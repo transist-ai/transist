@@ -1,0 +1,125 @@
+name: Security Scan
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Git ref to check out and validate (used by release staging for the exact tagged commit)'
+        required: true
+        type: string
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  RUST_BACKTRACE: short
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  security-audit:
+    runs-on: ubuntu-24.04
+    container:
+      image: rust:1.88.0-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0
+      options: --cap-add=SYS_ADMIN --cap-add=NET_ADMIN --security-opt apparmor=unconfined --security-opt seccomp=unconfined
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 0
+      - name: Install cargo-deny
+        run: |
+          bash scripts/ci/install_debian_tools.sh bubblewrap curl git jq ripgrep unzip nodejs npm python3 pip3
+          bash scripts/ci/install_ci_tools.sh audit
+      - name: Build sandbox launcher for security regressions
+        run: cargo build --locked -p transist-sandbox-launcher
+      - name: Install sandbox launcher for containerized tests
+        run: install -Dm755 target/debug/transist-sandbox-launcher /usr/libexec/transist/transist-sandbox-launcher
+      - name: Security regression suite
+        run: bash scripts/ci/run_security_regression_suite.sh
+      - name: Supply-chain pins
+        run: bash scripts/ci/check_supply_chain_pins.sh
+      - name: License and notice checks
+        run: bash scripts/ci/check_licenses.sh
+      - name: RustSec audit
+        run: cargo deny check
+      - name: Install locked npm dependencies
+        working-directory: scripts/ci/redocly
+        run: npm ci --ignore-scripts --no-audit
+      - name: npm high-severity audit
+        working-directory: scripts/ci/redocly
+        run: npm audit --audit-level=high
+      - name: Install locked Markdown dependencies
+        working-directory: scripts/ci/markdown
+        run: npm ci --ignore-scripts --no-audit
+      - name: Markdown npm high-severity audit
+        working-directory: scripts/ci/markdown
+        run: npm audit --audit-level=high
+      - name: Full-history secret scan
+        run: bash scripts/ci/check_secrets.sh
+
+  codeql:
+    name: codeql
+    if: ${{ github.event.repository.private == false }}
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@47be0dbd5113ab1b79fe2dd3f68bdf7e426cdc87 # v3
+        with:
+          languages: rust
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@47be0dbd5113ab1b79fe2dd3f68bdf7e426cdc87 # v3
+      - name: Analyze
+        uses: github/codeql-action/analyze@47be0dbd5113ab1b79fe2dd3f68bdf7e426cdc87 # v3
+
+  security-gate:
+    name: security-gate
+    if: ${{ always() }}
+    needs:
+      - security-audit
+      - codeql
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require security checks
+        env:
+          AUDIT_RESULT: ${{ needs.security-audit.result }}
+          CODEQL_RESULT: ${{ needs.codeql.result }}
+          REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
+        run: |
+          set -euo pipefail
+          if [[ "$AUDIT_RESULT" != "success" ]]; then
+            echo "Security audit did not succeed: $AUDIT_RESULT" >&2
+            exit 1
+          fi
+          case "$REPOSITORY_PRIVATE" in
+            false) expected_codeql="success" ;;
+            true) expected_codeql="skipped" ;;
+            *)
+              echo "Invalid repository visibility: $REPOSITORY_PRIVATE" >&2
+              exit 1
+              ;;
+          esac
+          if [[ "$CODEQL_RESULT" != "$expected_codeql" ]]; then
+            echo "CodeQL must be $expected_codeql for repository private=$REPOSITORY_PRIVATE: $CODEQL_RESULT" >&2
+            exit 1
+          fi
+          echo "Security Scan gate passed (repository private=$REPOSITORY_PRIVATE; CodeQL=$CODEQL_RESULT)."

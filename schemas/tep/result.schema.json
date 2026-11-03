@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://transist.dev/schemas/tep/result.schema.json",
+  "title": "TEP Invoke Result (Current Alias)",
+  "$ref": "result.v1.schema.json"
+}

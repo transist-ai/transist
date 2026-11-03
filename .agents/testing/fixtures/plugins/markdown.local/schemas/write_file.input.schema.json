@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["path"],
+  "properties": {
+    "path": { "type": "string", "minLength": 1 },
+    "text": { "type": "string" },
+    "text_file": { "type": "string", "minLength": 1 },
+    "create_parents": { "type": "boolean" },
+    "overwrite": { "type": "boolean" }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,20 @@
+{
+  "name": "transist-ci-markdown",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Repository Markdown checks using the maintained markdownlint library.",
+  "license": "MPL-2.0",
+  "scripts": {
+    "test": "node --test test_markdown.mjs"
+  },
+  "dependencies": {
+    "jsonc-parser": "3.3.1",
+    "markdownlint": "0.41.1",
+    "tinyglobby": "0.2.17"
+  },
+  "overrides": {
+    "micromark-extension-math": {
+      "katex": "0.18.2"
+    }
+  }
+}

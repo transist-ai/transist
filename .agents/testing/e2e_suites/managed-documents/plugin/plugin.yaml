@@ -1,0 +1,32 @@
+schema: transist.plugin.v1
+id: fixture.documents
+version: 0.1.0
+adapter: process
+default_provider_kind: local
+entrypoint:
+  type: process
+  command: plugin.py
+package:
+  files: [plugin.py, input.json, strict.json, typed.json, output.json]
+actions:
+  - name: call
+    input_schema: input.json
+    output_schema: output.json
+    secret_inputs:
+      - name: DOCUMENT_TEST_SECRET
+        required: false
+        binding: {type: env, name: DOCUMENT_TOKEN}
+      - name: DOCUMENT_MISSING_SECRET
+        required: false
+        binding: {type: env, name: MISSING_DOCUMENT_TOKEN}
+  - name: strict
+    input_schema: strict.json
+    output_schema: output.json
+  - name: typed
+    input_schema: typed.json
+    output_schema: output.json
+capabilities:
+  supports_cancel: false
+  supports_health: false
+  supports_artifact_hints: true
+  supports_evidence_hints: false

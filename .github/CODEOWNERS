@@ -1,0 +1,58 @@
+* @implicitly-awesome
+
+# Core runtime and contract-critical paths
+/crates/transist-core/ @implicitly-awesome
+/crates/transist-protocol/ @implicitly-awesome
+/crates/transist-adapters/ @implicitly-awesome
+/crates/transist-cli/ @implicitly-awesome
+/crates/transist-server/ @implicitly-awesome
+/crates/transist-inspection/ @implicitly-awesome
+/crates/transist-metrics/ @implicitly-awesome
+/src/ @implicitly-awesome
+/docs/developer/architecture/ @implicitly-awesome
+
+# Admin trust-creation executable (separate executable in this monorepo)
+/transist-admin/ @implicitly-awesome
+
+# Schemas and public contracts
+/schemas/ @implicitly-awesome
+
+# Security, trust, and policy surfaces
+/SECURITY.md @implicitly-awesome
+/secrets/ @implicitly-awesome
+/.gitleaks.toml @implicitly-awesome
+/docs/public/security/ @implicitly-awesome
+examples/quickstart/trust/ @implicitly-awesome
+transist-release.minisign.pub @implicitly-awesome
+
+# Brand, legal, governance, and contribution policy
+/NOTICE @implicitly-awesome
+/LICENSE @implicitly-awesome
+/THIRD_PARTY_NOTICES.md @implicitly-awesome
+/MAINTAINERS.md @implicitly-awesome
+/CONTRIBUTING.md @implicitly-awesome
+/AGENTS.md @implicitly-awesome
+/CODE_OF_CONDUCT.md @implicitly-awesome
+/SUPPORT.md @implicitly-awesome
+/about.hbs @implicitly-awesome
+/about.toml @implicitly-awesome
+
+# Release engineering and supply chain
+/deny.toml @implicitly-awesome
+/Cargo.toml @implicitly-awesome
+/Cargo.lock @implicitly-awesome
+/rust-toolchain.toml @implicitly-awesome
+/scripts/ci/package_release_archive.sh @implicitly-awesome
+/scripts/ci/test_archive_reproducibility.sh @implicitly-awesome
+/scripts/ci/record_build_provenance.sh @implicitly-awesome
+/scripts/ci/check_release_archive.sh @implicitly-awesome
+/docs/public/reference/release-artifact-verification.md @implicitly-awesome
+/docs/public/reference/platform-distribution-signing.md @implicitly-awesome
+/docs/public/reference/supported-platforms.md @implicitly-awesome
+
+# Agent skills and core-change records
+/.agents/ @implicitly-awesome
+
+# CI, workflows, and repository configuration
+/.github/ @implicitly-awesome
+/scripts/ci/ @implicitly-awesome

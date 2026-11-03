@@ -1,0 +1,120 @@
+name: Extended Platform Validation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extended-platform-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  candidate-smoke:
+    name: ${{ matrix.target }} / candidate-smoke
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+            host: x86_64-apple-darwin
+            container_image: ''
+            includes_launcher: false
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            host: aarch64-unknown-linux-gnu
+            container_image: rust:1.88.0-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0
+            includes_launcher: true
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+            host: aarch64-unknown-linux-musl
+            container_image: rust:1.88.0-alpine@sha256:9dfaae478ecd298b6b5a039e1f2cc4fc040fc818a2de9aa78fa714dea036574d
+            includes_launcher: true
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: ${{ matrix.container_image }}
+      options: ${{ matrix.container_image != '' && '--cap-add=SYS_ADMIN --cap-add=NET_ADMIN --security-opt apparmor=unconfined --security-opt seccomp=unconfined' || '' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Install native runtime tools
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: bash scripts/ci/install_debian_tools.sh bubblewrap git jq python3
+      - name: Install Alpine runtime tools
+        if: matrix.target == 'aarch64-unknown-linux-musl'
+        shell: sh
+        run: sh scripts/ci/install_alpine_tools.sh
+      - name: Re-checkout after Alpine bootstrap
+        if: matrix.target == 'aarch64-unknown-linux-musl'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Install Rust toolchain
+        run: rustup toolchain install 1.88.0 --profile minimal --no-self-update
+      - name: Assert native host target
+        run: |
+          test "$(rustc -vV | sed -n 's/^host: //p')" = "${{ matrix.host }}"
+      - name: Verify ARM64 container platform
+        if: startsWith(matrix.target, 'aarch64-unknown-linux')
+        run: test "$(uname -m)" = aarch64
+      - name: Build native release binaries
+        run: cargo +1.88.0 build --locked --release -p transist-cli -p transist-server -p transist-admin ${{ matrix.includes_launcher && '-p transist-sandbox-launcher' || '' }}
+      - name: Inspect binary architecture
+        run: |
+          set -euo pipefail
+          file target/release/transist
+      - name: Verify musl is glibc-free
+        if: endsWith(matrix.target, '-musl')
+        run: |
+          if readelf -l target/release/transist | grep -q 'interpreter.*ld-linux'; then
+            echo "musl candidate has a glibc interpreter" >&2
+            exit 1
+          fi
+      - name: Verify release binaries
+        run: |
+          set -euo pipefail
+          for binary in transist transist-server transist-admin; do
+            "target/release/$binary" --help >/dev/null
+            "target/release/$binary" --version
+          done
+      - name: Create and validate candidate archive
+        run: |
+          set -euo pipefail
+          tag="v$(sed -n 's/^version = "\([0-9.]*\)"$/\1/p' Cargo.toml | head -n 1)"
+          commit="$(git rev-parse HEAD)"
+          tree="$(git rev-parse "$commit^{tree}")"
+          mkdir -p dist
+          CI_RUNNER_IMAGE="${{ matrix.runner }}" bash scripts/ci/record_build_provenance.sh \
+            "dist/build-provenance-${{ matrix.target }}.json" "${{ matrix.target }}" \
+            target/release/transist target/release/transist-server target/release/transist-admin \
+            ${{ matrix.includes_launcher && 'target/release/transist-sandbox-launcher' || '' }} \
+            --commit "$commit" --tree "$tree"
+          CI_RUNNER_IMAGE="${{ matrix.runner }}" CI_CONTAINER_IMAGE="${{ matrix.container_image }}" \
+            bash scripts/ci/record_packaging_provenance.sh dist/packaging-provenance.json --commit "$commit" --tree "$tree"
+          args=("$tag" target/release/transist target/release/transist-server target/release/transist-admin "${{ matrix.target }}" dist/packaging-provenance.json)
+          if [[ "${{ matrix.includes_launcher }}" == true ]]; then args+=(target/release/transist-sandbox-launcher); fi
+          TRANSIST_DIST_DIR=dist bash scripts/ci/package_release_archive.sh "${args[@]}"
+          bash scripts/ci/check_release_archive.sh "${{ matrix.target }}" "$tag" --expected-commit "$commit" --expected-tree "$tree" --allow-unsigned "dist/transist-${tag}-${{ matrix.target }}.tar.gz"
+      - name: Run quickstart and shipped workflows from candidate archive
+        run: |
+          set -euo pipefail
+          tag="v$(sed -n 's/^version = "\([0-9.]*\)"$/\1/p' Cargo.toml | head -n 1)"
+          archive="dist/transist-${tag}-${{ matrix.target }}.tar.gz"
+          bash scripts/ci/run_quickstart_smoke.sh --archive "$archive" --require-isolation
+          bash scripts/ci/run_shipped_workflows.sh --archive "$archive"
+          bash scripts/ci/test_archive_reproducibility.sh "${{ matrix.target }}"
+      - name: Upload successful candidate artifacts
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: candidate-${{ matrix.target }}-${{ github.sha }}
+          path: dist/
+          retention-days: 7
+          if-no-files-found: error

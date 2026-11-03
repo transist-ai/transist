@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Workflows · Transist Inspect{% endblock %}
+{% block content %}
+<h1>Workflows</h1>
+{% if workflows.is_empty() %}
+<div class="empty-state">No workflows discovered in this workspace.</div>
+{% else %}
+<table>
+  <thead>
+    <tr><th>Workflow</th><th>Title</th><th>Source</th><th>Steps</th><th>Runnable</th><th>Compiled</th></tr>
+  </thead>
+  <tbody>
+  {% for w in workflows %}
+    <tr>
+      <td><a class="mono" href="/inspect/workflows/{{ w.workflow_ref }}">{{ w.workflow_ref }}</a></td>
+      <td>{{ w.title.as_deref().unwrap_or("—") }}</td>
+      <td class="mono">{{ w.source_ref.as_deref().unwrap_or("—") }}</td>
+      <td>{{ w.root_step_count }}</td>
+      <td>{% if w.runnable %}yes{% else %}no{% endif %}</td>
+      <td>{% if w.compiled_recipe_available %}yes{% else %}no{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

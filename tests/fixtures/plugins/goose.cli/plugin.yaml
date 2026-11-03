@@ -1,0 +1,29 @@
+schema: transist.plugin.v1
+id: goose.cli
+version: 0.1.0
+adapter: process
+entrypoint:
+  type: process
+  command: plugin.py
+package:
+  files:
+    - plugin.py
+    - schemas/run_task.input.schema.json
+    - schemas/run_task.output.schema.json
+actions:
+  - name: run_task
+    input_schema: schemas/run_task.input.schema.json
+    output_schema: schemas/run_task.output.schema.json
+    secret_inputs: []
+    bindings:
+      transist_prompt_v1:
+        inline_field: prompt
+        file_field: prompt_file
+      transist_skills_v1:
+        bundle_field: skills_bundle
+        rendered_field: skills_rendered
+capabilities:
+  supports_cancel: true
+  supports_health: false
+  supports_artifact_hints: true
+  supports_evidence_hints: false

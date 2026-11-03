@@ -1,0 +1,3 @@
+# Canonical and cargo-about-rendered license texts preserve upstream spaces.
+LICENSE text eol=lf whitespace=-trailing-space
+THIRD_PARTY_NOTICES.md text eol=lf whitespace=-trailing-space

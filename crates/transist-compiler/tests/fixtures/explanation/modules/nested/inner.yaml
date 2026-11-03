@@ -1,0 +1,14 @@
+schema: transist.module.v1
+id: inner
+version: 0.1.0
+inputs:
+  value: {type: string, required: true}
+outputs: {result: '{{steps.call.out.answer}}'}
+steps:
+  - id: call
+    uses: process:fixture/review
+    prompt_file: prompts/task.md
+    with:
+      answer: '{{inputs.value}}'
+      input_file: {$document: issue, access: read}
+      helper: source://helpers/task.sh

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["ok", "prompt_seen", "stdout", "stderr", "exit_code"],
+  "properties": {
+    "ok": { "type": "boolean" },
+    "prompt_seen": { "type": "string" },
+    "stdout": { "type": "string" },
+    "stderr": { "type": "string" },
+    "exit_code": { "type": "integer" }
+  },
+  "additionalProperties": false
+}

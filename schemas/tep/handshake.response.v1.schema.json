@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://transist.dev/schemas/tep/handshake.response.v1.schema.json",
+  "title": "TEP Handshake Response v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "protocol_version", "adapter", "capabilities"],
+  "properties": {
+    "type": { "const": "tep.handshake.response.v1" },
+    "protocol_version": { "type": "string", "const": "tep.v1" },
+    "adapter": { "$ref": "#/$defs/adapterIdentity" },
+    "capabilities": { "$ref": "capabilities.schema.json" }
+  },
+  "$defs": {
+    "adapterIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "version"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["process", "http", "mcp"] },
+        "version": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

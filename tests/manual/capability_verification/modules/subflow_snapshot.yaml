@@ -1,0 +1,18 @@
+schema: transist.module.v1
+id: snapshot
+version: 0.1.0
+inputs:
+  session_name:
+    type: string
+    required: true
+steps:
+  - id: record_subflow_snapshot
+    uses: process:shell/exec
+    with:
+      command: python3
+      args:
+        - tests/manual/capability_verification/scripts/write_subflow_snapshot.py
+        - "{{inputs.session_name}}"
+
+  - id: finish
+    control: control.finish

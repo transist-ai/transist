@@ -1,0 +1,4 @@
+interface:
+  display_name: "Transist Secrets And Policy"
+  short_description: "Guide AI-assisted secret-safe workflow and plugin authoring."
+  default_prompt: "Use $transist-secrets-and-policy to review or repair invoke-step `with.secret_refs`, adapter-specific secret delivery across `process`, `http`, and `mcp`, runtime policy, and persistence boundaries. Use bound validation for static gaps and persisted preflight plus capability reports for live blockers, while keeping resolved secrets out of state and enabling remote delivery only where needed."

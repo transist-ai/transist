@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://transist.dev/schemas/trust/signature.v1.schema.json",
+  "title": "Transist Signature Envelope v1",
+  "description": "Detached signature sidecar for a workflow definition or plugin package.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "sig_alg",
+    "digest_alg",
+    "subject",
+    "key_id",
+    "signed_at_ms",
+    "signature"
+  ],
+  "properties": {
+    "schema": { "type": "string", "const": "transist.signature.v1" },
+    "sig_alg": { "type": "string", "const": "ed25519" },
+    "digest_alg": { "type": "string", "const": "sha256" },
+    "subject": { "$ref": "#/$defs/subject" },
+    "key_id": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "signed_at_ms": { "type": "integer", "minimum": 0 },
+    "signature": { "type": "string", "minLength": 1 }
+  },
+  "$defs": {
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "version", "digest"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["workflow", "plugin"] },
+        "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    }
+  }
+}

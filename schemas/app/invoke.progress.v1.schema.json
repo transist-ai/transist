@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://transist.dev/schemas/app/invoke.progress.v1.schema.json",
+  "title": "APP Invoke Progress v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "protocol_version", "invoke_id", "stream", "delta_lines"],
+  "properties": {
+    "type": { "const": "app.invoke.progress.v1" },
+    "protocol_version": { "type": "string", "const": "app.v1" },
+    "invoke_id": { "type": "string", "minLength": 1 },
+    "stream": { "type": "string" },
+    "delta_lines": { "type": "integer", "minimum": 0 },
+    "line_preview": { "type": "string" }
+  }
+}

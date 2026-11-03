@@ -1,0 +1,47 @@
+schema: transist.plugin.v1
+id: shell
+version: 0.1.0
+adapter: process
+default_provider_kind: local
+entrypoint:
+  type: process
+  command: plugin.py
+package:
+  files:
+    - plugin.py
+    - process_lifecycle.py
+    - process_runner.py
+    - schemas/exec.input.schema.json
+    - schemas/exec.output.schema.json
+    - schemas/exec_with_secret_env.input.schema.json
+    - schemas/exec_with_secret_env.output.schema.json
+    - schemas/echo.input.schema.json
+    - schemas/echo.output.schema.json
+actions:
+  - name: exec
+    input_schema: schemas/exec.input.schema.json
+    output_schema: schemas/exec.output.schema.json
+    secret_inputs: []
+    bindings:
+      transist_gate_decision_v1:
+        decision_field: gate_decision
+  - name: exec_with_secret_env
+    input_schema: schemas/exec_with_secret_env.input.schema.json
+    output_schema: schemas/exec_with_secret_env.output.schema.json
+    secret_inputs:
+      - name: MY_API_TOKEN
+        required: true
+        binding:
+          type: env
+          name: API_TOKEN
+    bindings: {}
+  - name: echo
+    input_schema: schemas/echo.input.schema.json
+    output_schema: schemas/echo.output.schema.json
+    secret_inputs: []
+    bindings: {}
+capabilities:
+  supports_cancel: true
+  supports_health: false
+  supports_artifact_hints: true
+  supports_evidence_hints: true

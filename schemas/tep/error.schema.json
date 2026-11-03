@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://transist.dev/schemas/tep/error.schema.json",
+  "title": "TEP Protocol Error v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["code", "class", "message", "retryability"],
+  "properties": {
+    "code": {
+      "type": "string",
+      "enum": [
+        "configuration_error",
+        "auth_error",
+        "secret_resolution_error",
+        "validation_error",
+        "subflow_input_binding_failed",
+        "timeout_error",
+        "cancelled",
+        "rate_limit_error",
+        "transport_error",
+        "protocol_error",
+        "tool_execution_error",
+        "adapter_internal_error",
+        "policy_denied",
+        "capability_not_granted"
+      ]
+    },
+    "class": {
+      "type": "string",
+      "enum": [
+        "configuration",
+        "auth",
+        "secret",
+        "validation",
+        "timeout",
+        "cancellation",
+        "rate_limit",
+        "transport",
+        "protocol",
+        "tool",
+        "internal",
+        "policy"
+      ]
+    },
+    "message": { "type": "string" },
+    "retryability": {
+      "type": "string",
+      "enum": ["none", "safe", "operator"]
+    }
+  }
+}

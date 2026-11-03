@@ -1,0 +1,19 @@
+schema: transist.module.v1
+id: demo_07_greet
+version: 0.1.0
+inputs:
+  topic:
+    type: string
+    required: true
+  greeting_path:
+    type: string
+    required: true
+steps:
+  - id: write_greeting
+    uses: process:shell/exec
+    with:
+      command: sh
+      args:
+        - source://scripts/write_greeting.sh
+        - "{{inputs.topic}}"
+        - "{{inputs.greeting_path}}"

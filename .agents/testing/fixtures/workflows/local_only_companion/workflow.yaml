@@ -1,0 +1,36 @@
+schema: transist.flow.v1
+id: local_only_companion
+version: v1
+plugins:
+  markdown.local: 0.1.0
+
+inputs:
+  title:
+    type: string
+    default: Local Only Companion
+    description: Title written into the draft markdown file.
+  body:
+    type: string
+    default: This workflow stays local and proves external_transfers is empty.
+    description: Body text written and reformatted locally.
+
+steps:
+  - id: write_draft
+    uses: process:markdown.local/write_file
+    with:
+      path: draft.md
+      text: |
+        # {{inputs.title}}
+
+        {{inputs.body}}
+      create_parents: true
+      overwrite: true
+
+  - id: format_note
+    uses: process:markdown.local/format
+    with:
+      text_file: draft.md
+      output_path: note.md
+      normalize_headings: true
+      ensure_trailing_newline: true
+      wrap_at: 80

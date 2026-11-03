@@ -1,0 +1,359 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schema", "id", "version", "adapter", "entrypoint", "package", "actions", "capabilities"],
+  "properties": {
+    "schema": { "type": "string", "const": "transist.plugin.v1" },
+    "id": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+    "version": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+    "adapter": { "type": "string", "enum": ["process", "http", "mcp"] },
+    "entrypoint": {
+      "oneOf": [
+        { "$ref": "#/$defs/processEntrypoint" },
+        { "$ref": "#/$defs/httpEntrypoint" },
+        { "$ref": "#/$defs/mcpEntrypoint" }
+      ]
+    },
+    "package": { "$ref": "#/$defs/package" },
+    "prerequisites": { "$ref": "#/$defs/prerequisiteSet" },
+    "actions": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/action" }
+    },
+    "capabilities": { "$ref": "#/$defs/capabilities" },
+    "default_provider_kind": {
+      "type": "string",
+      "enum": ["local", "external"]
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": { "properties": { "adapter": { "const": "process" } }, "required": ["adapter"] },
+      "then": { "properties": { "entrypoint": { "$ref": "#/$defs/processEntrypoint" } } }
+    },
+    {
+      "if": { "properties": { "adapter": { "const": "http" } }, "required": ["adapter"] },
+      "then": { "properties": { "entrypoint": { "$ref": "#/$defs/httpEntrypoint" } } }
+    },
+    {
+      "if": { "properties": { "adapter": { "const": "mcp" } }, "required": ["adapter"] },
+      "then": {
+        "properties": {
+          "entrypoint": { "$ref": "#/$defs/mcpEntrypoint" },
+          "actions": {
+            "items": {
+              "allOf": [
+                { "$ref": "#/$defs/action" },
+                {
+                  "properties": {
+                    "bindings": {
+                      "type": "object",
+                      "required": ["tool_name"],
+                      "properties": {
+                        "tool_name": { "type": "string", "minLength": 1 }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "runtimeEnvironmentValue": {
+      "type": "string",
+      "description": "Complete runtime://temp declarations use normal relative components; the first documents component (case-insensitive) is reserved for managed documents.",
+      "if": { "pattern": "^runtime://temp" },
+      "then": { "pattern": "^runtime://temp(?:/(?!(?:[dD][oO][cC][uU][mM][eE][nN][tT][sS])(?:/|$))[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9][A-Za-z0-9._-]*)*)?$" }
+    },
+    "package": {
+      "type": "object",
+      "required": ["files"],
+      "properties": {
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      },
+      "additionalProperties": false
+    },
+    "processEntrypoint": {
+      "type": "object",
+      "required": ["type", "command"],
+      "properties": {
+        "type": { "const": "process" },
+        "command": { "type": "string", "minLength": 1 },
+        "args": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "cwd": { "type": "string", "minLength": 1 },
+        "env": {
+          "type": "object",
+          "description": "Child environment. Complete values may use runtime://temp or runtime://temp/<relative-path> for an invocation-private temporary directory; literals are preserved.",
+          "additionalProperties": { "$ref": "#/$defs/runtimeEnvironmentValue" },
+          "default": {}
+        }
+      },
+      "additionalProperties": false
+    },
+    "httpEntrypoint": {
+      "type": "object",
+      "required": ["type", "base_url"],
+      "properties": {
+        "type": { "const": "http" },
+        "base_url": {
+          "type": "string",
+          "pattern": "^https?://"
+        },
+        "ca_cert": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "mcpEntrypoint": {
+      "type": "object",
+      "required": ["type", "command"],
+      "properties": {
+        "type": { "const": "mcp" },
+        "command": { "type": "string", "minLength": 1 },
+        "args": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "cwd": { "type": "string", "minLength": 1 },
+        "env": {
+          "type": "object",
+          "description": "Child environment. Complete values may use runtime://temp or runtime://temp/<relative-path> for an invocation-private temporary directory; literals are preserved.",
+          "additionalProperties": { "$ref": "#/$defs/runtimeEnvironmentValue" },
+          "default": {}
+        }
+      },
+      "additionalProperties": false
+    },
+    "action": {
+      "type": "object",
+      "required": ["name", "input_schema", "output_schema"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "input_schema": { "type": "string", "minLength": 1 },
+        "output_schema": { "type": "string", "minLength": 1 },
+        "secret_inputs": {
+          "type": "array",
+          "default": [],
+          "items": { "$ref": "#/$defs/secretInput" }
+        },
+        "bindings": {
+          "type": "object",
+          "default": {},
+          "properties": {
+            "tool_name": { "type": "string", "minLength": 1 },
+            "transist_prompt_v1": {
+              "type": "object",
+              "required": ["inline_field"],
+              "properties": {
+                "inline_field": { "type": "string", "minLength": 1 },
+                "file_field": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            "transist_skills_v1": {
+              "type": "object",
+              "required": ["bundle_field", "rendered_field"],
+              "properties": {
+                "bundle_field": { "type": "string", "minLength": 1 },
+                "rendered_field": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            "transist_gate_decision_v1": {
+              "type": "object",
+              "required": ["decision_field"],
+              "properties": {
+                "decision_field": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": true
+        },
+        "prerequisites": { "$ref": "#/$defs/prerequisiteSet" },
+        "provider_kind": {
+          "type": "string",
+          "enum": ["local", "external"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "secretInput": {
+      "type": "object",
+      "required": ["name", "required", "binding"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "required": { "type": "boolean" },
+        "binding": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["type", "name"],
+              "properties": {
+                "type": { "const": "env" },
+                "name": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["type", "path_env"],
+              "properties": {
+                "type": { "const": "temp_file" },
+                "path_env": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["type", "name"],
+              "properties": {
+                "type": { "const": "header" },
+                "name": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["type", "name"],
+              "properties": {
+                "type": { "const": "body_field" },
+                "name": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["type", "flag"],
+              "properties": {
+                "type": { "const": "arg" },
+                "flag": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "capabilities": {
+      "type": "object",
+      "required": [
+        "supports_cancel",
+        "supports_health",
+        "supports_artifact_hints",
+        "supports_evidence_hints"
+      ],
+      "properties": {
+        "supports_cancel": { "type": "boolean" },
+        "supports_health": { "type": "boolean" },
+        "supports_artifact_hints": { "type": "boolean" },
+        "supports_evidence_hints": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "prerequisiteSet": {
+      "type": "object",
+      "properties": {
+        "binaries": {
+          "type": "array",
+          "default": [],
+          "items": { "$ref": "#/$defs/binaryPrerequisite" }
+        },
+        "env": {
+          "type": "array",
+          "default": [],
+          "items": { "$ref": "#/$defs/envPrerequisite" }
+        },
+        "paths": {
+          "type": "array",
+          "default": [],
+          "items": { "$ref": "#/$defs/pathPrerequisite" }
+        },
+        "commands": {
+          "type": "array",
+          "default": [],
+          "items": { "$ref": "#/$defs/commandPrerequisite" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "binaryPrerequisite": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "required": { "type": "boolean", "default": true },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Legacy executable version requirement. Parsed for migration, then rejected at evaluation with legacy_executable_prerequisite_unsupported."
+        },
+        "version_check": {
+          "description": "Legacy executable version probe. Parsed for migration, never executed, and rejected at evaluation with legacy_executable_prerequisite_unsupported.",
+          "type": "object",
+          "required": ["argv"],
+          "properties": {
+            "argv": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "regex": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "envPrerequisite": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "required": { "type": "boolean", "default": true }
+      },
+      "additionalProperties": false
+    },
+    "pathPrerequisite": {
+      "type": "object",
+      "required": ["path"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "enum": ["any", "file", "dir"] },
+        "required": { "type": "boolean", "default": true }
+      },
+      "additionalProperties": false
+    },
+    "commandPrerequisite": {
+      "type": "object",
+      "description": "Legacy executable prerequisite. Parsed for migration, never executed, and rejected at evaluation with legacy_executable_prerequisite_unsupported.",
+      "required": ["argv"],
+      "properties": {
+        "argv": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "timeout_ms": { "type": "integer", "minimum": 0 },
+        "required": { "type": "boolean", "default": true }
+      },
+      "additionalProperties": false
+    }
+  }
+}

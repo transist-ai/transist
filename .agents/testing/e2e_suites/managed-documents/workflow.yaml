@@ -1,0 +1,48 @@
+schema: transist.flow.v1
+id: managed.documents
+version: 0.1.0
+plugins:
+  fixture.documents: 0.1.0
+inputs:
+  repo_path: {type: string, required: true}
+  home_probe: {type: string, required: true}
+workspace:
+  path: '{{inputs.repo_path}}'
+  access: read_only
+network: {mode: none}
+documents:
+  invocation: {kind: file, max_bytes: 4096}
+  file: {kind: file, max_bytes: 4096, initial: initial}
+  tree: {kind: tree, max_bytes: 4096, max_files: 3}
+  final: {kind: file, max_bytes: 4096}
+modules:
+  middle: {path: modules/middle.yaml}
+steps:
+  - id: capture_metadata
+    uses: process:fixture.documents/call
+    with:
+      ops:
+        - {path: {$document: invocation, access: write}, op: runtime_metadata}
+  - id: produce
+    uses: process:fixture.documents/call
+    with:
+      ops:
+        - {path: {$document: tree, access: write}, op: tree, content: member}
+  - id: nested
+    module: middle
+  - id: consume
+    uses: process:fixture.documents/call
+    with:
+      ops:
+        - {path: {$document: file, access: read}, op: read, content: initialchanged}
+        - {path: {$document: tree, access: read}, op: tree_read, content: member}
+      workspace_read_only: true
+      home_probe: '{{inputs.home_probe}}'
+      large: true
+cleanup:
+  - id: clean
+    when: [success]
+    uses: process:fixture.documents/call
+    with:
+      ops:
+        - {path: {$document: final, access: write}, op: write, content: cleanup}

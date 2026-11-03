@@ -1,0 +1,4 @@
+interface:
+  display_name: "Transist Workflow Authoring"
+  short_description: "Clarify a goal, author, validate and explain workflows before execution."
+  default_prompt: "Use $transist-workflow-authoring and its checked-out references. Capture intent, clarify only missing decisions/bindings, inspect real action contracts, generate a 0.1.0 workflow with managed documents and exact review, validate source, explain and compare revisions deterministically, then separate unresolved prerequisites from execution approval. Report missing integrations; never invent actions, hide them in unrestricted shell, or implicitly install, authorize, sign or dispatch."

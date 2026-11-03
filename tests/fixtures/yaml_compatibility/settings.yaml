@@ -1,0 +1,5 @@
+schema: transist.user-settings.v1
+home:
+  global_root: null
+identity:
+  actor: reviewer@example.com

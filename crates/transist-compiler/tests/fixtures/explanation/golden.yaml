@@ -1,0 +1,8 @@
+schema: transist.flow.v1
+id: explanation.golden
+version: 0.1.0
+inputs:
+  message: {type: string, required: true}
+steps:
+  - id: finish
+    control: control.finish

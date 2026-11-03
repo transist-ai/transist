@@ -1,0 +1,23 @@
+schema: transist.flow.v1
+id: demo_04_replay
+version: 0.1.0
+plugins:
+  shell: 0.1.0
+network:
+  mode: none
+inputs:
+  marker:
+    type: string
+    required: true
+steps:
+  - id: append_marker
+    uses: process:shell/exec
+    with:
+      command: sh
+      args:
+        - -c
+        - |
+          printf '%s\n' "$1" >> replay-history.log
+          printf 'appended %s\n' "$1"
+        - --
+        - "{{inputs.marker}}"

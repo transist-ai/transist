@@ -1,0 +1,19 @@
+schema: transist.flow.v1
+id: managed.documents.alias
+version: 0.1.0
+plugins: {fixture.documents: 0.1.0}
+inputs:
+  repo_path: {type: string, required: true}
+workspace:
+  path: '{{inputs.repo_path}}'
+  access: full
+network: {mode: none}
+documents:
+  file: {kind: file, max_bytes: 4096, initial: initial}
+steps:
+  - id: read
+    uses: process:fixture.documents/call
+    with:
+      workspace_alias_probe: true
+      ops:
+        - {path: {$document: file, access: read}, op: read, content: initial}

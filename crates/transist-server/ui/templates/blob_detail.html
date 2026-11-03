@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}{{ data.kind_label }} {{ data.name }}{% endblock %}
+{% block breadcrumb %}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="/inspect/runs">Runs</a><span class="sep">›</span>
+  <a class="mono" href="/inspect/runs/{{ data.run_id }}">{{ data.run_id }}</a><span class="sep">›</span>
+  <span>{{ data.kind_label }}</span>
+</nav>
+{% endblock %}
+{% block content %}
+<h1>{{ data.kind_label }} <span class="mono">{{ data.name }}</span></h1>
+<dl class="kv-grid">
+  <dt>Run</dt><dd><a class="mono" href="/inspect/runs/{{ data.run_id }}">{{ data.run_id }}</a></dd>
+  <dt>ID</dt><dd class="mono">{{ data.blob_id }}<button type="button" class="copy-id" data-copy="{{ data.blob_id }}">copy</button></dd>
+  <dt>Size</dt><dd>{{ data.size }} bytes</dd>
+  <dt>Type</dt><dd>{{ data.media_type }}</dd>
+  {% match data.producing_step_id %}{% when Some with (s) %}<dt>Step</dt><dd class="mono">{{ s }}</dd>{% when None %}{% endmatch %}
+  {% match data.execution %}{% when Some with (e) %}<dt>Execution</dt><dd>{{ e }}</dd>{% when None %}{% endmatch %}
+  {% match data.field_name %}{% when Some with (f) %}<dt>Field</dt><dd>{{ f }}</dd>{% when None %}{% endmatch %}
+  {% match data.path %}{% when Some with (p) %}<dt>Path</dt><dd class="mono">{{ p }}</dd>{% when None %}{% endmatch %}
+</dl>
+
+<p><a href="{{ data.content_url }}" download="{{ data.name }}">Download {{ data.name }}</a></p>
+
+<h2>Preview</h2>
+{% if data.preview_too_large %}
+<div class="empty-state">Too large to preview inline ({{ data.size }} bytes). Use the download link above.</div>
+{% else if data.preview_image %}
+<img src="{{ data.content_url }}" alt="{{ data.name }}" class="preview-image">
+{% else if data.preview_html %}
+<iframe src="{{ data.content_url }}" sandbox class="preview-iframe" title="HTML preview"></iframe>
+{% else %}
+{% match data.preview_text %}
+{% when Some with (t) %}<pre>{{ t }}</pre>
+{% when None %}<div class="empty-state">No inline preview available. Use the download link above.</div>
+{% endmatch %}
+{% endif %}
+{% endblock %}

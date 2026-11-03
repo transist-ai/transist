@@ -1,0 +1,12 @@
+schema: transist.flow.v1
+id: demo_01_hello_world
+version: 0.1.0
+plugins:
+  shell: 0.1.0
+network:
+  mode: none
+steps:
+  - id: hello
+    uses: process:shell/echo
+    with:
+      args: ["hello", "from", "transist"]

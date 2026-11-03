@@ -1,0 +1,47 @@
+name: Feature request
+description: Propose a focused improvement to the current Transist kernel or docs.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for focused feature ideas.
+
+        Feature requests are evaluation input, not commitment. Please keep requests grounded in the current repository scope. This tracker is not a channel for open-ended consulting or for asking maintainers to design an entire system on your behalf. See [SUPPORT.md](../../SUPPORT.md) for support boundaries.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: What concrete problem are you trying to solve with Transist today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposed_change
+    attributes:
+      label: Proposed change
+      description: Describe the specific improvement you would like to see.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What are you doing today instead, or what other approaches did you consider?
+    validations:
+      required: false
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Where does this belong?
+      description: Choose the narrowest area that matches your request.
+      options:
+        - Workflow authoring
+        - Runtime kernel
+        - Inspection or operations
+        - Plugin or adapter contract
+        - Documentation
+        - Not sure
+    validations:
+      required: true

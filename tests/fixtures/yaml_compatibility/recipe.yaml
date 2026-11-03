@@ -1,0 +1,23 @@
+schema: transist.recipe.v1
+workflow:
+  id: demo.workflow
+  version: v1
+repositories: []
+inputs: {}
+steps:
+- id: run_script
+  execution:
+    kind: invoke
+    adapter: process
+    plugin_id: shell
+    plugin: shell
+    action: exec
+    execution_kind: external
+    plugin_version: 1.0.0
+  with:
+    command: source://scripts/hello.sh
+graph:
+  entry: run_script
+  edges: []
+  max_iterations: 10000
+capabilities_persisted: false

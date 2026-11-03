@@ -1,0 +1,33 @@
+schema: transist.module.v1
+id: review_loop
+version: 0.1.0
+inputs:
+  session_name:
+    type: string
+    required: true
+steps:
+  - id: review_loop
+    control: control.noop
+    loop:
+      body:
+        - ref: render_revision
+        - ref: operator_review
+      until: 'steps.operator_review.out.decision == "approved"'
+      max_iters: 5
+      max_duration: 1h
+
+  - id: render_revision
+    uses: process:shell/exec
+    with:
+      command: python3
+      args:
+        - tests/manual/capability_verification/scripts/render_revision.py
+        - "{{inputs.session_name}}"
+
+  - id: operator_review
+    control: control.gate.manual
+    with:
+      gate_id: verification-review
+
+  - id: finish
+    control: control.finish

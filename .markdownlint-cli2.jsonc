@@ -1,0 +1,17 @@
+{
+  "globs": ["**/*.md", "**/*.markdown"],
+  "ignores": [
+    "**/node_modules/**",
+    "target/**",
+    ".tmp/**",
+    ".agents/testing/e2e_suites/detached-assets/prompts/task.md"
+  ],
+  "config": {
+    "default": true,
+    "MD013": false,
+    "MD024": {
+      "siblings_only": true
+    },
+    "MD060": false
+  }
+}

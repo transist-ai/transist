@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://transist.dev/schemas/app/invoke.result.v1.schema.json",
+  "title": "APP Invoke Result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "protocol_version", "invoke_id", "status", "output", "artifact_hints", "evidence_hints", "metrics"],
+  "properties": {
+    "type": { "const": "app.invoke.result.v1" },
+    "protocol_version": { "type": "string", "const": "app.v1" },
+    "invoke_id": { "type": "string", "minLength": 1 },
+    "status": { "type": "string", "minLength": 1 },
+    "output": { "description": "JSON output payload returned by the plugin action." },
+    "artifact_hints": {
+      "type": "array",
+      "items": { "description": "Artifact descriptor that the host may persist." }
+    },
+    "evidence_hints": {
+      "type": "array",
+      "items": { "description": "Evidence descriptor that the host may persist." }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": { "type": "number" }
+    },
+    "usage": { "$ref": "#/$defs/usage" },
+    "error": { "$ref": "../tep/error.schema.json" }
+  },
+  "$defs": {
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": { "type": "string" },
+        "model": { "type": "string" },
+        "input_tokens": { "type": "integer", "minimum": 0 },
+        "output_tokens": { "type": "integer", "minimum": 0 },
+        "total_tokens": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

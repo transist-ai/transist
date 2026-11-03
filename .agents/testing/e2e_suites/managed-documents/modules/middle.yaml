@@ -1,0 +1,8 @@
+schema: transist.module.v1
+id: middle
+version: 0.1.0
+modules:
+  leaf: {path: leaf.yaml}
+steps:
+  - id: leaf
+    module: leaf

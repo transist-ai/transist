@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% block title %}Step {{ data.step_id }} · Run {{ data.run_id }}{% endblock %}
+{% block breadcrumb %}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="/inspect/runs">Runs</a><span class="sep">›</span>
+  <a class="mono" href="/inspect/runs/{{ data.run_id }}">{{ data.run_id }}</a><span class="sep">›</span>
+  <span>Step</span> <span class="mono">{{ data.step_id }}</span>
+</nav>
+{% endblock %}
+{% block content %}
+<h1>
+  <span class="status-badge status-{{ data.status }}">{{ data.status }}</span>
+  Step <span class="mono">{{ data.step_id }}</span>
+</h1>
+{% if !data.preflight_blockers.is_empty() %}
+<aside class="status-banner status-banner-failed" role="status">
+  <div class="status-banner-headline">
+    <strong>This step is blocked by preflight.</strong>
+  </div>
+  <ul class="status-banner-preflight-list">
+    {% for b in data.preflight_blockers %}
+    <li>
+      <code>{{ b.kind }}</code>: {{ b.message }}
+      {% match b.plugin_id %}{% when Some with (p) %}<span class="mono"> · plugin {{ p }}</span>{% when None %}{% endmatch %}
+      {% match b.action %}{% when Some with (a) %}<span class="mono"> · action {{ a }}</span>{% when None %}{% endmatch %}
+    </li>
+    {% endfor %}
+  </ul>
+</aside>
+{% endif %}
+<dl class="kv-grid">
+  <dt>Run</dt><dd><a class="mono" href="/inspect/runs/{{ data.run_id }}">{{ data.run_id }}</a></dd>
+  <dt>Kind</dt><dd>{{ data.step_kind }}</dd>
+  <dt>Execution</dt><dd>{% match data.execution %}{% when Some with (e) %}{{ e }}{% when None %}—{% endmatch %}</dd>
+  <dt>Started</dt><dd class="mono">{{ data.started_at.as_deref().unwrap_or("—") }}</dd>
+  <dt>Finished</dt><dd class="mono">{{ data.finished_at.as_deref().unwrap_or("—") }}</dd>
+  {% match data.child_run_url %}{% when Some with (url) %}
+  <dt>Child run</dt>
+  <dd><a class="mono" href="{{ url }}">{{ data.child_run_id.as_deref().unwrap_or("") }}</a></dd>
+  {% when None %}{% endmatch %}
+  {% for f in data.summary_fields %}
+  <dt>{{ f.label }}</dt>
+  <dd{% if f.mono %} class="mono"{% endif %}>{{ f.value }}</dd>
+  {% endfor %}
+</dl>
+
+{% match data.child_run_url %}{% when Some with (url) %}
+<aside class="status-banner status-banner-running" role="status">
+  <div class="status-banner-headline">
+    <strong>This step launches a child run.</strong>
+  </div>
+  <p class="status-banner-detail">
+    Steps, events, gates, artifacts, and evidence produced inside the subflow live on the child run, not on this step.
+  </p>
+  <p class="status-banner-actions">
+    <a href="{{ url }}">View child run <span class="mono">{{ data.child_run_id.as_deref().unwrap_or("") }}</span> →</a>
+  </p>
+</aside>
+
+{% match data.child_run_overview %}{% when Some with (o) %}
+<h2>Child run overview</h2>
+<dl class="kv-grid">
+  <dt>Run</dt><dd><a class="mono" href="{{ o.run_url }}">{{ o.run_id }}</a></dd>
+  <dt>Workflow</dt><dd class="mono">{{ o.workflow_label }}</dd>
+  <dt>Status</dt><dd><span class="status-badge status-{{ o.status }}">{{ o.status }}</span></dd>
+  <dt>Started</dt><dd class="mono">{{ o.started_at.as_deref().unwrap_or("—") }}</dd>
+  <dt>Finished</dt><dd class="mono">{{ o.finished_at.as_deref().unwrap_or("—") }}</dd>
+  <dt>Artifacts</dt><dd>{{ o.artifact_count }}</dd>
+  <dt>Evidence files</dt><dd>{{ o.evidence_count }}</dd>
+</dl>
+{% match o.metrics %}{% when Some with (m) %}
+<dl class="kv-grid">
+  <dt>Step executions</dt><dd>{{ m.step_executions }}</dd>
+  <dt>Tokens (in/out/total)</dt><dd>{{ m.input_tokens }} / {{ m.output_tokens }} / {{ m.total_tokens }}</dd>
+  <dt>Duration</dt><dd>{{ m.duration_label }}</dd>
+</dl>
+{% when None %}<p class="muted">No metrics collected yet.</p>{% endmatch %}
+<details id="child-step-counts"><summary>Step counts JSON</summary><pre>{{ o.step_counts_json }}</pre></details>
+{% when None %}{% endmatch %}
+
+{% when None %}{% endmatch %}
+
+{% match data.gate_guidance %}{% when Some with (g) %}
+<aside class="status-banner status-banner-blocked" role="status">
+  <div class="status-banner-headline"><strong>Manual gate guidance</strong></div>
+  {% match g.expected_response %}{% when Some with (s) %}<p class="status-banner-detail"><strong>Expected from user:</strong> {{ s }}</p>{% when None %}{% endmatch %}
+  {% match g.prompt %}{% when Some with (s) %}<p class="status-banner-detail"><strong>Prompt:</strong> {{ s }}</p>{% when None %}{% endmatch %}
+  {% match g.reason %}{% when Some with (s) %}<p class="status-banner-detail"><strong>Reason:</strong> {{ s }}</p>{% when None %}{% endmatch %}
+  {% if !g.options.is_empty() %}
+  <p class="status-banner-detail"><strong>Decision options:</strong> {% for option in g.options %}<code>{{ option }}</code>{% if !loop.last %}, {% endif %}{% endfor %}</p>
+  {% endif %}
+</aside>
+{% when None %}{% endmatch %}
+
+{% if !data.key_groups.is_empty() %}
+<h2>Keys</h2>
+<dl class="kv-grid">
+  {% for g in data.key_groups %}
+  <dt>{{ g.label }}</dt>
+  <dd>{% for k in g.keys %}<code>{{ k }}</code>{% if !loop.last %} {% endif %}{% endfor %}</dd>
+  {% endfor %}
+</dl>
+{% endif %}
+
+<section class="step-outputs" aria-labelledby="step-outputs-heading">
+<h2 id="step-outputs-heading">Outputs</h2>
+<form method="get" class="filters-inline" aria-label="Output execution">
+  <input type="hidden" name="iteration" value="{{ data.iteration_value }}">
+  <label for="output-execution">Output execution</label>
+  <select id="output-execution" name="execution">
+    {% for option in data.output_options %}
+    <option value="{{ option.value }}" {% if option.selected %}selected{% endif %}>{{ option.value }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit">Apply</button>
+</form>
+<p>Selected output execution: {% match data.output_execution %}{% when Some with (e) %}{{ e }}{% when None %}none{% endmatch %}
+  · Status: <span class="status-badge status-{{ data.output_status }}">{{ data.output_status }}</span>
+  · Source: <code>{{ data.output_source }}</code></p>
+{% if !data.output_result_present %}
+<p class="empty-state">No persisted result for this execution.</p>
+{% else %}
+{% match data.output.truncated_json %}{% when Some with (text) %}
+<p class="muted">Output truncated</p>
+<pre class="output-value">{{ text }}</pre>
+{% when None %}
+{% for field in data.output.fields %}
+{% match field.label %}{% when Some with (label) %}<h3 class="output-field">{{ label }}</h3>{% when None %}{% endmatch %}
+{% if field.expandable %}
+<details><summary>Show JSON</summary><pre class="output-value">{{ field.text }}</pre></details>
+{% else %}
+<pre class="output-value">{{ field.text }}</pre>
+{% endif %}
+{% endfor %}
+{% endmatch %}
+{% endif %}
+<p><a href="{{ data.output_json_url }}">Complete sanitized detail JSON</a></p>
+</section>
+
+<h2>Latest step input summary</h2>
+<details id="step-input-summary"><summary>Show JSON</summary><pre>{{ data.input_summary_json }}</pre></details>
+
+<h2>Latest step output summary</h2>
+<details id="step-output-summary"><summary>Show JSON</summary><pre>{{ data.output_summary_json }}</pre></details>
+
+<h2>Artifact/evidence iteration filter</h2>
+<form method="get" class="filters-inline" aria-label="Artifact/evidence iteration filter">
+  <input type="hidden" name="execution" value="{{ data.output_selector }}">
+  <label for="iteration-select">Show artifacts/evidence from</label>
+  <select id="iteration-select" name="iteration">
+    <option value="all" {% if data.iteration_scope == "all" %}selected{% endif %}>all iterations</option>
+    <option value="last" {% if data.iteration_scope == "last" %}selected{% endif %}>last iteration</option>
+    {% for iter in data.available_iterations %}
+    <option value="{{ iter }}" {% match data.selected_iteration %}{% when Some with (selected) %}{% if *selected == *iter %}selected{% endif %}{% when None %}{% endmatch %}>iteration {{ iter }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit">Apply</button>
+</form>
+<p class="muted">Artifacts and evidence follow this filter. Workflow files are shown from the step snapshot.</p>
+
+<h2>Workflow files</h2>
+{% if data.workflow_files.is_empty() %}<div class="empty-state">None.</div>{% else %}
+<table>
+  <thead><tr><th>Field</th><th>Name</th><th>Path</th><th>Size</th><th></th></tr></thead>
+  <tbody>
+  {% for w in data.workflow_files %}
+    <tr>
+      <td>{{ w.field_name }}</td>
+      <td class="mono">{{ w.name }}</td>
+      <td class="mono">{{ w.path }}</td>
+      <td>{{ w.size }}</td>
+      <td>{% match w.detail_url %}{% when Some with (url) %}<a href="{{ url }}">view</a>{% when None %}unavailable{% endmatch %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<h2>Artifacts</h2>
+{% if data.artifacts.is_empty() %}<div class="empty-state">None.</div>{% else %}
+<table>
+  <thead><tr><th>Name</th><th>Size</th><th>Type</th><th>Exec</th><th></th></tr></thead>
+  <tbody>
+  {% for a in data.artifacts %}
+    <tr>
+      <td class="mono">{{ a.name }}</td>
+      <td>{{ a.size }}</td>
+      <td>{{ a.media_type }}</td>
+      <td>{{ a.execution }}</td>
+      <td><a href="{{ a.detail_url }}">view</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<h2>Evidence</h2>
+{% if data.evidence.is_empty() %}<div class="empty-state">None.</div>{% else %}
+<table>
+  <thead><tr><th>Name</th><th>Size</th><th>Type</th><th>Exec</th><th></th></tr></thead>
+  <tbody>
+  {% for a in data.evidence %}
+    <tr>
+      <td class="mono">{{ a.name }}</td>
+      <td>{{ a.size }}</td>
+      <td>{{ a.media_type }}</td>
+      <td>{{ a.execution }}</td>
+      <td><a href="{{ a.detail_url }}">view</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<h2>Metrics</h2>
+<details id="step-metrics"><summary>Show JSON</summary><pre>{{ data.metrics_json }}</pre></details>
+{% endblock %}

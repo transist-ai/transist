@@ -1,0 +1,25 @@
+schema: transist.flow.v1
+id: demo.workflow
+version: v1
+plugins:
+  shell: 1.0.0
+modules:
+  review:
+    path: modules/review.yaml
+inputs: {}
+steps:
+- id: review
+  module:
+    ref: review
+    inputs: {}
+  with: {}
+- id: run_script
+  uses: process:shell/exec
+  with:
+    command: source://scripts/hello.sh
+- id: run_with_prompt
+  uses: process:shell/exec
+  prompt_file: prompts/task.md
+  with:
+    command: echo
+cleanup: []

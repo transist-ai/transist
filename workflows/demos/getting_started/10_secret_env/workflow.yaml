@@ -1,0 +1,21 @@
+schema: transist.flow.v1
+id: demo_10_secret_env
+version: 0.1.0
+plugins:
+  shell: 0.1.0
+network:
+  mode: none
+steps:
+  - id: receive_secret
+    uses: process:shell/exec_with_secret_env
+    with:
+      command: sh
+      args:
+        - -c
+        - |
+          if [ -z "${API_TOKEN-}" ]; then
+            echo "API_TOKEN not delivered" >&2
+            exit 1
+          fi
+          printf 'received secret of length %s\n' "${#API_TOKEN}"
+      secret_refs: ["MY_API_TOKEN"]

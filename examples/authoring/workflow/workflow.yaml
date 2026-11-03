@@ -1,0 +1,22 @@
+schema: transist.flow.v1
+id: tutorial.reviewed_greeting
+version: 0.1.0
+plugins:
+  shell: 0.1.0
+inputs:
+  name:
+    type: string
+    required: true
+steps:
+  - id: draft
+    uses: process:shell/echo
+    with:
+      args: ["Hello,", "{{inputs.name}}"]
+  - id: review
+    control: control.gate.manual
+    with:
+      gate_id: greeting-review
+  - id: deliver
+    uses: process:shell/echo
+    with:
+      args: ["Approved:", "{{steps.draft.out.stdout}}"]

@@ -1,0 +1,40 @@
+schema: transist.flow.v1
+id: demo_02_review_with_manual_gate
+version: 0.1.0
+plugins:
+  shell: 0.1.0
+network:
+  mode: none
+inputs:
+  request_id:
+    type: string
+    required: true
+  change_summary:
+    type: string
+    required: true
+steps:
+  - id: capture_context
+    uses: process:shell/exec
+    with:
+      command: sh
+      args:
+        - -c
+        - |
+          printf 'request=%s\nsummary=%s\n' "$1" "$2" > review-context.txt
+          printf 'captured context for %s\n' "$1"
+        - --
+        - "{{inputs.request_id}}"
+        - "{{inputs.change_summary}}"
+  - id: draft_summary
+    uses: process:shell/exec
+    with:
+      command: sh
+      args:
+        - -c
+        - |
+          mkdir -p "$TRANSIST_EVIDENCE_DIR"
+          printf 'draft summary for %s\n' "$1"
+          printf 'request=%s\nsummary=%s\n' "$1" "$2" > "$TRANSIST_EVIDENCE_DIR/review-summary.txt"
+        - --
+        - "{{inputs.request_id}}"
+        - "{{inputs.change_summary}}"

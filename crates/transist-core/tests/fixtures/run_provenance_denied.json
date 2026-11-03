@@ -1,0 +1,30 @@
+{
+  "schema": "transist.run_provenance.v1",
+  "run_id": "run-denied",
+  "workflow_id": "demo",
+  "workflow_version": "v1",
+  "workflow_digest": "abc123",
+  "workflow_signature_verified": false,
+  "workflow_trust_decision": "denied",
+  "plugins": [],
+  "trusted_execution_mode": true,
+  "policy_decision": {
+    "allowed": false,
+    "reason_code": "trusted_execution_denied",
+    "mode": "run_start"
+  },
+  "providers": [],
+  "external_transfer_summary": {
+    "count": 0
+  },
+  "approval_summary": [],
+  "decision": "denied",
+  "denied": {
+    "reason": "digest_mismatch",
+    "offending_kind": "workflow",
+    "offending_id": "demo",
+    "failed_verification_type": "workflow_signature",
+    "at_ms": 500
+  },
+  "created_at_ms": 500
+}

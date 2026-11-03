@@ -1,0 +1,23 @@
+[package]
+name = "transist-sandbox-launcher"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Internal Linux sandbox launcher that raises loopback then drops capabilities"
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "transist-sandbox-launcher"
+path = "src/main.rs"
+
+[dependencies]
+libc = { workspace = true }

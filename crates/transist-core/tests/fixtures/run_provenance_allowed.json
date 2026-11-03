@@ -1,0 +1,45 @@
+{
+  "schema": "transist.run_provenance.v1",
+  "run_id": "run-allowed",
+  "workflow_id": "demo",
+  "workflow_version": "v1",
+  "workflow_digest": "abc123",
+  "workflow_signature_verified": true,
+  "workflow_signer_key_id": "key-1",
+  "workflow_trust_decision": "verified",
+  "plugins": [
+    {
+      "id": "shell",
+      "version": "1.0.0",
+      "digest": "def456",
+      "signature_verified": true,
+      "signer_key_id": "key-1",
+      "trust_decision": "verified"
+    }
+  ],
+  "trusted_execution_mode": true,
+  "policy_decision": {
+    "allowed": true,
+    "mode": "run_start"
+  },
+  "providers": [
+    {
+      "step_id": "invoke",
+      "provider": "openai",
+      "model": "gpt-5.4"
+    }
+  ],
+  "external_transfer_summary": {
+    "count": 0
+  },
+  "approval_summary": [
+    {
+      "gate_id": "review",
+      "decision": "approved",
+      "reason": "looks good"
+    }
+  ],
+  "decision": "allowed",
+  "created_at_ms": 1000,
+  "finalized_at_ms": 2000
+}

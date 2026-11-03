@@ -1,0 +1,4 @@
+interface:
+  display_name: "Transist Runtime Setup"
+  short_description: "Guide beginner-safe Transist installation and runtime-home setup."
+  default_prompt: "Use $transist-runtime-setup to guide me one question at a time through optional Transist installation and runtime-home setup. After the home is ready, hand off workflow selection, signing, validation, policy, and testing to $transist-workflow-setup. Never search for private keys. Run read-only validation without permission prompts; ask for a choice when alternatives exist and require immediate consent only for trust mutations or private-key access."

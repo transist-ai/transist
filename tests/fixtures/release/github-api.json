@@ -1,0 +1,111 @@
+{
+  "candidate_sha": "1111111111111111111111111111111111111111",
+  "base": {
+    "rulesets": [
+      [
+        {
+          "id": 42,
+          "name": "v-tag-protection",
+          "target": "tag",
+          "enforcement": "active"
+        }
+      ],
+      [
+        {
+          "id": 99,
+          "name": "unrelated-ruleset",
+          "target": "branch",
+          "enforcement": "active"
+        }
+      ]
+    ],
+    "ruleset_detail": {
+      "name": "v-tag-protection",
+      "target": "tag",
+      "enforcement": "active",
+       "conditions": {"ref_name": {"include": ["refs/tags/v*"], "exclude": []}},
+      "rules": [
+        {"type": "deletion"},
+        {"type": "non_fast_forward"},
+        {"type": "update"}
+      ],
+      "bypass_actors": []
+    },
+    "check_runs": [
+      [
+        {
+          "name": "main-gate",
+          "head_sha": "1111111111111111111111111111111111111111",
+          "app": {"id": 15368, "slug": "github-actions"},
+          "started_at": "2026-08-10T10:00:00Z",
+          "completed_at": "2026-08-10T10:01:00Z",
+          "conclusion": "success"
+        },
+        {
+          "name": "security-gate",
+          "head_sha": "1111111111111111111111111111111111111111",
+          "app": {"id": 15368, "slug": "github-actions"},
+          "started_at": "2026-08-10T10:00:00Z",
+          "completed_at": "2026-08-10T10:01:00Z",
+          "conclusion": "success"
+        }
+      ],
+      [
+        {
+          "name": "main-gate",
+          "head_sha": "1111111111111111111111111111111111111111",
+          "app": {"id": 15368, "slug": "github-actions"},
+          "started_at": "2026-08-10T11:00:00Z",
+          "completed_at": "2026-08-10T11:01:00Z",
+          "conclusion": "success"
+        },
+        {
+          "name": "security-gate",
+          "head_sha": "1111111111111111111111111111111111111111",
+          "app": {"id": 15368, "slug": "github-actions"},
+          "started_at": "2026-08-10T11:00:00Z",
+          "completed_at": "2026-08-10T11:01:00Z",
+          "conclusion": "success"
+        }
+      ]
+    ],
+    "environment": {
+      "can_admins_bypass": false,
+      "deployment_branch_policy": {
+        "protected_branches": false,
+        "custom_branch_policies": true
+      },
+      "protection_rules": [
+        {
+          "type": "required_reviewers",
+          "reviewers": [{"reviewer": {"login": "implicitly-awesome"}}]
+        }
+      ],
+      "reviewers": ["implicitly-awesome"]
+    },
+    "branch_policies": {
+      "total_count": 2,
+      "branch_policies": [
+        {"id": 7, "name": "v*", "type": "tag"},
+        {"id": 8, "name": "main", "type": "branch"}
+      ]
+    }
+  },
+  "cases": {
+    "valid": {},
+    "wrong-sha": {"wrong_sha": true},
+    "wrong-provider": {"wrong_provider": true},
+    "latest-failure": {"latest_main": "failure"},
+    "latest-incomplete": {"latest_main": "incomplete"},
+    "invalid-ruleset": {"invalid_ruleset": true},
+    "extra-ruleset-rule": {"extra_ruleset_rule": true},
+    "ruleset-bypass": {"ruleset_bypass": true},
+    "wrong-reviewer": {"wrong_reviewer": true},
+    "extra-reviewer": {"extra_reviewer": true},
+    "admin-bypass": {"admin_bypass": true},
+    "extra-policy": {"extra_policy": true},
+    "wrong-tag-type": {"wrong_tag_type": true},
+    "empty-policy": {"empty_policy": true},
+    "permissive-update-rule": {"permissive_update_rule": true}
+  }
+}

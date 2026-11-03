@@ -1,0 +1,25 @@
+version: v1
+runtime:
+  mode: governed
+policy:
+  profile: allowlist
+  grant_sets:
+    detached_e2e:
+      plugin_grants:
+        - plugin: detached.prompt@1.0.0
+          actions: [run]
+        - plugin: shell@0.1.0
+          actions: [exec]
+      capabilities:
+        - capability: filesystem
+          resource: workspace:///e2e
+          operations: [list, read, create, write, delete, rename]
+        - capability: filesystem
+          resource: run://artifacts
+          operations: [create, write]
+        - capability: filesystem
+          resource: run://evidence
+          operations: [create, write]
+  workflow_grants:
+    - workflow: detached.demo@v1
+      use: [detached_e2e]

@@ -1,0 +1,23 @@
+schema: transist.flow.v1
+id: detached.demo
+version: v1
+plugins:
+  detached.prompt: 1.0.0
+  shell: 0.1.0
+inputs:
+  repo_path:
+    type: string
+    required: true
+workspace:
+  path: "{{inputs.repo_path}}"
+  access: full
+network:
+  mode: none
+steps:
+  - id: consume_prompt
+    uses: process:detached.prompt/run
+    prompt_file: prompts/task.md
+  - id: consume_source
+    uses: process:shell/exec
+    with:
+      command: source://scripts/hello.sh

@@ -1,0 +1,55 @@
+name: Bug report
+description: Report a reproducible defect in current Transist behavior.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug.
+
+        Please use this form only for reproducible defects. For vulnerabilities, do not open a normal issue; follow [SECURITY.md](../../SECURITY.md). For support boundaries, see [SUPPORT.md](../../SUPPORT.md).
+  - type: input
+    id: version
+    attributes:
+      label: Transist version or commit
+      description: The release version, tag, or commit SHA you tested. Transist is public beta (pre-1.0); report against the latest patch of the current minor. See [Compatibility and Stability](../../docs/public/reference/compatibility-and-stability.md).
+      placeholder: v0.1.0 or abc1234
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, shell, Rust version, and any relevant local setup details.
+      placeholder: macOS 15, zsh, Rust 1.88.0
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include the smallest workflow, commands, or setup needed to reproduce the issue.
+      placeholder: Step-by-step reproduction with exact commands and inputs.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect Transist to do?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead? Include relevant error output or inspection details. Before submission, remove secrets, tokens, customer data, private paths, and sensitive run artifacts.
+    validations:
+      required: true
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Add any screenshots, logs, or notes that help isolate the bug. Before submission, remove secrets, tokens, customer data, private paths, and sensitive run artifacts.

@@ -1,0 +1,95 @@
+schema: transist.flow.v1
+id: transist_capability_verification
+version: 0.1.0
+plugins:
+  shell: 0.1.0
+modules:
+  snapshot:
+    path: modules/subflow_snapshot.yaml
+  review_loop:
+    path: modules/review_loop.yaml
+inputs:
+  session_name:
+    type: string
+    required: true
+    description: Short label carried through artifacts and evidence for the current verification run.
+  include_optional_branch:
+    type: boolean
+    default: true
+    description: When true, exercise the guarded optional echo step before the subflow.
+  exercise_resume_demo:
+    type: boolean
+    default: false
+    description: When true, fail on the resume checkpoint until the operator creates the marker file.
+  checkpoint_number:
+    type: number
+    default: 1
+    description: Numeric checkpoint value recorded in the preparation artifacts.
+  repo_path:
+    type: string
+    required: true
+    description: Canonical repository workspace used by every workflow step.
+workspace:
+  path: "{{inputs.repo_path}}"
+  access: full
+steps:
+  - id: prepare_workspace
+    uses: process:shell/exec
+    with:
+      command: sh
+      args:
+        - -c
+        - >-
+          python3 tests/manual/capability_verification/scripts/prepare_workspace.py
+          '{{inputs.session_name}}' '{{inputs.checkpoint_number}}'
+
+  - id: snapshot_subflow
+    module:
+      ref: snapshot
+      inputs:
+        session_name: "{{inputs.session_name}}"
+
+  - id: review_loop
+    module:
+      ref: review_loop
+      inputs:
+        session_name: "{{inputs.session_name}}"
+
+  - id: maybe_resume_demo
+    control: control.noop
+
+  - id: resume_checkpoint
+    uses: process:shell/exec
+    with:
+      command: python3
+      args:
+        - tests/manual/capability_verification/scripts/check_resume_marker.py
+        - "{{inputs.session_name}}"
+
+  - id: collect_summary
+    uses: process:shell/exec
+    with:
+      command: python3
+      args:
+        - tests/manual/capability_verification/scripts/collect_summary.py
+        - "{{inputs.session_name}}"
+
+  - id: branch_optional_echo
+    control: control.noop
+    if:
+      guard: "inputs.include_optional_branch == true"
+      then:
+        - ref: optional_echo
+      else:
+        - ref: finish
+
+  - id: optional_echo
+    uses: process:shell/echo
+    with:
+      args:
+        - optional-branch
+        - "{{inputs.session_name}}"
+        - "{{inputs.checkpoint_number}}"
+
+  - id: finish
+    control: control.finish

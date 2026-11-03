@@ -1,0 +1,11 @@
+{
+  "key_id": "eebb50e73c06b23b1bba2f9ccfe73436c92824056b11ee145d24aa28e1259aab",
+  "workflow": {
+    "subject_key": "workflow:demo.workflow@v1@52292daa92268539b0c43c4514b6187656fe5712c469080eec8f0d2f4311b96e",
+    "digest": "52292daa92268539b0c43c4514b6187656fe5712c469080eec8f0d2f4311b96e"
+  },
+  "plugin": {
+    "subject_key": "plugin:demo.plugin@v1@3098e6f53be592a9c2c3bc86d6950978a48c7824973004f567205a00b4b1343b",
+    "digest": "3098e6f53be592a9c2c3bc86d6950978a48c7824973004f567205a00b4b1343b"
+  }
+}

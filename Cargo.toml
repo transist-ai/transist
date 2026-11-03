@@ -1,0 +1,179 @@
+[workspace]
+resolver = "3"
+members = [
+    ".",
+    "crates/transist-prerequisites",
+    "crates/transist-protocol",
+    "crates/transist-plugins",
+    "crates/transist-trust-digest",
+    "crates/transist-core",
+    "crates/transist-compiler",
+    "crates/transist-policy",
+    "crates/transist-storage-local",
+    "crates/transist-adapters",
+    "crates/transist-inspection",
+    "crates/transist-metrics",
+    "crates/transist-cli",
+    "transist-admin",
+    "crates/transist-server",
+    "crates/transist-sandbox-launcher",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88.0"
+license = "MPL-2.0"
+readme = "README.md"
+keywords = ["workflow", "orchestration", "automation", "runtime"]
+categories = ["command-line-utilities", "development-tools"]
+publish = false
+repository = "https://github.com/transist-ai/transist"
+homepage = "https://transist.ai"
+
+[workspace.dependencies]
+# External dependencies
+anyhow = "1.0"
+askama = "0.14"
+assert_cmd = "2.0"
+axum = "0.8"
+base64 = "0.22"
+clap = { version = "4.5", features = ["derive"] }
+crossterm = "0.28"
+criterion = { version = "0.5", features = ["html_reports"] }
+ctrlc = "3.4"
+dialoguer = "0.11"
+ed25519-dalek = "2.1"
+hex = "0.4"
+hostname = "0.4"
+jsonschema = { version = "=0.18.3", default-features = false, features = ["draft202012"] }
+libc = "0.2"
+lru = "0.18"
+mime_guess = "2.0"
+rand = "0.8"
+ratatui = "0.29"
+rcgen = { version = "0.14.8", default-features = false, features = ["pem", "ring"] }
+regex = "1.11"
+reqwest = { version = "0.12.24", default-features = false, features = ["rustls-tls", "json", "gzip"] }
+semver = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_urlencoded = "0.7"
+yaml_serde = "0.10.7"
+sha2 = "0.10"
+shell-words = "1.1"
+tempfile = "3.10"
+thiserror = "2"
+time = { version = "0.3.47", features = ["formatting"] }
+tokio = { version = "1.44", features = ["macros", "rt-multi-thread", "time"] }
+tower = { version = "0.5", features = ["util"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt"] }
+tui-textarea = "0.7"
+url = "2.5"
+uuid = { version = "1.8", features = ["v4", "v7"] }
+which = "7.0"
+# Internal dependencies
+transist = { path = ".", default-features = false }
+transist-adapters = { path = "crates/transist-adapters" }
+transist-admin = { path = "transist-admin" }
+transist-cli = { path = "crates/transist-cli" }
+transist-compiler = { path = "crates/transist-compiler" }
+transist-core = { path = "crates/transist-core" }
+transist-inspection = { path = "crates/transist-inspection" }
+transist-metrics = { path = "crates/transist-metrics" }
+transist-plugins = { path = "crates/transist-plugins" }
+transist-policy = { path = "crates/transist-policy" }
+transist-prerequisites = { path = "crates/transist-prerequisites" }
+transist-protocol = { path = "crates/transist-protocol" }
+transist-server = { path = "crates/transist-server" }
+transist-storage-local = { path = "crates/transist-storage-local" }
+transist-trust-digest = { path = "crates/transist-trust-digest" }
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+uninlined_format_args = "allow"
+
+[features]
+central-inspection-sync = []
+managed-mode = []
+dev-version-bypass = ["transist-compiler/dev-version-bypass", "transist-core/dev-version-bypass"]
+
+[package]
+name = "transist"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Transist workspace crate for shared dependencies and integration tests"
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[[bench]]
+name = "tui_load_benchmark"
+harness = false
+
+[[bench]]
+name = "workflow_readiness_benchmark"
+harness = false
+
+[lints]
+workspace = true
+
+[profile.dev]
+debug = "line-tables-only"
+split-debuginfo = "unpacked"
+
+[profile.dev.package."*"]
+opt-level = 1
+
+[profile.release]
+strip = "symbols"
+lto = "fat"
+codegen-units = 1
+debug = 0
+
+[profile.release-dbg]
+inherits = "release"
+debug = 2
+strip = "none"
+lto = false
+codegen-units = 16
+
+[dependencies]
+anyhow = { workspace = true }
+jsonschema = { workspace = true }
+libc = { workspace = true }
+lru = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+yaml_serde = { workspace = true }
+sha2 = { workspace = true }
+tracing = { workspace = true }
+transist-adapters = { workspace = true }
+transist-compiler = { workspace = true }
+transist-core = { workspace = true }
+transist-inspection = { workspace = true }
+transist-metrics = { workspace = true }
+transist-policy = { workspace = true }
+transist-prerequisites = { workspace = true }
+transist-protocol = { workspace = true }
+transist-plugins = { workspace = true }
+transist-storage-local = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+base64 = { workspace = true }
+criterion = { workspace = true }
+ed25519-dalek = { workspace = true }
+hex = { workspace = true }
+tempfile = { workspace = true }
+transist-admin = { workspace = true }
+url = { workspace = true }

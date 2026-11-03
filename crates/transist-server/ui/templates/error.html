@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Error · Transist Inspect{% endblock %}
+{% block content %}
+<h1>Error</h1>
+<div class="error-box" role="alert">
+  <p><strong>{{ code }}</strong></p>
+  <p>{{ message }}</p>
+</div>
+<p><a href="/inspect/runs">Back to runs</a></p>
+{% endblock %}

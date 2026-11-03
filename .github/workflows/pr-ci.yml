@@ -1,0 +1,313 @@
+name: PR Gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-validation-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  RUST_BACKTRACE: short
+  # The installer and binary-only cache must resolve the same path in containers.
+  # Cache keys also hash this workflow so its actual image digest is bound.
+  CI_TOOL_ROOT: /tmp/transist-ci-tools
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  commit-signoff:
+    name: Commit Sign-off
+    runs-on: ubuntu-24.04
+    if: ${{ github.event.pull_request.draft == false && github.actor != 'dependabot[bot]' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Verify commit sign-offs
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash scripts/ci/check_commit_signoffs.sh "$BASE_SHA" "$HEAD_SHA"
+
+  ci-static:
+    name: ci-static
+    if: ${{ github.event.pull_request.draft == false }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Install pinned static checker
+        # Only the checksum-pinned actionlint binary is needed; no Cargo installs.
+        # GITHUB_PATH from the installer makes it available to the next step.
+        run: bash scripts/ci/install_ci_tools.sh static
+      - name: Validate CI statically
+        run: bash scripts/ci/check_ci_static.sh
+
+  preflight-gate:
+    name: preflight-gate
+    if: ${{ always() }}
+    needs:
+      - ci-static
+      - commit-signoff
+      - markdownlint
+      - cargo-deny
+      - dependency-review
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Require all preflight checks
+        env:
+          IS_DRAFT: ${{ github.event.pull_request.draft }}
+          IS_DEPENDABOT: ${{ github.actor == 'dependabot[bot]' }}
+          DEPENDENCY_REVIEW_ENABLED: ${{ vars.ENABLE_DEPENDENCY_REVIEW }}
+          CI_STATIC_RESULT: ${{ needs.ci-static.result }}
+          COMMIT_SIGNOFF_RESULT: ${{ needs.commit-signoff.result }}
+          MARKDOWNLINT_RESULT: ${{ needs.markdownlint.result }}
+          CARGO_DENY_RESULT: ${{ needs.cargo-deny.result }}
+          DEPENDENCY_REVIEW_RESULT: ${{ needs.dependency-review.result }}
+        run: bash scripts/ci/check_gate_results.sh preflight
+
+  validate-full:
+    name: validate-full
+    needs: [preflight-gate]
+    if: ${{ !cancelled() && github.event.pull_request.draft == false && needs.preflight-gate.result == 'success' }}
+    runs-on: ubuntu-24.04
+    container:
+      image: rust:1.88.0-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0
+      options: --cap-add=SYS_ADMIN --cap-add=NET_ADMIN --security-opt apparmor=unconfined --security-opt seccomp=unconfined
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy --no-self-update
+          rustup default 1.88.0
+      - name: Cargo build cache
+        uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+        with:
+          prefix-key: pr-ci-noncoverage-ubuntu-24.04-bookworm-${{ hashFiles('.github/workflows/pr-ci.yml', 'scripts/ci/tool-versions.env') }}
+          shared-key: pr-ci-validate-full
+          cache-bin: false
+          cache-on-failure: true
+      - name: Cache pinned Cargo CI tools
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          # Never cache all of CARGO_HOME/bin (it contains rustup shims).
+          path: |
+            ${{ env.CI_TOOL_ROOT }}/bin/cargo-deny
+            ${{ env.CI_TOOL_ROOT }}/bin/cargo-about
+            ${{ env.CI_TOOL_ROOT }}/bin/cargo-cyclonedx
+            ${{ env.CI_TOOL_ROOT }}/bin/cargo-llvm-cov
+          key: pr-ci-tools-release-${{ runner.os }}-${{ runner.arch }}-ubuntu-24.04-bookworm-${{ hashFiles('.github/workflows/pr-ci.yml', 'rust-toolchain.toml', 'scripts/ci/tool-versions.env', 'scripts/ci/install_ci_tools.sh') }}
+      - name: Install debian test dependencies
+        run: |
+          bash scripts/ci/install_debian_tools.sh bubblewrap ripgrep git jq python3 curl unzip nodejs npm pip3
+          bash scripts/ci/install_ci_tools.sh release
+      - name: Build sandbox launcher (test dependency)
+        run: cargo build --locked -p transist-sandbox-launcher
+      - name: Install sandbox launcher for containerized tests
+        run: install -Dm755 target/debug/transist-sandbox-launcher /usr/libexec/transist/transist-sandbox-launcher
+      - name: Run full PR-readiness gate
+        run: bash scripts/ci/check_pr_ready.sh
+
+  coverage:
+    name: coverage
+    needs: [preflight-gate]
+    if: ${{ !cancelled() && github.event.pull_request.draft == false && needs.preflight-gate.result == 'success' }}
+    runs-on: ubuntu-24.04
+    container:
+      image: rust:1.88.0-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0
+      options: --cap-add=SYS_ADMIN --cap-add=NET_ADMIN --security-opt apparmor=unconfined --security-opt seccomp=unconfined
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Install Rust toolchain and coverage component
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal --component llvm-tools-preview --no-self-update
+          rustup default 1.88.0
+      - name: Cargo build cache (coverage)
+        uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+        with:
+          prefix-key: pr-ci-coverage-ubuntu-24.04-bookworm-${{ hashFiles('.github/workflows/pr-ci.yml', 'scripts/ci/tool-versions.env') }}
+          shared-key: pr-ci-coverage
+          cache-bin: false
+          cache-on-failure: true
+      - name: Cache pinned Cargo coverage tool
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: ${{ env.CI_TOOL_ROOT }}/bin/cargo-llvm-cov
+          key: pr-ci-tools-coverage-${{ runner.os }}-${{ runner.arch }}-ubuntu-24.04-bookworm-${{ hashFiles('.github/workflows/pr-ci.yml', 'rust-toolchain.toml', 'scripts/ci/tool-versions.env', 'scripts/ci/install_ci_tools.sh') }}
+      - name: Install coverage dependencies
+        run: |
+          bash scripts/ci/install_debian_tools.sh bubblewrap git jq python3
+          bash scripts/ci/install_ci_tools.sh coverage
+      - name: Build sandbox launcher (test dependency)
+        run: cargo build --locked -p transist-sandbox-launcher
+      - name: Install sandbox launcher for containerized tests
+        run: install -Dm755 target/debug/transist-sandbox-launcher /usr/libexec/transist/transist-sandbox-launcher
+      - name: Generate coverage reports
+        run: bash scripts/ci/run_coverage.sh coverage
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage-pr-${{ github.event.pull_request.number }}-${{ github.sha }}
+          path: coverage
+          if-no-files-found: error
+
+  schema-api-contracts:
+    name: schema-api-contracts
+    needs: [preflight-gate]
+    if: ${{ !cancelled() && github.event.pull_request.draft == false && needs.preflight-gate.result == 'success' }}
+    runs-on: ubuntu-24.04
+    container:
+      image: rust:1.88.0-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0
+      options: --cap-add=SYS_ADMIN --cap-add=NET_ADMIN --security-opt apparmor=unconfined --security-opt seccomp=unconfined
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Cargo build cache (schema contracts)
+        uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+        with:
+          prefix-key: pr-ci-noncoverage-ubuntu-24.04-bookworm-${{ hashFiles('.github/workflows/pr-ci.yml', 'scripts/ci/tool-versions.env') }}
+          shared-key: pr-ci-schema-api-contracts
+          cache-bin: false
+          cache-on-failure: true
+      - name: Cache pinned Cargo audit tools
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: |
+            ${{ env.CI_TOOL_ROOT }}/bin/cargo-deny
+            ${{ env.CI_TOOL_ROOT }}/bin/cargo-about
+          key: pr-ci-tools-audit-${{ runner.os }}-${{ runner.arch }}-ubuntu-24.04-bookworm-${{ hashFiles('.github/workflows/pr-ci.yml', 'rust-toolchain.toml', 'scripts/ci/tool-versions.env', 'scripts/ci/install_ci_tools.sh') }}
+      - name: Install contract dependencies
+        run: |
+          bash scripts/ci/install_debian_tools.sh bubblewrap nodejs npm python3 pip3 jq git
+          bash scripts/ci/install_ci_tools.sh audit
+      - name: Build sandbox launcher (contract test dependency)
+        run: cargo build --locked -p transist-sandbox-launcher
+      - name: Install sandbox launcher for contract tests
+        run: install -Dm755 target/debug/transist-sandbox-launcher /usr/libexec/transist/transist-sandbox-launcher
+      - name: Run schema and OpenAPI contracts
+        run: bash scripts/ci/check_schema_api_contracts.sh
+
+  cargo-deny:
+    name: cargo-deny
+    if: ${{ github.event.pull_request.draft == false }}
+    runs-on: ubuntu-24.04
+    container:
+      image: rust:1.88.0-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Cache pinned Cargo audit tools
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: |
+            ${{ env.CI_TOOL_ROOT }}/bin/cargo-deny
+            ${{ env.CI_TOOL_ROOT }}/bin/cargo-about
+          key: pr-ci-tools-audit-${{ runner.os }}-${{ runner.arch }}-ubuntu-24.04-bookworm-${{ hashFiles('.github/workflows/pr-ci.yml', 'rust-toolchain.toml', 'scripts/ci/tool-versions.env', 'scripts/ci/install_ci_tools.sh') }}
+      - name: Install cargo-deny
+        run: |
+          bash scripts/ci/install_debian_tools.sh curl unzip nodejs npm python3 pip3 jq
+          bash scripts/ci/install_ci_tools.sh audit
+      - name: Run full cargo-deny policy
+        run: cargo deny check
+
+  markdownlint:
+    name: markdownlint
+    if: ${{ github.event.pull_request.draft == false }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: scripts/ci/markdown/package-lock.json
+      - name: Install locked Markdown tools
+        run: npm ci --ignore-scripts --no-audit --prefix scripts/ci/markdown
+      - name: Lint tracked Markdown
+        run: bash scripts/ci/check_markdown.sh
+
+  dependency-review:
+    if: ${{ vars.ENABLE_DEPENDENCY_REVIEW == 'true' && github.event.pull_request.draft == false }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Dependency review
+        uses: actions/dependency-review-action@ce3cf9537a52e8119d91fd484ab5b8a807627bf8 # v4.6.0
+        with:
+          fail-on-severity: high
+
+  pr-gate:
+    name: pr-gate
+    if: ${{ always() }}
+    needs:
+      - ci-static
+      - preflight-gate
+      - commit-signoff
+      - validate-full
+      - schema-api-contracts
+      - cargo-deny
+      - markdownlint
+      - coverage
+      - dependency-review
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Require all PR checks
+        env:
+          IS_DRAFT: ${{ github.event.pull_request.draft }}
+          IS_DEPENDABOT: ${{ github.actor == 'dependabot[bot]' }}
+          CI_STATIC_RESULT: ${{ needs.ci-static.result }}
+          PREFLIGHT_RESULT: ${{ needs.preflight-gate.result }}
+          COMMIT_SIGNOFF_RESULT: ${{ needs.commit-signoff.result }}
+          DEPENDENCY_REVIEW_ENABLED: ${{ vars.ENABLE_DEPENDENCY_REVIEW }}
+          DEPENDENCY_REVIEW_RESULT: ${{ needs.dependency-review.result }}
+          VALIDATE_RESULT: ${{ needs.validate-full.result }}
+          SCHEMA_RESULT: ${{ needs.schema-api-contracts.result }}
+          CARGO_DENY_RESULT: ${{ needs.cargo-deny.result }}
+          MARKDOWNLINT_RESULT: ${{ needs.markdownlint.result }}
+          COVERAGE_RESULT: ${{ needs.coverage.result }}
+        run: bash scripts/ci/check_gate_results.sh pr

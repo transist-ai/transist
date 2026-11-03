@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://transist.dev/schemas/tep/capabilities.schema.json",
+  "title": "TEP Adapter Capabilities v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["actions"],
+  "properties": {
+    "actions": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "supports_cancel": { "type": "boolean" },
+    "supports_health": { "type": "boolean" }
+  }
+}

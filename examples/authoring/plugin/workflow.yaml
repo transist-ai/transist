@@ -1,0 +1,14 @@
+schema: transist.flow.v1
+id: tutorial.plugin_greeting
+version: 0.1.0
+plugins:
+  tutorial.greeting: 0.1.0
+inputs:
+  name:
+    type: string
+    required: true
+steps:
+  - id: greet
+    uses: process:tutorial.greeting/greet
+    with:
+      name: "{{inputs.name}}"

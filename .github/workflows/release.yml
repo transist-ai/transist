@@ -1,0 +1,747 @@
+name: Release CD
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "stage: build, sign, and upload to draft; publish: verify, attest when public, and publish"
+        required: true
+        type: choice
+        options: [stage, publish]
+      release_tag:
+        description: "Existing immutable release tag (for example, v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  RUST_BACKTRACE: short
+
+concurrency:
+  group: release-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  validate-input:
+    runs-on: ubuntu-24.04
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      DISPATCH_REF: ${{ github.ref }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Validate release tag
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "invalid release tag: $RELEASE_TAG" >&2
+            exit 1
+          }
+      - name: Require dispatch from the exact release tag ref
+        run: |
+          set -euo pipefail
+          [[ "$DISPATCH_REF" == "refs/tags/$RELEASE_TAG" ]] || {
+            echo "FAIL: workflow dispatched from $DISPATCH_REF; expected refs/tags/$RELEASE_TAG" >&2
+            echo "      Dispatch Release CD from the exact release tag ref so preflight can" >&2
+            echo "      bind existing hosted gates and release assets to the tag SHA." >&2
+            exit 1
+          }
+
+  release-preflight:
+    if: inputs.operation == 'stage'
+    needs: validate-input
+    runs-on: ubuntu-24.04
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      GH_TOKEN: ${{ github.token }}
+    permissions:
+      contents: read
+      checks: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: refs/tags/${{ inputs.release_tag }}
+          fetch-depth: 0
+      - name: Install pinned preflight tools
+        run: bash scripts/ci/install_ci_tools.sh preflight
+      - name: Verify exact tag and required hosted gates
+        run: |
+          set -euo pipefail
+          release_sha="$(git rev-parse "refs/tags/$RELEASE_TAG^{}")"
+          bash scripts/ci/check_release_candidate.sh "$RELEASE_TAG" --sha "$release_sha"
+
+  build:
+    if: inputs.operation == 'stage'
+    needs: release-preflight
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            host: x86_64-unknown-linux-gnu
+            container_image: rust:1.88.0-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+            host: x86_64-unknown-linux-musl
+            container_image: rust:1.88.0-alpine@sha256:9dfaae478ecd298b6b5a039e1f2cc4fc040fc818a2de9aa78fa714dea036574d
+          - os: macos-15
+            target: aarch64-apple-darwin
+            host: aarch64-apple-darwin
+            container_image: ''
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            host: x86_64-apple-darwin
+            container_image: ''
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            host: aarch64-unknown-linux-gnu
+            container_image: rust:1.88.0-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+            host: aarch64-unknown-linux-gnu
+            # GitHub Actions cannot run JavaScript actions in Alpine containers
+            # on Arm64. Use the pinned Debian image and its native musl toolchain.
+            container_image: rust:1.88.0-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0
+    runs-on: ${{ matrix.os }}
+    container:
+      image: ${{ matrix.container_image }}
+      options: ${{ matrix.container_image != '' && '--cap-add=SYS_ADMIN --cap-add=NET_ADMIN --security-opt apparmor=unconfined --security-opt seccomp=unconfined' || '' }}
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: refs/tags/${{ inputs.release_tag }}
+          fetch-depth: 0
+      - name: Install Alpine runtime and sandbox tools
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        shell: sh
+        run: sh scripts/ci/install_alpine_tools.sh
+      - name: Re-checkout as a real git repo
+        # The rust:1.88.0-alpine container has no git on PATH at first checkout,
+        # so actions/checkout fell back to the GitHub REST-API tarball and created
+        # NO local `.git`. Every later git-reading step (provenance) dies with
+        # "fatal: not a git repository". Now that install_alpine_tools.sh has
+        # installed git, re-checkout so the workspace is a real repository.
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: refs/tags/${{ inputs.release_tag }}
+          fetch-depth: 0
+      - name: Install GNU build tools
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: bash scripts/ci/install_debian_tools.sh jq python3
+      - name: Install native Arm64 musl toolchain
+        if: matrix.target == 'aarch64-unknown-linux-musl'
+        run: bash scripts/ci/install_debian_tools.sh musl-tools
+      - name: Install Rust toolchain
+        run: rustup toolchain install 1.88.0 --profile minimal --no-self-update
+      - name: Add Arm64 musl Rust target
+        if: matrix.target == 'aarch64-unknown-linux-musl'
+        run: rustup target add aarch64-unknown-linux-musl --toolchain 1.88.0
+      - name: Assert host architecture
+        run: |
+          set -euo pipefail
+          test "$(rustc -vV | sed -n 's/^host: //p')" = "${{ matrix.host }}"
+      - name: Verify native Arm64 musl toolchain
+        if: matrix.target == 'aarch64-unknown-linux-musl'
+        run: |
+          set -euo pipefail
+          rustup target list --installed --toolchain 1.88.0 | grep -Fx aarch64-unknown-linux-musl
+          command -v musl-gcc
+          printf 'int main(void) { return 0; }\n' | musl-gcc -x c - -o /tmp/musl-probe
+          /tmp/musl-probe
+      - name: Verify musl toolchain produces glibc-free output
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: |
+          set -euo pipefail
+          printf 'fn main(){}\n' > /tmp/h.rs
+          rustc --target x86_64-unknown-linux-musl --crate-type bin -o /tmp/h.bin /tmp/h.rs
+          if grep -q ld-linux /tmp/h.bin 2>/dev/null || strings /tmp/h.bin 2>/dev/null | grep -q 'libc.so'; then
+            echo "FAIL: musl output links against glibc" >&2
+            exit 1
+          fi
+      - name: Build release binaries
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+        run: |
+          set -euo pipefail
+          if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-musl" ]]; then
+            # Fat LTO can otherwise link several large binaries concurrently
+            # and exceed the Arm64 runner's memory budget.
+            cargo +1.88.0 build --locked --release --jobs 1 --target ${{ matrix.target }} -p transist-cli -p transist-server -p transist-admin -p transist-sandbox-launcher
+          else
+            cargo +1.88.0 build --locked --release --target ${{ matrix.target }} -p transist-cli -p transist-server -p transist-admin -p transist-sandbox-launcher
+          fi
+      - name: Stage raw native build artifacts and provenance
+        env:
+          CI_RUNNER_IMAGE: ${{ matrix.os }}
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory '*'
+          mkdir -p raw-build
+          target="${{ matrix.target }}"
+          cp "target/${target}/release/transist" raw-build/transist
+          cp "target/${target}/release/transist-server" raw-build/transist-server
+          cp "target/${target}/release/transist-admin" raw-build/transist-admin
+          # Stage the Linux-only sandbox launcher for Linux targets.
+          extra_bins=()
+          # shellcheck disable=SC2193 # GitHub expands matrix.target at runtime.
+          if [[ "${{ matrix.target }}" == *-linux-* ]]; then
+            cp "target/${target}/release/transist-sandbox-launcher" raw-build/transist-sandbox-launcher
+            extra_bins=(raw-build/transist-sandbox-launcher)
+          fi
+          bash scripts/ci/record_build_provenance.sh \
+            "raw-build/build-provenance-${target}.json" \
+            "${target}" \
+            raw-build/transist raw-build/transist-server raw-build/transist-admin ${extra_bins[@]+"${extra_bins[@]}"} \
+            --commit "$(git rev-parse 'HEAD^{commit}')" \
+            --tree "$(git rev-parse 'HEAD^{tree}')"
+      - name: Upload raw native build artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-raw-${{ matrix.target }}
+          path: raw-build
+          if-no-files-found: error
+
+  package:
+    if: inputs.operation == 'stage'
+    needs: [validate-input, build]
+    runs-on: ubuntu-24.04
+    # Packaging is intentionally centralized so archive bytes do not depend on
+    # the native build runner or its tar implementation.
+    container:
+      image: rust:1.88.0-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      CI_CONTAINER_IMAGE: rust:1.88.0-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0
+      CI_RUNNER_IMAGE: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: refs/tags/${{ inputs.release_tag }}
+          fetch-depth: 0
+      - name: Install packaging tools
+        run: bash scripts/ci/install_debian_tools.sh jq python3
+      - name: Download raw native build artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-raw-x86_64-unknown-linux-gnu
+          path: raw-builds/x86_64-unknown-linux-gnu
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-raw-x86_64-unknown-linux-musl
+          path: raw-builds/x86_64-unknown-linux-musl
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-raw-aarch64-apple-darwin
+          path: raw-builds/aarch64-apple-darwin
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-raw-x86_64-apple-darwin
+          path: raw-builds/x86_64-apple-darwin
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-raw-aarch64-unknown-linux-gnu
+          path: raw-builds/aarch64-unknown-linux-gnu
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-raw-aarch64-unknown-linux-musl
+          path: raw-builds/aarch64-unknown-linux-musl
+      - name: Package all archives from raw inputs
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory '*'
+          mkdir -p dist
+          release_sha="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+          tree_sha="$(git rev-parse "$release_sha^{tree}")"
+          bash scripts/ci/record_packaging_provenance.sh dist/packaging-provenance.json \
+            --commit "$release_sha" --tree "$tree_sha"
+          for target in x86_64-unknown-linux-gnu x86_64-unknown-linux-musl aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-gnu aarch64-unknown-linux-musl; do
+            raw_dir="raw-builds/$target"
+            python3 -c 'import json, sys; value = json.load(open(sys.argv[1], encoding="utf-8")); assert value.get("kind") == "native-build"; assert value.get("target") == sys.argv[4]; assert value.get("source", {}).get("commit_sha") == sys.argv[2]; assert value.get("source", {}).get("tree_sha") == sys.argv[3]; assert value.get("binaries")' \
+              "$raw_dir/build-provenance-$target.json" "$release_sha" "$tree_sha" "$target"
+            cp "$raw_dir/build-provenance-$target.json" "dist/build-provenance-$target.json"
+            # Linux targets include the sandbox launcher; macOS does not.
+            launcher_arg=""
+            if [[ "$target" == *-linux-* ]]; then
+              launcher_arg="$raw_dir/transist-sandbox-launcher"
+            fi
+            TRANSIST_DIST_DIR=dist bash scripts/ci/package_release_archive.sh \
+              "$RELEASE_TAG" \
+              "$raw_dir/transist" \
+              "$raw_dir/transist-server" \
+              "$raw_dir/transist-admin" \
+              "$target" \
+              dist/packaging-provenance.json \
+              ${launcher_arg}
+            bash scripts/ci/check_release_archive.sh "$target" "$RELEASE_TAG" \
+              --expected-commit "$release_sha" --expected-tree "$tree_sha" \
+              --allow-unsigned --host-independent \
+              "dist/transist-${RELEASE_TAG}-${target}.tar.gz"
+          done
+      - name: Upload final unsigned package inputs
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-packaged
+          path: |
+            dist/transist-${{ inputs.release_tag }}-x86_64-unknown-linux-gnu.tar.gz
+            dist/transist-${{ inputs.release_tag }}-x86_64-unknown-linux-gnu.tar.gz.sha256
+            dist/transist-${{ inputs.release_tag }}-x86_64-unknown-linux-musl.tar.gz
+            dist/transist-${{ inputs.release_tag }}-x86_64-unknown-linux-musl.tar.gz.sha256
+            dist/transist-${{ inputs.release_tag }}-aarch64-apple-darwin.tar.gz
+            dist/transist-${{ inputs.release_tag }}-aarch64-apple-darwin.tar.gz.sha256
+            dist/transist-${{ inputs.release_tag }}-x86_64-apple-darwin.tar.gz
+            dist/transist-${{ inputs.release_tag }}-x86_64-apple-darwin.tar.gz.sha256
+            dist/transist-${{ inputs.release_tag }}-aarch64-unknown-linux-gnu.tar.gz
+            dist/transist-${{ inputs.release_tag }}-aarch64-unknown-linux-gnu.tar.gz.sha256
+            dist/transist-${{ inputs.release_tag }}-aarch64-unknown-linux-musl.tar.gz
+            dist/transist-${{ inputs.release_tag }}-aarch64-unknown-linux-musl.tar.gz.sha256
+            dist/build-provenance-x86_64-unknown-linux-gnu.json
+            dist/build-provenance-x86_64-unknown-linux-musl.json
+            dist/build-provenance-aarch64-apple-darwin.json
+            dist/build-provenance-x86_64-apple-darwin.json
+            dist/build-provenance-aarch64-unknown-linux-gnu.json
+            dist/build-provenance-aarch64-unknown-linux-musl.json
+            dist/packaging-provenance.json
+          if-no-files-found: error
+
+  archive-smoke:
+    if: inputs.operation == 'stage'
+    needs: [validate-input, package]
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            container_image: rust:1.88.0-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+            container_image: rust:1.88.0-alpine@sha256:9dfaae478ecd298b6b5a039e1f2cc4fc040fc818a2de9aa78fa714dea036574d
+          - os: macos-15
+            target: aarch64-apple-darwin
+            container_image: ''
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            container_image: ''
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            container_image: rust:1.88.0-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+            # JavaScript actions cannot run in Alpine containers on Arm64.
+            # Smoke the static musl archive from pinned Debian with musl-tools.
+            container_image: rust:1.88.0-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0
+    runs-on: ${{ matrix.os }}
+    container:
+      image: ${{ matrix.container_image }}
+      options: ${{ matrix.container_image != '' && '--cap-add=SYS_ADMIN --cap-add=NET_ADMIN --security-opt apparmor=unconfined --security-opt seccomp=unconfined' || '' }}
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: refs/tags/${{ inputs.release_tag }}
+          fetch-depth: 0
+      - name: Install Alpine runtime and sandbox tools
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        shell: sh
+        run: sh scripts/ci/install_alpine_tools.sh
+      - name: Re-checkout as a real git repo
+        # The rust:1.88.0-alpine container has no git on PATH at first checkout,
+        # so actions/checkout fell back to the GitHub REST-API tarball and created
+        # NO local `.git`. Every later git-reading step (provenance, reproducibility)
+        # dies with "fatal: not a git repository". Now that install_alpine_tools.sh
+        # has installed git, re-checkout so the workspace is a real repository.
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: refs/tags/${{ inputs.release_tag }}
+          fetch-depth: 0
+      - name: Trust container checkout for release inspection
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Install Debian runtime and sandbox tools
+        if: matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-musl'
+        run: |
+          set -euo pipefail
+          bash scripts/ci/install_debian_tools.sh bubblewrap jq python3
+          command -v bwrap >/dev/null 2>&1 || { echo "FAIL: bwrap unavailable"; exit 1; }
+      - name: Install Arm64 musl reproducibility toolchain
+        if: matrix.target == 'aarch64-unknown-linux-musl'
+        run: |
+          set -euo pipefail
+          bash scripts/ci/install_debian_tools.sh musl-tools
+          rustup target add aarch64-unknown-linux-musl --toolchain 1.88.0
+          command -v musl-gcc
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-packaged
+          path: dist
+      - name: Validate and run quickstart from the final package
+        run: |
+          set -euo pipefail
+          archive="dist/transist-${RELEASE_TAG}-${{ matrix.target }}.tar.gz"
+          release_sha="$(git rev-parse "refs/tags/$RELEASE_TAG^{}")"
+          tree_sha="$(git rev-parse "$release_sha^{tree}")"
+          bash scripts/ci/check_release_archive.sh "${{ matrix.target }}" "$RELEASE_TAG" \
+            --expected-commit "$release_sha" --expected-tree "$tree_sha" \
+            --allow-unsigned "$archive"
+          bash scripts/ci/run_quickstart_smoke.sh --archive "$archive" --require-isolation
+      - name: Archive reproducibility from the tagged source
+        run: |
+          set -euo pipefail
+          # The archive-smoke host is always a native release target (gnu, musl,
+          # or aarch64-apple-darwin), so determinism is exercised directly from
+          # the tagged source at release time.
+          bash scripts/ci/test_archive_reproducibility.sh "${{ matrix.target }}"
+      - name: Run shipped workflows from the final package
+        run: |
+          set -euo pipefail
+          archive="dist/transist-${RELEASE_TAG}-${{ matrix.target }}.tar.gz"
+          # The same hermetic inventory run by the local release gates,
+          # executed against the exact release archive instead of the source
+          # checkout.
+          bash scripts/ci/run_shipped_workflows.sh --archive "$archive"
+
+  stage-and-sign:
+    if: inputs.operation == 'stage'
+    needs: [validate-input, release-preflight, package, archive-smoke]
+    runs-on: ubuntu-24.04
+    container:
+      image: rust:1.88.0-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0
+    environment: release
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      GH_TOKEN: ${{ github.token }}
+      CI_CONTAINER_IMAGE: rust:1.88.0-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0
+      CI_RUNNER_IMAGE: ubuntu-24.04
+    permissions:
+      contents: write
+      checks: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: refs/tags/${{ inputs.release_tag }}
+          fetch-depth: 0
+      - name: Install signing and SBOM tools
+        run: |
+          git config --global --add safe.directory '*'
+          bash scripts/ci/install_debian_tools.sh curl git jq pip3 python3 unzip
+          rustup toolchain install 1.88.0 --profile minimal --no-self-update
+          rustup default 1.88.0
+          bash scripts/ci/install_ci_tools.sh staging
+      - name: Download unsigned release assets
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-packaged
+          path: dist
+      - name: Validate unsigned release archive members
+        run: |
+          set -euo pipefail
+          for target in x86_64-unknown-linux-gnu x86_64-unknown-linux-musl aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-gnu aarch64-unknown-linux-musl; do
+            python3 scripts/ci/validate_release_archive_members.py \
+              "$target" "$RELEASE_TAG" "dist/transist-${RELEASE_TAG}-${target}.tar.gz"
+          done
+      - name: Sign exact release asset set
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          key_path="$(mktemp)"
+          trap 'rm -f "$key_path"' EXIT
+          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$key_path"
+          bash scripts/ci/verify_release_signing_key.sh "$key_path" transist-release.minisign.pub
+          cp transist-release.minisign.pub dist/transist-release.minisign.pub
+          for target in x86_64-unknown-linux-gnu x86_64-unknown-linux-musl aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-gnu aarch64-unknown-linux-musl; do
+            archive="dist/transist-${RELEASE_TAG}-${target}.tar.gz"
+            minisign -S -q -s "$key_path" -m "$archive" -x "${archive}.minisig"
+            minisign -Vq -p transist-release.minisign.pub -m "$archive" -x "${archive}.minisig"
+          done
+          sbom_dir="$(mktemp -d)"
+          norm_dir="$(mktemp -d)"
+          trap 'rm -f "$key_path"; rm -rf "$sbom_dir" "$norm_dir"' EXIT
+          # cargo-cyclonedx 0.5.x writes to the manifest directory and does not
+          # support --output or --locked. Use only supported options and collect
+          # the generated documents deterministically.
+          cargo cyclonedx --all --format json --spec-version 1.5
+          # Collect every generated SBOM from the manifest root into sbom_dir.
+          for src in *.cdx.json; do
+            [[ -f "$src" ]] || continue
+            mv "$src" "$sbom_dir/$(basename "$src")"
+          done
+          # Normalize + semantically validate every produced CycloneDX document
+          # with the pinned schema, then repack deterministically.
+          count=0
+          for src in "$sbom_dir"/*; do
+            [[ -f "$src" ]] || continue
+            base="$(basename "$src")"
+            python3 scripts/ci/normalize_and_validate_sbom.py "$src" "$norm_dir/$base"
+            count=$((count + 1))
+          done
+          [[ "$count" -gt 0 ]] || { echo "FAIL: no CycloneDX documents produced" >&2; exit 1; }
+          tar -C "$norm_dir" --sort=name --owner=0 --group=0 --numeric-owner --mtime='@0' \
+            -czf "dist/transist-${RELEASE_TAG}-sbom.tar.gz" .
+          bash scripts/ci/release_manifest.sh generate "$RELEASE_TAG" dist
+          minisign -S -q -s "$key_path" -m dist/release-manifest.txt -x dist/release-manifest.txt.minisig
+          minisign -Vq -p transist-release.minisign.pub -m dist/release-manifest.txt -x dist/release-manifest.txt.minisig
+          bash scripts/ci/release_manifest.sh verify "$RELEASE_TAG" dist
+          bash scripts/ci/release_manifest.sh compare-draft "$RELEASE_TAG" dist
+      - name: Create or require a draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft' >/tmp/is-draft 2>/dev/null; then
+            test "$(< /tmp/is-draft)" = true || { echo "FAIL: release is already published" >&2; exit 1; }
+          else
+            gh release create "$RELEASE_TAG" --draft --verify-tag --title "$RELEASE_TAG" --generate-notes
+          fi
+      - name: Upload exact draft asset set without overwrites
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          expected_assets=(
+            "transist-${RELEASE_TAG}-x86_64-unknown-linux-gnu.tar.gz"
+            "transist-${RELEASE_TAG}-x86_64-unknown-linux-gnu.tar.gz.sha256"
+            "transist-${RELEASE_TAG}-x86_64-unknown-linux-gnu.tar.gz.minisig"
+            "transist-${RELEASE_TAG}-x86_64-unknown-linux-musl.tar.gz"
+            "transist-${RELEASE_TAG}-x86_64-unknown-linux-musl.tar.gz.sha256"
+            "transist-${RELEASE_TAG}-x86_64-unknown-linux-musl.tar.gz.minisig"
+            "transist-${RELEASE_TAG}-aarch64-apple-darwin.tar.gz"
+            "transist-${RELEASE_TAG}-aarch64-apple-darwin.tar.gz.sha256"
+            "transist-${RELEASE_TAG}-aarch64-apple-darwin.tar.gz.minisig"
+            "transist-${RELEASE_TAG}-x86_64-apple-darwin.tar.gz"
+            "transist-${RELEASE_TAG}-x86_64-apple-darwin.tar.gz.sha256"
+            "transist-${RELEASE_TAG}-x86_64-apple-darwin.tar.gz.minisig"
+            "transist-${RELEASE_TAG}-aarch64-unknown-linux-gnu.tar.gz"
+            "transist-${RELEASE_TAG}-aarch64-unknown-linux-gnu.tar.gz.sha256"
+            "transist-${RELEASE_TAG}-aarch64-unknown-linux-gnu.tar.gz.minisig"
+            "transist-${RELEASE_TAG}-aarch64-unknown-linux-musl.tar.gz"
+            "transist-${RELEASE_TAG}-aarch64-unknown-linux-musl.tar.gz.sha256"
+            "transist-${RELEASE_TAG}-aarch64-unknown-linux-musl.tar.gz.minisig"
+            "build-provenance-x86_64-unknown-linux-gnu.json"
+            "build-provenance-x86_64-unknown-linux-musl.json"
+            "build-provenance-aarch64-apple-darwin.json"
+            "build-provenance-x86_64-apple-darwin.json"
+            "build-provenance-aarch64-unknown-linux-gnu.json"
+            "build-provenance-aarch64-unknown-linux-musl.json"
+            "packaging-provenance.json"
+            "transist-${RELEASE_TAG}-sbom.tar.gz"
+            "transist-release.minisign.pub"
+            "release-manifest.txt"
+            "release-manifest.txt.minisig"
+          )
+          for asset in "${expected_assets[@]}"; do
+            [[ -f "dist/$asset" ]] || { echo "FAIL: missing staged asset $asset" >&2; exit 1; }
+          done
+          existing_assets="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')"
+          [[ -z "$existing_assets" ]] || {
+            echo "FAIL: draft already contains assets; refusing to overwrite" >&2
+            printf '  %s\n' "$existing_assets" >&2
+            exit 1
+          }
+          # Deliberately omit --clobber: an existing remote name is an error.
+          gh release upload "$RELEASE_TAG" "${expected_assets[@]/#/dist/}"
+      - name: Verify downloaded draft is anchored to the committed key
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          downloaded="$(mktemp -d)"
+          trap 'rm -rf "$downloaded"' EXIT
+          gh release download "$RELEASE_TAG" --dir "$downloaded" --pattern '*'
+          cmp -s "$downloaded/transist-release.minisign.pub" transist-release.minisign.pub
+          minisign -Vq -p transist-release.minisign.pub -m "$downloaded/release-manifest.txt" -x "$downloaded/release-manifest.txt.minisig"
+          for target in x86_64-unknown-linux-gnu x86_64-unknown-linux-musl aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-gnu aarch64-unknown-linux-musl; do
+            archive="$downloaded/transist-${RELEASE_TAG}-${target}.tar.gz"
+            minisign -Vq -p transist-release.minisign.pub \
+              -m "$archive" \
+              -x "$archive.minisig"
+          done
+          bash scripts/ci/release_manifest.sh verify "$RELEASE_TAG" "$downloaded"
+          bash scripts/ci/release_manifest.sh compare-draft "$RELEASE_TAG" "$downloaded"
+          release_sha="$(git rev-parse "refs/tags/$RELEASE_TAG^{}")"
+          tree_sha="$(git rev-parse "$release_sha^{tree}")"
+          for provenance in "$downloaded"/build-provenance-*.json; do
+            [[ -f "$provenance" ]] || { echo "FAIL: missing build provenance" >&2; exit 1; }
+            jq -e --arg commit "$release_sha" --arg tree "$tree_sha" \
+              '.source.commit_sha == $commit and .source.tree_sha == $tree' \
+              "$provenance" >/dev/null
+          done
+          # Independent re-validation of the downloaded (published) draft for
+          # all six targets: archive checksum sidecars, member inspection,
+          # provenance-to-packaged-binary digest comparison, and SBOM semantic
+          # validation. Nothing is re-uploaded.
+          bash scripts/ci/verify_downloaded_draft.sh "$RELEASE_TAG" "$downloaded" \
+            --expected-commit "$release_sha" --expected-tree "$tree_sha"
+
+  attest-public-assets:
+    if: inputs.operation == 'publish'
+    needs: validate-input
+    runs-on: ubuntu-24.04
+    environment: release
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    permissions:
+      attestations: write
+      # GitHub omits draft releases from the authenticated release list unless
+      # the workflow token has release write access. Publication remains a
+      # separate, gated job.
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: refs/tags/${{ inputs.release_tag }}
+          fetch-depth: 0
+      - name: Install release verification tools
+        run: bash scripts/ci/install_ci_tools.sh verification
+      - name: Check repository visibility for public attestations
+        id: repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          visibility="$(gh api "repos/$GITHUB_REPOSITORY" --jq .visibility)"
+          echo "repository visibility: $visibility"
+          echo "visibility=$visibility" >> "$GITHUB_OUTPUT"
+          if [[ "$visibility" != "public" ]]; then
+            echo "WARN: repository is $visibility; GitHub artifact attestation is unavailable and will be skipped" >&2
+          fi
+      - name: Verify complete draft and source provenance before attestation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Drafts whose URL has changed to an `untagged-*` slug return 404
+          # from the release-by-tag endpoint, but remain discoverable by their
+          # tag_name in the authenticated release list.
+          release_id="$(bash scripts/ci/resolve_github_release_id.sh \
+            "$GITHUB_REPOSITORY" "$RELEASE_TAG")"
+          is_draft="$(gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" --jq .draft)"
+          test "$is_draft" = true
+          downloaded="$(mktemp -d)"
+          trap 'rm -rf "$downloaded"' EXIT
+          gh api "repos/$GITHUB_REPOSITORY/releases/$release_id/assets" --jq '.[].id' \
+            | while read -r asset_id; do
+                name="$(gh api "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" --jq .name)"
+                gh api "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" \
+                  -H "Accept: application/octet-stream" > "$downloaded/$name"
+              done
+          cmp -s "$downloaded/transist-release.minisign.pub" transist-release.minisign.pub
+          minisign -Vq -p transist-release.minisign.pub \
+            -m "$downloaded/release-manifest.txt" \
+            -x "$downloaded/release-manifest.txt.minisig"
+          for target in x86_64-unknown-linux-gnu x86_64-unknown-linux-musl aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-gnu aarch64-unknown-linux-musl; do
+            minisign -Vq -p transist-release.minisign.pub \
+              -m "$downloaded/transist-${RELEASE_TAG}-${target}.tar.gz" \
+              -x "$downloaded/transist-${RELEASE_TAG}-${target}.tar.gz.minisig"
+          done
+          bash scripts/ci/release_manifest.sh verify "$RELEASE_TAG" "$downloaded"
+          bash scripts/ci/release_manifest.sh compare-draft "$RELEASE_TAG" "$downloaded"
+          release_sha="$(git rev-parse "refs/tags/$RELEASE_TAG^{}")"
+          tree_sha="$(git rev-parse "$release_sha^{tree}")"
+          for provenance in "$downloaded"/build-provenance-*.json; do
+            [[ -f "$provenance" ]] || { echo "FAIL: missing build provenance" >&2; exit 1; }
+            jq -e --arg commit "$release_sha" --arg tree "$tree_sha" \
+              '.source.commit_sha == $commit and .source.tree_sha == $tree' \
+              "$provenance" >/dev/null
+          done
+          bash scripts/ci/verify_downloaded_draft.sh "$RELEASE_TAG" "$downloaded" \
+            --expected-commit "$release_sha" --expected-tree "$tree_sha"
+          mkdir -p release-assets
+          cp "$downloaded"/*.tar.gz release-assets/
+          (cd release-assets && shasum -a 256 ./*.tar.gz | sort) > release-assets-digests.txt
+      - name: Publish attestation digest set
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-attestation-digests-${{ github.run_id }}
+          path: release-assets-digests.txt
+          if-no-files-found: error
+      - name: Attest release archives
+        if: steps.repository.outputs.visibility == 'public'
+        uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v1
+        with:
+          subject-path: release-assets/*.tar.gz
+
+  publish-release:
+    if: inputs.operation == 'publish'
+    needs: [validate-input, attest-public-assets]
+    runs-on: ubuntu-24.04
+    environment: release
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: refs/tags/${{ inputs.release_tag }}
+      - name: Download attestation digest set
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-attestation-digests-${{ github.run_id }}
+          path: attestation-digests
+      - name: Install minisign
+        run: bash scripts/ci/install_ci_tools.sh verification
+      - name: Verify complete draft before publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          release_id="$(bash scripts/ci/resolve_github_release_id.sh \
+            "$GITHUB_REPOSITORY" "$RELEASE_TAG")"
+          is_draft="$(gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" --jq .draft)"
+          test "$is_draft" = true
+          downloaded="$(mktemp -d)"
+          trap 'rm -rf "$downloaded"' EXIT
+          gh api "repos/$GITHUB_REPOSITORY/releases/$release_id/assets" --jq '.[].id' \
+            | while read -r asset_id; do
+                name="$(gh api "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" --jq .name)"
+                gh api "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" \
+                  -H "Accept: application/octet-stream" > "$downloaded/$name"
+              done
+          cmp -s "$downloaded/transist-release.minisign.pub" transist-release.minisign.pub
+          minisign -Vq -p transist-release.minisign.pub -m "$downloaded/release-manifest.txt" -x "$downloaded/release-manifest.txt.minisig"
+          for target in x86_64-unknown-linux-gnu x86_64-unknown-linux-musl aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-gnu aarch64-unknown-linux-musl; do
+            minisign -Vq -p transist-release.minisign.pub \
+              -m "$downloaded/transist-${RELEASE_TAG}-${target}.tar.gz" \
+              -x "$downloaded/transist-${RELEASE_TAG}-${target}.tar.gz.minisig"
+          done
+          bash scripts/ci/release_manifest.sh verify "$RELEASE_TAG" "$downloaded"
+          bash scripts/ci/release_manifest.sh compare-draft "$RELEASE_TAG" "$downloaded"
+          release_sha="$(git rev-parse "refs/tags/$RELEASE_TAG^{}")"
+          tree_sha="$(git rev-parse "$release_sha^{tree}")"
+          for provenance in "$downloaded"/build-provenance-*.json; do
+            [[ -f "$provenance" ]] || { echo "FAIL: missing build provenance" >&2; exit 1; }
+            jq -e --arg commit "$release_sha" --arg tree "$tree_sha" \
+              '.source.commit_sha == $commit and .source.tree_sha == $tree' \
+              "$provenance" >/dev/null
+          done
+          bash scripts/ci/verify_downloaded_draft.sh "$RELEASE_TAG" "$downloaded" \
+            --expected-commit "$release_sha" --expected-tree "$tree_sha"
+          (cd "$downloaded" && shasum -a 256 ./*.tar.gz | sort) > published-release-digests.txt
+          diff -u attestation-digests/release-assets-digests.txt published-release-digests.txt
+      - name: Publish verified draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          release_id="$(bash scripts/ci/resolve_github_release_id.sh \
+            "$GITHUB_REPOSITORY" "$RELEASE_TAG")"
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+            -f draft=false -f tag_name="$RELEASE_TAG" --jq .html_url

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Transist Workflow Setup"
+  short_description: "Guide safe workflow signing, validation, promotion, policy, and testing."
+  default_prompt: "Use $transist-workflow-setup to install or prepare a workflow. Separate authored bytes, dependencies, trust, policy, inputs, and runtime-only failures; for governed delivery package, install, check, authorize exact missing authority, recheck, then prepare or run, and ask before every private-key operation, policy application, or test dispatch."

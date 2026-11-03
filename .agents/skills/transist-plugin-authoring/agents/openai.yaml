@@ -1,0 +1,4 @@
+interface:
+  display_name: "Transist Plugin Authoring"
+  short_description: "Guide AI-assisted authoring of current `transist.plugin.v1` packages."
+  default_prompt: "Use $transist-plugin-authoring to create, review, or repair a current `transist.plugin.v1` package with `plugin.yaml`, action schemas, bindings, and lifecycle verification through plugin install/inspect plus authored and bound workflow validation before a real run. Consult the advanced adapter appendix only when package behavior depends on adapter details."

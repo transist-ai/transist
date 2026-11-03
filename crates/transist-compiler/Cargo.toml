@@ -1,0 +1,35 @@
+[package]
+name = "transist-compiler"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Workflow validation and compilation for transist.flow.v1"
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+libc = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+semver = { workspace = true }
+yaml_serde = { workspace = true }
+tracing = { workspace = true }
+transist-plugins = { workspace = true }
+transist-prerequisites = { workspace = true }
+transist-protocol = { workspace = true }
+transist-trust-digest = { workspace = true }
+
+[features]
+dev-version-bypass = []
+
+[dev-dependencies]
+tempfile = { workspace = true }

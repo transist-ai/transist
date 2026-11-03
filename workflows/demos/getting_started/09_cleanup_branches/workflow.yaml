@@ -1,0 +1,66 @@
+schema: transist.flow.v1
+id: demo_09_cleanup_branches
+version: 0.1.0
+plugins:
+  shell: 0.1.0
+network:
+  mode: none
+inputs:
+  fail:
+    type: boolean
+    required: false
+    default: false
+  slow:
+    type: boolean
+    required: false
+    default: false
+steps:
+  - id: maybe_fail_or_slow
+    uses: process:shell/exec
+    with:
+      command: sh
+      args:
+        - -c
+        - |
+          if [ "$1" = "true" ]; then
+            echo "deliberate failure" >&2
+            exit 1
+          fi
+          if [ "$2" = "true" ]; then
+            sleep 30
+          fi
+          printf 'main step ok\n'
+        - --
+        - "{{inputs.fail}}"
+        - "{{inputs.slow}}"
+cleanup:
+  - id: on_success
+    when: [success]
+    uses: process:shell/exec
+    with:
+      command: sh
+      args:
+        - -c
+        - |
+          printf 'cleanup-success ran\n' > cleanup-success.txt
+          printf 'cleanup-success ran\n'
+  - id: on_canceled
+    when: [canceled]
+    uses: process:shell/exec
+    with:
+      command: sh
+      args:
+        - -c
+        - |
+          printf 'cleanup-canceled ran\n' > cleanup-canceled.txt
+          printf 'cleanup-canceled ran\n'
+  - id: on_failed
+    when: [failed]
+    uses: process:shell/exec
+    with:
+      command: sh
+      args:
+        - -c
+        - |
+          printf 'cleanup-failed ran\n' > cleanup-failed.txt
+          printf 'cleanup-failed ran\n'

@@ -1,0 +1,5 @@
+filesystem_policy:
+  workspace_access:
+    mode: full
+  read_allow_paths:
+    - ~/.gitconfig

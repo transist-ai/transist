@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["ok", "response_text", "response_file", "stdout", "stderr", "exit_code"],
+  "properties": {
+    "ok": { "type": "boolean" },
+    "response_text": { "type": "string" },
+    "response_file": { "type": "string" },
+    "stdout": { "type": "string" },
+    "stderr": { "type": "string" },
+    "exit_code": { "type": "integer" }
+  },
+  "additionalProperties": false
+}

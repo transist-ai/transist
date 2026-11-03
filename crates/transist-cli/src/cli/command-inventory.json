@@ -1,0 +1,1523 @@
+[
+  {
+    "aliases": [],
+    "options": [
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": true,
+        "name": "--format",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": true,
+        "name": "--home",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": true,
+        "name": "--ui",
+        "required": false,
+        "short": null
+      }
+    ],
+    "path": [],
+    "positionals": []
+  },
+  {
+    "aliases": [],
+    "options": [],
+    "path": [
+      "home"
+    ],
+    "positionals": []
+  },
+  {
+    "aliases": [],
+    "options": [],
+    "path": [
+      "home",
+      "get"
+    ],
+    "positionals": []
+  },
+  {
+    "aliases": [],
+    "options": [
+      {
+        "aliases": [],
+        "defaults": [
+          "governed"
+        ],
+        "global": false,
+        "name": "--mode",
+        "required": false,
+        "short": null
+      }
+    ],
+    "path": [
+      "home",
+      "init"
+    ],
+    "positionals": []
+  },
+  {
+    "aliases": [],
+    "options": [],
+    "path": [
+      "home",
+      "set"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "path",
+        "required": true
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [],
+    "path": [
+      "home",
+      "unset"
+    ],
+    "positionals": []
+  },
+  {
+    "aliases": [],
+    "options": [],
+    "path": [
+      "plugins"
+    ],
+    "positionals": []
+  },
+  {
+    "aliases": [],
+    "options": [],
+    "path": [
+      "plugins",
+      "inspect"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "plugin_id",
+        "required": true
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--path",
+        "required": true,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--signature",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--trusted-execution",
+        "required": false,
+        "short": null
+      }
+    ],
+    "path": [
+      "plugins",
+      "install"
+    ],
+    "positionals": []
+  },
+  {
+    "aliases": [],
+    "options": [],
+    "path": [
+      "plugins",
+      "list"
+    ],
+    "positionals": []
+  },
+  {
+    "aliases": [],
+    "options": [
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--version",
+        "required": false,
+        "short": null
+      }
+    ],
+    "path": [
+      "plugins",
+      "uninstall"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "plugin_id",
+        "required": true
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [],
+    "path": [
+      "policy"
+    ],
+    "positionals": []
+  },
+  {
+    "aliases": [],
+    "options": [
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--effective",
+        "required": false,
+        "short": null
+      }
+    ],
+    "path": [
+      "policy",
+      "show"
+    ],
+    "positionals": []
+  },
+  {
+    "aliases": [],
+    "options": [],
+    "path": [
+      "policy",
+      "validate"
+    ],
+    "positionals": []
+  },
+  {
+    "aliases": [],
+    "options": [],
+    "path": [
+      "runs"
+    ],
+    "positionals": []
+  },
+  {
+    "aliases": [],
+    "options": [],
+    "path": [
+      "runs",
+      "cancel"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "run_id",
+        "required": true
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--exact",
+        "required": false,
+        "short": null
+      }
+    ],
+    "path": [
+      "runs",
+      "capabilities"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "run_id",
+        "required": true
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--local-only",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--trusted-execution",
+        "required": false,
+        "short": null
+      }
+    ],
+    "path": [
+      "runs",
+      "cleanup"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "run_id",
+        "required": true
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [],
+    "path": [
+      "runs",
+      "evidence"
+    ],
+    "positionals": []
+  },
+  {
+    "aliases": [],
+    "options": [],
+    "path": [
+      "runs",
+      "evidence",
+      "export"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "run_id",
+        "required": true
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [],
+    "path": [
+      "runs",
+      "gate"
+    ],
+    "positionals": []
+  },
+  {
+    "aliases": [],
+    "options": [
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--actor",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--reason",
+        "required": false,
+        "short": null
+      }
+    ],
+    "path": [
+      "runs",
+      "gate",
+      "approve"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "run_id",
+        "required": true
+      },
+      {
+        "defaults": [],
+        "index": null,
+        "name": "gate_id",
+        "required": false
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--actor",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--reason",
+        "required": false,
+        "short": null
+      }
+    ],
+    "path": [
+      "runs",
+      "gate",
+      "reject"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "run_id",
+        "required": true
+      },
+      {
+        "defaults": [],
+        "index": null,
+        "name": "gate_id",
+        "required": false
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--actor",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--reason",
+        "required": false,
+        "short": null
+      }
+    ],
+    "path": [
+      "runs",
+      "gate",
+      "request-changes"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "run_id",
+        "required": true
+      },
+      {
+        "defaults": [],
+        "index": null,
+        "name": "gate_id",
+        "required": false
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [],
+    "path": [
+      "runs",
+      "lease"
+    ],
+    "positionals": []
+  },
+  {
+    "aliases": [],
+    "options": [
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--force-live-owner",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--yes-i-understand",
+        "required": false,
+        "short": null
+      }
+    ],
+    "path": [
+      "runs",
+      "lease",
+      "break"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "run_id",
+        "required": true
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [],
+    "path": [
+      "runs",
+      "lease",
+      "inspect"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "run_id",
+        "required": true
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--all",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--ids-only",
+        "required": false,
+        "short": null
+      }
+    ],
+    "path": [
+      "runs",
+      "list"
+    ],
+    "positionals": []
+  },
+  {
+    "aliases": [],
+    "options": [
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--local-only",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--trusted-execution",
+        "required": false,
+        "short": null
+      }
+    ],
+    "path": [
+      "runs",
+      "preflight"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "run_id",
+        "required": true
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--local-only",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--run-ref",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--trusted-execution",
+        "required": false,
+        "short": null
+      }
+    ],
+    "path": [
+      "runs",
+      "replay"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "run_id",
+        "required": true
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--local-only",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--trusted-execution",
+        "required": false,
+        "short": null
+      }
+    ],
+    "path": [
+      "runs",
+      "resume"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "run_id",
+        "required": true
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--local-only",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--trusted-execution",
+        "required": false,
+        "short": null
+      }
+    ],
+    "path": [
+      "runs",
+      "retry"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "run_id",
+        "required": true
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--all",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--failed",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--success",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--tui",
+        "required": false,
+        "short": null
+      }
+    ],
+    "path": [
+      "runs",
+      "show"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "run_id",
+        "required": true
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [],
+    "path": [
+      "runs",
+      "snapshot"
+    ],
+    "positionals": []
+  },
+  {
+    "aliases": [],
+    "options": [
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--include-event-payloads",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--include-gate-request-summary",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--include-run-detail-full",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--include-stderr-tail",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--include-workflow-input-values",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--max-payload-bytes",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--operator-label",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [
+          "-"
+        ],
+        "global": false,
+        "name": "--output",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--source-id",
+        "required": true,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [
+          "metadata_only"
+        ],
+        "global": false,
+        "name": "--sync-mode",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [
+          "0"
+        ],
+        "global": false,
+        "name": "--tree-version",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--workspace-id",
+        "required": true,
+        "short": null
+      }
+    ],
+    "path": [
+      "runs",
+      "snapshot",
+      "export"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "run_id",
+        "required": true
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--local-only",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--trusted-execution",
+        "required": false,
+        "short": null
+      }
+    ],
+    "path": [
+      "runs",
+      "start"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "run_id",
+        "required": true
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [],
+    "path": [
+      "runs",
+      "status"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "run_id",
+        "required": true
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [],
+    "path": [
+      "runs",
+      "sync-recipe"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "run_id",
+        "required": true
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [
+      {
+        "aliases": [],
+        "defaults": [
+          "20"
+        ],
+        "global": false,
+        "name": "--limit",
+        "required": false,
+        "short": null
+      }
+    ],
+    "path": [
+      "runs",
+      "tail"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "run_id",
+        "required": true
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [],
+    "path": [
+      "runs",
+      "watch"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "run_id",
+        "required": true
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [],
+    "path": [
+      "trust"
+    ],
+    "positionals": []
+  },
+  {
+    "aliases": [],
+    "options": [
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--output",
+        "required": true,
+        "short": null
+      }
+    ],
+    "path": [
+      "trust",
+      "export"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "key_id",
+        "required": true
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [],
+    "path": [
+      "trust",
+      "import"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "trust_root_file",
+        "required": true
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [],
+    "path": [
+      "trust",
+      "inspect"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "key_id",
+        "required": true
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [],
+    "path": [
+      "trust",
+      "list"
+    ],
+    "positionals": []
+  },
+  {
+    "aliases": [],
+    "options": [
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--yes",
+        "required": false,
+        "short": null
+      }
+    ],
+    "path": [
+      "trust",
+      "remove"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "key_id",
+        "required": true
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [],
+    "path": [
+      "workflows"
+    ],
+    "positionals": []
+  },
+  {
+    "aliases": [],
+    "options": [
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--approve",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--dry-run",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--input",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--inputs-file",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--policy-output",
+        "required": false,
+        "short": null
+      }
+    ],
+    "path": [
+      "workflows",
+      "authorize"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "workflow_ref",
+        "required": true
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--input",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--inputs-file",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--live",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--local-only",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--output",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--path",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--trusted-execution",
+        "required": false,
+        "short": null
+      }
+    ],
+    "path": [
+      "workflows",
+      "check"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "workflow_ref",
+        "required": false
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--compare-to",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--inputs-file",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--path",
+        "required": true,
+        "short": null
+      }
+    ],
+    "path": [
+      "workflows",
+      "explain"
+    ],
+    "positionals": []
+  },
+  {
+    "aliases": [],
+    "options": [],
+    "path": [
+      "workflows",
+      "inspect"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "workflow_ref",
+        "required": true
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--approve",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--dry-run",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--input",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--inputs-file",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--local-only",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--package",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--path",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--policy-output",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--signature",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--trusted-execution",
+        "required": false,
+        "short": null
+      }
+    ],
+    "path": [
+      "workflows",
+      "install"
+    ],
+    "positionals": []
+  },
+  {
+    "aliases": [],
+    "options": [],
+    "path": [
+      "workflows",
+      "list"
+    ],
+    "positionals": []
+  },
+  {
+    "aliases": [],
+    "options": [
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--input",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--inputs-file",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--local-only",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [
+          "300"
+        ],
+        "global": false,
+        "name": "--max-age",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--readiness-file",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--run-ref",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--trusted-execution",
+        "required": false,
+        "short": null
+      }
+    ],
+    "path": [
+      "workflows",
+      "prepare"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "workflow_ref",
+        "required": true
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--input",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--inputs-file",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--local-only",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [
+          "300"
+        ],
+        "global": false,
+        "name": "--max-age",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--readiness-file",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--run-ref",
+        "required": false,
+        "short": null
+      },
+      {
+        "aliases": [],
+        "defaults": [],
+        "global": false,
+        "name": "--trusted-execution",
+        "required": false,
+        "short": null
+      }
+    ],
+    "path": [
+      "workflows",
+      "run"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "workflow_ref",
+        "required": true
+      }
+    ]
+  },
+  {
+    "aliases": [],
+    "options": [],
+    "path": [
+      "workflows",
+      "uninstall"
+    ],
+    "positionals": [
+      {
+        "defaults": [],
+        "index": null,
+        "name": "workflow_ref",
+        "required": true
+      }
+    ]
+  }
+]

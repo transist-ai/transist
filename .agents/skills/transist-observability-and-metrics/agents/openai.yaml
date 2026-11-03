@@ -1,0 +1,4 @@
+interface:
+  display_name: "Transist Observability And Metrics"
+  short_description: "Guide AI-assisted inspection of Transist metrics and read-only APIs."
+  default_prompt: "Use $transist-observability-and-metrics to start or inspect `transist-server`, choose between CLI, `GET /api/v1/...`, and `/metrics`, and explain canonical metric families, label limits, histogram behavior, and usage reporting without inventing unsupported Prometheus series."

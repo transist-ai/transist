@@ -1,0 +1,13 @@
+schema: transist.module.v1
+id: middle
+version: 0.1.0
+inputs:
+  value: {type: string, required: true}
+modules:
+  inner: {path: ./nested/inner.yaml}
+outputs: {result: '{{steps.inner.out.result}}'}
+steps:
+  - id: inner
+    module:
+      ref: inner
+      inputs: {value: '{{inputs.value}}'}

@@ -1,0 +1,2 @@
+title: Local Only Companion
+body: This workflow uses only local-provider markdown steps and is safe to run with local-only mode enabled.

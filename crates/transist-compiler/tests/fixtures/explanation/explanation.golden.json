@@ -1,0 +1,112 @@
+{
+  "assets": {
+    "golden.yaml": {
+      "normalized_sha256": "6b4986b72eea58e0ae0a050e77fdc0d68da04722c1ff445dda9af28f2153d52f",
+      "sha256": "6b4986b72eea58e0ae0a050e77fdc0d68da04722c1ff445dda9af28f2153d52f"
+    }
+  },
+  "definition_sha256": "647f12b912160ac3a0cde7e5323e71c6af4c61280df2bec190f680c973d0dda1",
+  "documents": {},
+  "notice": "Static authoring explanation only: not validation, authorization, readiness, or execution consent. External actions, scripts, and prompts are opaque; no effects are inferred. Authority is requested, not granted. No document revisions or approvals are created.",
+  "pins": {},
+  "schema": "transist.workflow_explanation.v1",
+  "scopes": {
+    "root": {
+      "authority_requests": {
+        "bound": {
+          "resource_resolution": "declared_not_canonicalized",
+          "secret_refs": [],
+          "status": "requested_not_authorized",
+          "step_filesystem": null,
+          "step_network": null,
+          "workflow_filesystem": null,
+          "workflow_network": null,
+          "workspace": null
+        },
+        "declared": {
+          "resource_resolution": "declared_not_canonicalized",
+          "secret_refs": [],
+          "status": "requested_not_authorized",
+          "step_filesystem": null,
+          "step_network": null,
+          "workflow_filesystem": null,
+          "workflow_network": null,
+          "workspace": null
+        }
+      },
+      "cleanup_order": [],
+      "graph": {
+        "edges": [],
+        "entry": "finish",
+        "max_iterations": 10000
+      },
+      "inputs": {
+        "message": {
+          "required": true,
+          "state": "missing",
+          "type": "string"
+        }
+      },
+      "outputs": {},
+      "prerequisites": {
+        "binaries": [],
+        "commands": [],
+        "env": [],
+        "paths": []
+      },
+      "source": "golden.yaml",
+      "step_order": [
+        "root/steps/finish"
+      ]
+    }
+  },
+  "steps": {
+    "root/steps/finish": {
+      "action": "control.finish",
+      "authority_requests": {
+        "bound": {
+          "resource_resolution": "declared_not_canonicalized",
+          "secret_refs": [],
+          "status": "requested_not_authorized",
+          "step_filesystem": null,
+          "step_network": null,
+          "workflow_filesystem": null,
+          "workflow_network": null,
+          "workspace": null
+        },
+        "declared": {
+          "resource_resolution": "declared_not_canonicalized",
+          "secret_refs": [],
+          "status": "requested_not_authorized",
+          "step_filesystem": null,
+          "step_network": null,
+          "workflow_filesystem": null,
+          "workflow_network": null,
+          "workspace": null
+        }
+      },
+      "behavior": "kernel_control",
+      "bindings": {},
+      "bound_bindings": {},
+      "branch": null,
+      "cleanup_when": [],
+      "contract": null,
+      "contract_status": "not_applicable",
+      "dependencies": [],
+      "documents": [],
+      "gate": null,
+      "gate_decision": null,
+      "kind": "control",
+      "loop_limits": null,
+      "module": null,
+      "pin": null,
+      "prompt": null,
+      "skills": [],
+      "variable_assignments": {}
+    }
+  },
+  "workflow": {
+    "id": "explanation.golden",
+    "version": "0.1.0"
+  }
+}

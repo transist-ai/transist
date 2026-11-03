@@ -1,0 +1,27 @@
+schema: transist.flow.v1
+id: demo_05_artifacts_and_evidence
+version: 0.1.0
+plugins:
+  shell: 0.1.0
+network:
+  mode: none
+artifacts:
+  workspace_artifact:
+    scope: repository
+    path: artifact.txt
+steps:
+  - id: write_outputs
+    uses: process:shell/exec
+    with:
+      command: sh
+      args:
+        - source://scripts/write_outputs.sh
+        - "{{artifacts.workspace_artifact}}"
+
+  - id: read_outputs
+    uses: process:shell/exec
+    with:
+      command: sh
+      args:
+        - source://scripts/read_outputs.sh
+        - "{{artifacts.workspace_artifact}}"

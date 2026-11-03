@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "formatted_text": { "type": "string" },
+    "byte_length": { "type": "integer" },
+    "line_count": { "type": "integer" },
+    "output_path": { "type": "string" }
+  },
+  "additionalProperties": false
+}

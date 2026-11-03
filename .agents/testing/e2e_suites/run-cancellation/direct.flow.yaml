@@ -1,0 +1,43 @@
+schema: transist.flow.v1
+id: e2e_cancel_direct
+version: 0.1.0
+plugins:
+  shell: 0.1.0
+steps:
+  - id: wait
+    uses: process:shell/exec
+    with:
+      command: sh
+      args:
+        - -c
+        - |
+          touch main-started
+          for attempt in $(seq 1 2400); do
+            if [ -f main-release ]; then
+              touch main-completed
+              exit 0
+            fi
+            sleep 0.05
+          done
+          exit 1
+cleanup:
+  - id: teardown
+    when: [canceled]
+    uses: process:shell/exec
+    with:
+      command: sh
+      args:
+        - -c
+        - |
+          trap 'touch cleanup-signaled; exit 77' HUP INT TERM
+          printf 'attempt\n' >> cleanup-attempts.txt
+          touch cleanup-started
+          for attempt in $(seq 1 2400); do
+            if [ -f cleanup-release ]; then
+              printf 'cleanup-canceled ran\n' > cleanup-canceled.txt
+              printf 'cleanup-canceled ran\n'
+              exit 0
+            fi
+            sleep 0.05
+          done
+          exit 1

@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://transist.dev/schemas/runtime/workflow-reports.v1.schema.json",
+  "title": "Prospective workflow validation and readiness reports",
+  "oneOf": [
+    { "$ref": "#/$defs/readiness" },
+    { "$ref": "#/$defs/checkSummary" },
+    { "$ref": "#/$defs/boundValidation" },
+    { "$ref": "#/$defs/authoredValidation" }
+  ],
+  "$defs": {
+    "validationStatus": { "enum": ["passed", "deferred_to_dispatch", "failed", "warning", "not_evaluated"] },
+    "readinessStatus": { "enum": ["ready", "not_ready", "not_deliverable", "invalid_definition"] },
+    "evaluationMode": { "enum": ["validation", "live_readiness"] },
+    "check": {
+      "type": "object",
+      "required": ["code", "status", "message"],
+      "properties": {
+        "code": { "type": "string" },
+        "status": { "$ref": "#/$defs/validationStatus" },
+        "step_path": { "type": ["string", "null"] },
+        "message": { "type": "string" },
+        "remediation": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "checks": { "type": "array", "items": { "$ref": "#/$defs/check" } },
+    "boundValidation": {
+      "type": "object",
+      "required": ["workflow_ref", "workspace_dir", "status", "checks", "required_capabilities", "granted_capabilities", "missing_capabilities", "policy_suggestion"],
+      "properties": {
+        "workflow_ref": { "type": "string" },
+        "workspace_dir": { "type": "string" },
+        "status": { "$ref": "#/$defs/validationStatus" },
+        "checks": { "$ref": "#/$defs/checks" },
+        "required_capabilities": { "type": "array", "items": { "type": "object" } },
+        "granted_capabilities": { "type": "array", "items": { "type": "object" } },
+        "missing_capabilities": { "type": "array", "items": { "type": "object" } },
+        "policy_suggestion": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "authoredValidation": {
+      "type": "object",
+      "required": ["workflow_ref", "status", "checks"],
+      "properties": {
+        "workflow_ref": { "type": "string" },
+        "status": { "$ref": "#/$defs/validationStatus" },
+        "checks": { "$ref": "#/$defs/checks" }
+      },
+      "additionalProperties": false
+    },
+    "readiness": {
+      "type": "object",
+      "required": ["schema", "workflow", "status", "evaluation_mode", "validation_status", "run_created", "checks"],
+      "properties": {
+        "schema": { "const": "transist.workflow_readiness.v1" },
+        "workflow": { "type": "string" },
+        "status": { "$ref": "#/$defs/readinessStatus" },
+        "evaluation_mode": { "$ref": "#/$defs/evaluationMode" },
+        "validation_status": { "$ref": "#/$defs/validationStatus" },
+        "run_created": { "const": false },
+        "checks": { "$ref": "#/$defs/checks" },
+        "validation": { "$ref": "#/$defs/boundValidation" }
+      },
+      "additionalProperties": false
+    },
+    "finding": {
+      "type": "object",
+      "required": ["code", "status", "message", "remediation", "occurrences", "example_step_paths"],
+      "properties": {
+        "code": { "type": "string" },
+        "status": { "$ref": "#/$defs/validationStatus" },
+        "message": { "type": "string" },
+        "remediation": { "type": ["string", "null"] },
+        "occurrences": { "type": "integer", "minimum": 1 },
+        "example_step_paths": { "type": "array", "maxItems": 3, "uniqueItems": true, "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "checkSummary": {
+      "type": "object",
+      "required": ["mode", "evaluation_mode", "validation_status", "workflow_ref", "workspace_dir", "status", "readiness_status", "passed_checks", "findings", "required_input_names", "missing_capability_count", "policy_suggestion", "authorization_eligible"],
+      "properties": {
+        "mode": { "enum": ["authored", "bound", "readiness"] },
+        "evaluation_mode": { "$ref": "#/$defs/evaluationMode" },
+        "validation_status": { "$ref": "#/$defs/validationStatus" },
+        "workflow_ref": { "type": "string" },
+        "workspace_dir": { "type": ["string", "null"] },
+        "status": { "$ref": "#/$defs/validationStatus" },
+        "readiness_status": { "anyOf": [{ "$ref": "#/$defs/readinessStatus" }, { "type": "null" }] },
+        "passed_checks": { "type": "integer", "minimum": 0 },
+        "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
+        "required_input_names": { "type": "array", "items": { "type": "string" } },
+        "missing_capability_count": { "type": "integer", "minimum": 0 },
+        "policy_suggestion": { "type": ["object", "null"] },
+        "authorization_eligible": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

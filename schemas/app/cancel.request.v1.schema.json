@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://transist.dev/schemas/app/cancel.request.v1.schema.json",
+  "title": "APP Cancel Request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "protocol_version", "invoke_id"],
+  "properties": {
+    "type": { "const": "app.cancel.request.v1" },
+    "protocol_version": { "type": "string", "const": "app.v1" },
+    "invoke_id": { "type": "string", "minLength": 1 }
+  }
+}

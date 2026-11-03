@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "text": { "type": "string" },
+    "text_file": { "type": "string", "minLength": 1 },
+    "output_path": { "type": "string", "minLength": 1 },
+    "wrap_at": { "type": "integer", "minimum": 0 },
+    "normalize_headings": { "type": "boolean" },
+    "ensure_trailing_newline": { "type": "boolean" }
+  },
+  "additionalProperties": false
+}

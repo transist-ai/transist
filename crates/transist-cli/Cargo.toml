@@ -1,0 +1,52 @@
+[package]
+name = "transist-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Command-line interface for Transist workflow operations"
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "transist"
+path = "src/main.rs"
+doc = false
+
+[features]
+managed-mode = []
+dev-version-bypass = ["transist/dev-version-bypass"]
+
+[dependencies]
+anyhow = { workspace = true }
+base64 = { workspace = true }
+clap = { workspace = true }
+crossterm = { workspace = true }
+ctrlc = { workspace = true }
+dialoguer = { workspace = true }
+libc = { workspace = true }
+lru = { workspace = true }
+ratatui = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+yaml_serde = { workspace = true }
+shell-words = { workspace = true }
+time = { workspace = true }
+tui-textarea = { workspace = true }
+transist = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+assert_cmd = { workspace = true }
+tempfile = { workspace = true }
+transist-core = { workspace = true }
+transist-protocol = { workspace = true }
+transist-storage-local = { workspace = true }

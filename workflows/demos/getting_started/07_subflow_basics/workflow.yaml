@@ -1,0 +1,33 @@
+schema: transist.flow.v1
+id: demo_07_subflow_basics
+version: 0.1.0
+plugins:
+  shell: 0.1.0
+network:
+  mode: none
+inputs:
+  topic:
+    type: string
+    required: true
+artifacts:
+  greeting:
+    scope: repository
+    path: greeting.txt
+modules:
+  greet:
+    path: modules/greet.yaml
+steps:
+  - id: greet_via_subflow
+    module:
+      ref: greet
+      inputs:
+        topic: "{{inputs.topic}}"
+        greeting_path: "{{artifacts.greeting}}"
+
+  - id: read_subflow_artifact
+    uses: process:shell/exec
+    with:
+      command: sh
+      args:
+        - source://scripts/read_greeting.sh
+        - "{{artifacts.greeting}}"

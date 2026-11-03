@@ -1,0 +1,10 @@
+[
+  {
+    "name": "v*",
+    "type": "tag"
+  },
+  {
+    "name": "main",
+    "type": "branch"
+  }
+]

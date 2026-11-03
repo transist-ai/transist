@@ -1,0 +1,76 @@
+schema: transist.flow.v1
+id: explain.fixture
+version: 0.1.0
+plugins: {fixture: 0.1.0}
+inputs:
+  repo: {type: string, required: true}
+  host: {type: string, required: true}
+  token_ref: {type: string, required: true}
+  ticket: {type: string, required: true}
+  approvals: {type: number, default: 2}
+  payload: {type: object, required: true}
+context:
+  label: 'Ticket {{inputs.ticket}}'
+profiles:
+  review:
+    uses: process:fixture/review
+    with: {approval_count: '{{inputs.approvals}}'}
+    prompt: 'Review {{inputs.ticket}} and {{steps.produce.out.answer}}'
+workspace: {path: '{{inputs.repo}}', access: read_only}
+network: {mode: allowlist, allow_hosts: ['{{inputs.host}}'], allow_ports: [443]}
+documents:
+  issue: {kind: file, max_bytes: 4096}
+  notes: {kind: file, max_bytes: 4096, initial: draft}
+  tree: {kind: tree, max_bytes: 8192, max_files: 4}
+modules:
+  middle: {path: ./modules/middle.yaml}
+steps:
+  - id: produce
+    uses: process:fixture/produce
+    with:
+      label: '{{context.label}}'
+      payload: '{{inputs.payload}}'
+      output_file: {$document: issue, access: write}
+      helper: source://helpers/task.sh
+    set: {copied: '{{steps.produce.out.answer}}'}
+  - id: review
+    control: control.gate.manual
+    with: {gate_id: human-review, review_documents: [issue]}
+  - id: consume
+    uses: process:fixture/review
+    profile: review
+    gate_decision: {step: review}
+    with:
+      secret_refs: ['{{inputs.token_ref}}']
+      answer: '{{steps.produce.out.answer}}'
+      copied: '{{vars.copied}}'
+      input_file: {$document: issue, access: read, reviewed_by: review}
+      notes_file: {$document: notes, access: update}
+      tree: {$document: tree, access: write}
+  - id: choose
+    control: control.noop
+    if:
+      guard: steps.consume.out.ready == true
+      then: [{ref: middle}]
+      else: [{ref: skip}]
+  - id: middle
+    module:
+      ref: middle
+      inputs: {value: '{{steps.consume.out.answer}}'}
+  - id: skip
+    control: control.noop
+  - id: repeat
+    control: control.noop
+    loop:
+      body: [{ref: again}]
+      until: 'vars.copied == "done"'
+      max_iters: 3
+  - id: again
+    uses: process:fixture/review
+    prompt_file: prompts/review.md
+    with: {answer: '{{steps.middle.out.result}}'}
+cleanup:
+  - id: tidy
+    when: [success, canceled, failed]
+    uses: process:fixture/review
+    with: {input_file: {$document: notes, access: read}}

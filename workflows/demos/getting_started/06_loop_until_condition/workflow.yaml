@@ -1,0 +1,32 @@
+schema: transist.flow.v1
+id: demo_06_loop_until_condition
+version: 0.1.0
+plugins:
+  shell: 0.1.0
+network:
+  mode: none
+steps:
+  - id: attempt_loop
+    control: control.noop
+    loop:
+      body:
+        - ref: bump_counter
+      until: 'steps.bump_counter.executions >= 3'
+      max_iters: 5
+      max_duration: 1m
+
+  - id: bump_counter
+    uses: process:shell/exec
+    with:
+      command: sh
+      args:
+        - -c
+        - |
+          count_file=".loop-counter"
+          n=$(cat "$count_file" 2>/dev/null || echo 0)
+          n=$((n + 1))
+          printf '%s' "$n" > "$count_file"
+          printf 'iteration %s\n' "$n"
+
+  - id: finish
+    control: control.finish

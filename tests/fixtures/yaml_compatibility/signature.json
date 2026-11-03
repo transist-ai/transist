@@ -1,0 +1,14 @@
+{
+  "schema": "transist.signature.v1",
+  "sig_alg": "ed25519",
+  "digest_alg": "sha256",
+  "subject": {
+    "kind": "workflow",
+    "id": "demo.workflow",
+    "version": "v1",
+    "digest": "52292daa92268539b0c43c4514b6187656fe5712c469080eec8f0d2f4311b96e"
+  },
+  "key_id": "3ad05c4a519045ba1ed336946d5dce009b97824141fca25dec79972e5a0fee55",
+  "signed_at_ms": 1783891023442,
+  "signature": "Nmo+5FJKihyzjZTpO91zX5F7gJ6AEAXUFsuAlwc6DAW2V7t6aeupAEGOXofe7CiR7l+NGjNMjZSdnxD54huhCA=="
+}

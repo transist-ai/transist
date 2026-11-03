@@ -1,0 +1,6 @@
+{
+  "schema": "transist.trust_root.v1",
+  "name": "test-org",
+  "key_id": "3ad05c4a519045ba1ed336946d5dce009b97824141fca25dec79972e5a0fee55",
+  "public_key": "JTMdEFdJyQSA1PJm/K3IINlap/BWcwGJHgiJbSH9fiA="
+}

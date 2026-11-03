@@ -1,0 +1,24 @@
+schema: transist.plugin.v1
+id: remote.echo
+version: 0.1.0
+adapter: process
+default_provider_kind: external
+entrypoint:
+  type: process
+  command: plugin.py
+package:
+  files:
+    - plugin.py
+    - schemas/echo.input.schema.json
+    - schemas/echo.output.schema.json
+actions:
+  - name: echo
+    input_schema: schemas/echo.input.schema.json
+    output_schema: schemas/echo.output.schema.json
+    secret_inputs: []
+    bindings: {}
+capabilities:
+  supports_cancel: false
+  supports_health: false
+  supports_artifact_hints: false
+  supports_evidence_hints: false

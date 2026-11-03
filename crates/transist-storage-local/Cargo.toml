@@ -1,0 +1,30 @@
+[package]
+name = "transist-storage-local"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Local filesystem persistence backend for Transist runtime state"
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+hostname = { workspace = true }
+lru = { workspace = true }
+sha2 = { workspace = true }
+tempfile = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+yaml_serde = { workspace = true }
+libc = { workspace = true }
+transist-core = { workspace = true }
+transist-protocol = { workspace = true }
+uuid = { workspace = true }

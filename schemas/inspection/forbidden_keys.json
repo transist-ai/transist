@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "forbidden_keys": [
+    "content",
+    "raw_content",
+    "data",
+    "body",
+    "payload",
+    "stdout",
+    "stderr",
+    "full_stdout",
+    "full_stderr",
+    "prompt",
+    "response",
+    "request_body",
+    "response_body",
+    "messages",
+    "completion",
+    "ticket_text"
+  ]
+}

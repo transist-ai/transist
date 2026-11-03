@@ -1,0 +1,21 @@
+schema: transist.plugin.v1
+id: demo.plugin
+version: v1
+adapter: process
+entrypoint:
+  type: process
+  command: run.sh
+package:
+  files:
+    - run.sh
+    - schemas/input.json
+    - schemas/output.json
+actions:
+  - name: run
+    input_schema: schemas/input.json
+    output_schema: schemas/output.json
+capabilities:
+  supports_cancel: false
+  supports_health: true
+  supports_artifact_hints: false
+  supports_evidence_hints: false

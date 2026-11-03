@@ -1,0 +1,15 @@
+{
+  "run_id": "legacy-evidence-only",
+  "workflow_id": "wf",
+  "workflow_version": "v1",
+  "status": "success",
+  "created_at_ms": 1,
+  "updated_at_ms": 2,
+  "has_blocked_gates": false,
+  "has_artifacts": false,
+  "has_events": false,
+  "artifact_count": 0,
+  "evidence_count": 0,
+  "event_count": 0,
+  "root_run_id": "legacy-evidence-only"
+}

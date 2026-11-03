@@ -1,0 +1,53 @@
+name: External Link Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+  schedule:
+    - cron: '30 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: external-link-check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  links:
+    name: external-links
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Install pinned Lychee
+        run: bash scripts/ci/install_ci_tools.sh links
+      - name: Check tracked Markdown links
+        id: lychee
+        continue-on-error: true
+        run: |
+          mkdir -p lychee
+          lychee --verbose --no-progress \
+            --output lychee/out.md './**/*.md' './**/*.markdown'
+      - name: Upload link report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: external-link-report-${{ github.run_id }}
+          path: lychee/out.md
+          if-no-files-found: warn
+      - name: Report non-blocking network result
+        if: always() && steps.lychee.outcome != 'success'
+        run: |
+          echo "External-link checking reported failures or a network error." >&2
+          echo "This job is informational and does not block PR or mainline gates." >&2

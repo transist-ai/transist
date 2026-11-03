@@ -1,0 +1,22 @@
+# Third-Party Notices
+
+This file is generated from the dependency graph with `cargo-about`.
+
+<!-- markdownlint-disable MD010 MD012 MD024 -->
+
+{{#each licenses}}
+## {{name}}
+
+Used by:
+
+{{#each used_by}}
+- `{{crate.name}} {{crate.version}}`
+{{/each}}
+
+{{#if text}}
+```text
+{{{text}}}
+```
+{{/if}}
+
+{{/each}}

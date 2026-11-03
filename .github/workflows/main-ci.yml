@@ -1,0 +1,172 @@
+name: Mainline Validation
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  RUST_BACKTRACE: short
+  # Workflow hashes in cache keys bind literal and matrix container image digests.
+  CI_TOOL_ROOT: /tmp/transist-ci-tools
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  platform-smoke:
+    name: ${{ matrix.platform }} / platform-smoke
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: ${{ matrix.container_image }}
+      options: ${{ matrix.container_options }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: Linux
+            runner: ubuntu-24.04
+            container_image: rust:1.88.0-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0
+            container_options: --cap-add=SYS_ADMIN --cap-add=NET_ADMIN --security-opt apparmor=unconfined --security-opt seccomp=unconfined
+            cache_key: main-ci-platform-smoke-Linux
+          - platform: macOS
+            runner: macos-15
+            container_image: ''
+            container_options: ''
+            cache_key: main-ci-platform-smoke-macOS
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        with:
+          toolchain: 1.88.0
+      - name: Cargo build cache
+        uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+        with:
+          prefix-key: main-ci-noncoverage-${{ matrix.runner }}-${{ hashFiles('.github/workflows/main-ci.yml', 'scripts/ci/tool-versions.env') }}
+          shared-key: ${{ matrix.cache_key }}
+          cache-bin: false
+          cache-on-failure: true
+      - name: Install Linux smoke dependencies
+        if: runner.os == 'Linux'
+        run: bash scripts/ci/install_debian_tools.sh bubblewrap git python3
+      - name: Release build and quickstart smoke
+        run: |
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            bash scripts/ci/run_platform_smoke.sh linux
+          else
+            bash scripts/ci/run_platform_smoke.sh macos
+          fi
+
+  musl-smoke:
+    name: Alpine / musl-smoke
+    runs-on: ubuntu-24.04
+    container:
+      image: rust:1.88.0-alpine@sha256:9dfaae478ecd298b6b5a039e1f2cc4fc040fc818a2de9aa78fa714dea036574d
+      options: --cap-add=SYS_ADMIN --cap-add=NET_ADMIN --security-opt apparmor=unconfined --security-opt seccomp=unconfined
+    env:
+      CARGO_INCREMENTAL: 0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Install Alpine runtime and sandbox tools
+        shell: sh
+        run: sh scripts/ci/install_alpine_tools.sh
+      - name: Re-checkout as a real git repo
+        # The rust:1.88.0-alpine container has no git on PATH at first checkout,
+        # so actions/checkout fell back to the GitHub REST-API tarball and created
+        # NO local `.git`. Now that install_alpine_tools.sh has installed git,
+        # re-checkout so the workspace is a real repository.
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Cargo build cache (Alpine)
+        uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+        with:
+          prefix-key: main-ci-noncoverage-ubuntu-24.04-musl-${{ hashFiles('.github/workflows/main-ci.yml', 'scripts/ci/tool-versions.env') }}
+          shared-key: main-ci-musl-smoke
+          cache-bin: false
+          cache-on-failure: true
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        with:
+          toolchain: 1.88.0
+          targets: x86_64-unknown-linux-musl
+      - name: Release build, runtime temp regression and quickstart smoke (musl)
+        run: bash scripts/ci/run_platform_smoke.sh alpine
+
+  coverage:
+    name: coverage
+    runs-on: ubuntu-24.04
+    container:
+      image: rust:1.88.0-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0
+      options: --cap-add=SYS_ADMIN --cap-add=NET_ADMIN --security-opt apparmor=unconfined --security-opt seccomp=unconfined
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Install Rust toolchain and coverage component
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal --component llvm-tools-preview --no-self-update
+          rustup default 1.88.0
+      - name: Cargo build cache (coverage)
+        uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+        with:
+          prefix-key: main-ci-coverage-ubuntu-24.04-bookworm-${{ hashFiles('.github/workflows/main-ci.yml', 'scripts/ci/tool-versions.env') }}
+          shared-key: main-ci-coverage
+          cache-bin: false
+          cache-on-failure: true
+      - name: Cache pinned Cargo coverage tool
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: ${{ env.CI_TOOL_ROOT }}/bin/cargo-llvm-cov
+          key: main-ci-tools-coverage-${{ runner.os }}-${{ runner.arch }}-ubuntu-24.04-bookworm-${{ hashFiles('.github/workflows/main-ci.yml', 'rust-toolchain.toml', 'scripts/ci/tool-versions.env', 'scripts/ci/install_ci_tools.sh') }}
+      - name: Install coverage dependencies
+        run: |
+          bash scripts/ci/install_debian_tools.sh bubblewrap git jq python3
+          bash scripts/ci/install_ci_tools.sh coverage
+      - name: Build sandbox launcher (test dependency)
+        run: cargo build --locked -p transist-sandbox-launcher
+      - name: Install sandbox launcher for containerized tests
+        run: install -Dm755 target/debug/transist-sandbox-launcher /usr/libexec/transist/transist-sandbox-launcher
+      - name: Generate coverage reports
+        run: bash scripts/ci/run_coverage.sh coverage
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage-main-${{ github.sha }}
+          path: coverage
+          if-no-files-found: error
+
+  main-gate:
+    name: main-gate
+    if: ${{ always() }}
+    needs:
+      - platform-smoke
+      - musl-smoke
+      - coverage
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Require every mainline validation job
+        env:
+          PLATFORM_RESULT: ${{ needs.platform-smoke.result }}
+          MUSL_RESULT: ${{ needs.musl-smoke.result }}
+          COVERAGE_RESULT: ${{ needs.coverage.result }}
+        run: bash scripts/ci/check_gate_results.sh main

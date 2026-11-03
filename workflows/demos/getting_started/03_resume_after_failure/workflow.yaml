@@ -1,0 +1,20 @@
+schema: transist.flow.v1
+id: demo_03_resume_after_failure
+version: 0.1.0
+plugins:
+  shell: 0.1.0
+network:
+  mode: none
+steps:
+  - id: wait_for_fix
+    uses: process:shell/exec
+    with:
+      command: sh
+      args:
+        - -c
+        - |
+          test -f .retry-ok || {
+            echo "create .retry-ok and then run 'cargo run -p transist-cli -- runs resume demo_03_resume_after_failure'" >&2
+            exit 1
+          }
+          printf 'recovered after retry marker\n'

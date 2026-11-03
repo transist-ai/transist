@@ -1,0 +1,11 @@
+schema: transist.flow.v1
+id: failure_demo
+version: 0.1.0
+plugins:
+  shell: 0.1.0
+steps:
+  - id: deliberate_fail
+    uses: process:shell/exec
+    with:
+      command: sh
+      args: ["-c", "exit 1"]

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "ops": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "op"],
+        "properties": {"path": {"type": "string"}, "op": {"type": "string"}}
+      }
+    },
+    "secret_refs": {"type": "array", "items": {"type": "string"}}
+  }
+}

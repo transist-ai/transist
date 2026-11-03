@@ -1,0 +1,17 @@
+[extend]
+path = ".gitleaks.toml"
+
+[[allowlists]]
+description = "Ignored local working-tree output is never part of the public tree"
+paths = [
+  '''target/.*''',
+  '''secrets/.*''',
+  '''reports/.*''',
+  '''\.transist/.*''',
+  '''\.transist-dev/.*''',
+  '''\.transist-tmp/.*''',
+  '''\.tmp_transist_home/.*''',
+  '''\.tmp/.*''',
+  '''\.tmp-e2e-plugin-runtime/.*''',
+  '''demo/trust/.*\.key$''',
+]

@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Workflow {{ workflow_ref }}{% endblock %}
+{% block breadcrumb %}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="/inspect/workflows">Workflows</a><span class="sep">›</span>
+  <span class="mono">{{ workflow_ref }}</span>
+</nav>
+{% endblock %}
+{% block content %}
+<h1>Workflow <span class="mono">{{ workflow_ref }}</span></h1>
+<dl class="kv-grid">
+  <dt>ID</dt><dd class="mono">{{ workflow_id }}</dd>
+  <dt>Version</dt><dd class="mono">{{ workflow_version }}</dd>
+  <dt>Title</dt><dd>{{ title.as_deref().unwrap_or("—") }}</dd>
+  <dt>Source</dt><dd class="mono">{{ source_ref.as_deref().unwrap_or("—") }}</dd>
+  <dt>Validation</dt><dd><span class="status-badge status-{{ validation_status }}">{{ validation_status }}</span></dd>
+  <dt>Runnable</dt><dd>{% if runnable %}yes{% else %}no{% endif %}</dd>
+  <dt>Compiled</dt><dd>{% if compiled_recipe_available %}<a href="{{ compiled_url }}">view compiled</a>{% else %}n/a{% endif %}</dd>
+  <dt>Source link</dt><dd><a href="{{ source_url }}">view source</a></dd>
+</dl>
+
+{% if !validation_errors.is_empty() %}
+<h2>Validation errors</h2>
+<ul>
+{% for e in validation_errors %}<li class="mono">{{ e }}</li>{% endfor %}
+</ul>
+{% endif %}
+
+<nav class="tabs" aria-label="Workflow tabs">
+  {% for t in tabs %}
+  <a href="{{ t.href }}"{% if t.active %} class="active" aria-current="page"{% endif %}>{{ t.label }}</a>
+  {% endfor %}
+</nav>
+
+{% if tab == "plugins" %}
+{% if plugins.is_empty() %}<div class="empty-state">No plugins used by this workflow.</div>{% else %}
+<table>
+  <thead><tr><th>Plugin</th><th>Adapter</th><th>Actions</th><th>Steps</th></tr></thead>
+  <tbody>
+  {% for p in plugins %}
+  <tr>
+    <td class="mono">{{ p.plugin }}</td>
+    <td>{{ p.adapters.join(", ") }}</td>
+    <td class="mono">{{ p.actions.join(", ") }}</td>
+    <td class="mono">{{ p.step_ids.join(", ") }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% else if tab == "inputs" %}
+{% if inputs.is_empty() %}<div class="empty-state">No declared inputs.</div>{% else %}
+<table>
+  <thead><tr><th>Name</th><th>Type</th><th>Required</th><th>Default</th><th>Description</th></tr></thead>
+  <tbody>
+  {% for i in inputs %}
+  <tr>
+    <td class="mono">{{ i.name }}</td>
+    <td>{{ i.value_type }}</td>
+    <td>{% if i.required %}yes{% else %}no{% endif %}</td>
+    <td>{% if i.has_default %}yes{% else %}no{% endif %}</td>
+    <td>{{ i.description }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% else %}
+{% if step_groups.is_empty() %}<div class="empty-state">No steps.</div>{% else %}
+<table>
+  <thead><tr><th>Step</th><th>Kind</th><th>Adapter</th><th>Plugin</th><th>Action</th><th>Inputs</th><th>Edges</th><th>Children</th></tr></thead>
+  <tbody>
+  {% for group in step_groups %}
+  <tr>
+    <td class="mono">{{ group.root.step_id }}</td>
+    <td>{{ group.root.kind }}</td>
+    <td>{{ group.root.adapter.as_deref().unwrap_or("—") }}</td>
+    <td>{{ group.root.plugin.as_deref().unwrap_or("—") }}</td>
+    <td>{{ group.root.action.as_deref().unwrap_or("—") }}</td>
+    <td class="mono">{% if group.root.workflow_input_refs.is_empty() %}—{% else %}{{ group.root.workflow_input_refs.join(", ") }}{% endif %}</td>
+    <td class="mono">{% if group.root.edges.is_empty() %}—{% else %}{{ group.root.edges.join(", ") }}{% endif %}</td>
+    <td>{% if group.descendants.is_empty() %}—{% else %}{{ group.root.child_step_ids.len() }} direct / {{ group.descendants.len() }} total{% endif %}</td>
+  </tr>
+  {% if !group.descendants.is_empty() %}
+  <tr>
+    <td colspan="8">
+      <details>
+        <summary>Show children ({{ group.descendants.len() }})</summary>
+        <table>
+          <thead><tr><th>Step</th><th>Kind</th><th>Adapter</th><th>Plugin</th><th>Action</th><th>Inputs</th><th>Edges</th><th>Children</th></tr></thead>
+          <tbody>
+          {% for step in group.descendants %}
+          <tr>
+            <td><span class="mono workflow-step-indent" style="padding-left: {{ step.depth }}em;">{{ step.step_id }}</span></td>
+            <td>{{ step.kind }}</td>
+            <td>{{ step.adapter.as_deref().unwrap_or("—") }}</td>
+            <td>{{ step.plugin.as_deref().unwrap_or("—") }}</td>
+            <td>{{ step.action.as_deref().unwrap_or("—") }}</td>
+            <td class="mono">{% if step.workflow_input_refs.is_empty() %}—{% else %}{{ step.workflow_input_refs.join(", ") }}{% endif %}</td>
+            <td class="mono">{% if step.edges.is_empty() %}—{% else %}{{ step.edges.join(", ") }}{% endif %}</td>
+            <td>{% if step.child_step_ids.is_empty() %}—{% else %}{{ step.child_step_ids.len() }}{% endif %}</td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </details>
+    </td>
+  </tr>
+  {% endif %}
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endif %}
+{% endblock %}

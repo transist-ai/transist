@@ -1,0 +1,9 @@
+schema: transist.module.v1
+id: leaf
+version: 0.1.0
+steps:
+  - id: update
+    uses: process:fixture.documents/call
+    with:
+      ops:
+        - {path: {$document: file, access: update}, op: update, content: changed}

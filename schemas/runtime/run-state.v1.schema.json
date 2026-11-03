@@ -1,0 +1,259 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://transist.dev/schemas/runtime/run-state.v1.schema.json",
+  "title": "Transist Run State v1",
+  "description": "Serialized shape of the `transist.run_state.v1` persisted run record (`state.json`). Step lifetime `executions` and `activation_executions_baseline` are append-only: `baseline <= executions` is enforced by the runtime on every read and write.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "workflow_id",
+    "workflow_version",
+    "status",
+    "steps",
+    "workflow_inputs",
+    "resume_count"
+  ],
+  "properties": {
+    "schema": { "type": "string", "const": "transist.run_state.v1" },
+    "run_id": { "type": "string", "minLength": 1 },
+    "workflow_id": { "type": "string", "minLength": 1 },
+    "workflow_version": { "type": "string", "minLength": 1 },
+    "status": { "$ref": "#/$defs/run_status" },
+    "steps": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/step_state" }
+    },
+    "executions": {
+      "type": "object",
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    },
+    "recipe_snapshot": { "$ref": "#/$defs/recipe_ref" },
+    "lineage": { "$ref": "#/$defs/lineage" },
+    "resume_count": { "type": "integer", "minimum": 0 },
+    "workflow_inputs": { "$ref": "#/$defs/value_map" },
+    "workspace": { "$ref": "#/$defs/workspace_binding" },
+    "workflow_vars": { "$ref": "#/$defs/value_map" },
+    "recovery_state": { "$ref": "#/$defs/recovery_state" },
+    "cleanup": { "$ref": "#/$defs/cleanup" },
+    "preflight": { "$ref": "#/$defs/preflight" },
+    "trusted_execution_mode": { "type": "boolean" },
+    "trust_decision": { "$ref": "#/$defs/trust_decision" },
+    "local_only_mode": { "type": "boolean" },
+    "runtime_mode": { "type": "string" },
+    "policy_profile": { "type": "string" },
+    "capability_enforcement": { "type": "string" },
+    "asset_locks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/asset_lock" }
+    },
+    "asset_lock_version": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Current births emit 1. Zero is pre-lock legacy and unsupported for re-entry. Higher revisions are unsupported and fail closed."
+    },
+    "workflow_asset_snapshot": {
+      "type": "boolean",
+      "default": false,
+      "description": "True requires private captured workflow assets, with no authored-source fallback. Absent/false preserves version-1 source resolution. False is omitted on serialization."
+    },
+    "test_mode": { "type": "boolean" },
+    "capability_authority_version": { "type": "integer", "minimum": 0, "maximum": 1 },
+    "created_at_ms": { "type": "integer", "minimum": 0 },
+    "updated_at_ms": { "type": "integer", "minimum": 0 }
+  },
+  "$defs": {
+    "workspace_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "access"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "access": { "type": "string", "enum": ["full", "read_only"] }
+      }
+    },
+    "run_status": {
+      "type": "string",
+      "enum": ["created", "planned", "running", "waiting", "blocked", "success", "failed", "canceled"]
+    },
+    "step_status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "runnable",
+        "dispatching",
+        "running",
+        "blocked",
+        "succeeded",
+        "failed",
+        "retry_wait",
+        "skipped",
+        "canceled"
+      ]
+    },
+    "skip_reason": {
+      "type": "string",
+      "enum": ["dependency_failed", "guard_blocked"]
+    },
+    "step_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["step_id", "status", "executions"],
+      "properties": {
+        "step_id": { "type": "string", "minLength": 1 },
+        "status": { "$ref": "#/$defs/step_status" },
+        "executions": { "type": "integer", "minimum": 0 },
+        "activation_executions_baseline": { "type": "integer", "minimum": 0 },
+        "retry_wait_until_ms": { "type": "integer", "minimum": 0 },
+        "skip_reason": { "$ref": "#/$defs/skip_reason" },
+        "last_request": { "$ref": "../tep/invoke.v1.schema.json" },
+        "last_result": { "$ref": "../tep/result.v1.schema.json" },
+        "started_at_ms": { "type": "integer", "minimum": 0 },
+        "finished_at_ms": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "recipe_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "lineage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "root_run_id"],
+      "properties": {
+        "mode": { "type": "string", "enum": ["fresh", "replay"] },
+        "source_run_id": { "type": "string", "minLength": 1 },
+        "root_run_id": { "type": "string", "minLength": 1 },
+        "parent_run_id": { "type": "string", "minLength": 1 },
+        "parent_step_id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "value_map": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "recovery_state": {
+      "type": "string",
+      "enum": ["recoverable", "cleanup_required", "cleanup_completed"]
+    },
+    "cleanup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["trigger", "state", "steps"],
+      "properties": {
+        "trigger": { "type": "string", "enum": ["success", "canceled", "failed"] },
+        "state": {
+          "type": "string",
+          "enum": ["pending", "running", "succeeded", "failed", "skipped"]
+        },
+        "steps": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/step_state" }
+        },
+        "preflight": { "$ref": "#/$defs/preflight" },
+        "started_at_ms": { "type": "integer", "minimum": 0 },
+        "finished_at_ms": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "preflight_status": {
+      "type": "string",
+      "enum": ["passed", "deferred_to_dispatch", "warning", "failed"]
+    },
+    "preflight_check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "status", "message"],
+      "properties": {
+        "kind": { "type": "string", "minLength": 1 },
+        "status": { "$ref": "#/$defs/preflight_status" },
+        "step_ids": { "type": "array", "items": { "type": "string" } },
+        "adapter_kind": { "type": "string" },
+        "plugin_id": { "type": "string" },
+        "action": { "type": "string" },
+        "message": { "type": "string" }
+      }
+    },
+    "preflight": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "checked_at_ms", "blocker_count", "warning_count"],
+      "properties": {
+        "status": { "$ref": "#/$defs/preflight_status" },
+        "checked_at_ms": { "type": "integer", "minimum": 0 },
+        "blocker_count": { "type": "integer", "minimum": 0 },
+        "warning_count": { "type": "integer", "minimum": 0 },
+        "checks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/preflight_check" }
+        }
+      }
+    },
+    "trust_subject_decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "digest", "signature_verified", "trust_decision"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "signature_verified": { "type": "boolean" },
+        "signer_key_id": { "type": "string" },
+        "reason_code": { "type": "string" },
+        "trust_decision": {
+          "type": "string",
+          "enum": ["verified", "denied", "bypassed"]
+        }
+      }
+    },
+    "trust_decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "run_id",
+        "trusted_execution_mode",
+        "decision",
+        "workflow",
+        "decided_at_ms"
+      ],
+      "properties": {
+        "schema": { "type": "string", "const": "transist.trust_decision.v1" },
+        "run_id": { "type": "string", "minLength": 1 },
+        "trusted_execution_mode": { "type": "boolean" },
+        "decision": {
+          "type": "string",
+          "enum": ["allowed", "denied", "bypassed"]
+        },
+        "workflow": { "$ref": "#/$defs/trust_subject_decision" },
+        "plugins": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/trust_subject_decision" }
+        },
+        "reason_code": { "type": "string" },
+        "failed_verification_type": { "type": "string" },
+        "organization_id": { "type": "string" },
+        "policy_revision": { "type": "string" },
+        "decided_at_ms": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "asset_lock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["step_id", "kind", "ref_id", "sha256"],
+      "properties": {
+        "step_id": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "enum": ["plugin", "prompt_file"] },
+        "ref_id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string" },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    }
+  }
+}

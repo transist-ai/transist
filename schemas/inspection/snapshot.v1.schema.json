@@ -1,0 +1,456 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://transist.dev/schemas/inspection/snapshot.v1.schema.json",
+  "title": "Transist Inspection Snapshot Envelope v1",
+  "description": "Metadata-only outbound sync contract for the local-first inspection read model.",
+  "type": "object",
+  "required": [
+    "kind",
+    "schema_version",
+    "source_id",
+    "workspace_id",
+    "produced_at_unix_ms",
+    "tree_version",
+    "root_run_id",
+    "tree_fingerprint",
+    "runs"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "kind": { "type": "string", "const": "transist.inspection.snapshot" },
+    "schema_version": { "type": "integer", "const": 1 },
+    "source_id": { "type": "string", "minLength": 1 },
+    "workspace_id": { "type": "string", "minLength": 1 },
+    "operator_label": { "type": "string", "minLength": 1 },
+    "produced_at_unix_ms": { "type": "integer", "minimum": 0 },
+    "tree_version": { "type": "integer", "minimum": 0 },
+    "root_run_id": { "type": "string", "minLength": 1 },
+    "tree_fingerprint": { "type": "string", "minLength": 1 },
+    "sync_policy": { "$ref": "#/$defs/reservedObject" },
+    "runs": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/run" }
+    },
+    "extensions": { "$ref": "#/$defs/reservedObject" },
+    "provider_facts": { "$ref": "#/$defs/reservedObject" },
+    "policy_facts": { "$ref": "#/$defs/reservedObject" },
+    "runtime_id": { "type": "string", "minLength": 1 },
+    "organization_id": { "type": "string", "minLength": 1 },
+    "policy_revision": { "type": "string", "minLength": 1 },
+    "trusted_execution_mode": { "type": "boolean" },
+    "workflow_digest": { "type": "string", "minLength": 1 },
+    "workflow_signature_status": { "type": "string", "minLength": 1 },
+    "workflow_signer_key_id": { "type": "string", "minLength": 1 },
+    "plugin_trust": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/pluginTrust" }
+    },
+    "trust_decision": { "type": "string", "minLength": 1 },
+    "external_transfer_summary": { "$ref": "#/$defs/externalTransferSummary" },
+    "approver_identity": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/approverIdentity" }
+    },
+    "locality": { "$ref": "#/$defs/locality" },
+    "evidence_export": { "$ref": "#/$defs/evidenceExport" }
+  },
+  "$defs": {
+    "reservedObject": {
+      "type": "object"
+    },
+    "run": {
+      "type": "object",
+      "required": [
+        "run_id",
+        "run_summary",
+        "run_detail_summary",
+        "run_fingerprint",
+        "failures",
+        "last_event_seq"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "run_id": { "type": "string", "minLength": 1 },
+        "run_summary": {
+          "type": "object",
+          "required": ["run_id"],
+          "properties": {
+            "run_id": { "type": "string", "minLength": 1 }
+          }
+        },
+        "run_detail_summary": {
+          "type": "object",
+          "required": [
+            "summary",
+            "input_keys",
+            "input_types",
+            "input_presence",
+            "input_sources",
+            "blocked_gate_ids",
+            "step_count"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "summary": {
+              "type": "object",
+              "required": ["run_id"],
+              "properties": {
+                "run_id": { "type": "string", "minLength": 1 }
+              }
+            },
+            "input_keys": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "input_types": {
+              "type": "object",
+              "additionalProperties": { "type": "string", "minLength": 1 }
+            },
+            "input_presence": {
+              "type": "object",
+              "additionalProperties": { "type": "boolean" }
+            },
+            "input_sources": {
+              "type": "object",
+              "additionalProperties": { "type": "string", "minLength": 1 }
+            },
+            "workflow_input_values": { "type": "object" },
+            "run_detail_full": { "type": "object" },
+            "blocked_gate_ids": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "step_count": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "step_metrics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/stepMetrics" }
+        },
+        "gates": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/gate" }
+        },
+        "events": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/event" }
+        },
+        "artifacts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/blobMetadata" }
+        },
+        "evidence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/blobMetadata" }
+        },
+        "failures": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/failure" }
+        },
+        "usage_facts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/usageFact" }
+        },
+        "run_fingerprint": { "type": "string", "minLength": 1 },
+        "last_event_seq": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "event": {
+      "type": "object",
+      "required": ["event_seq", "timestamp_unix_ms", "event_type", "summary"],
+      "additionalProperties": false,
+      "properties": {
+        "event_seq": { "type": "integer", "minimum": 1 },
+        "timestamp_unix_ms": { "type": "integer", "minimum": 0 },
+        "event_type": { "type": "string", "minLength": 1 },
+        "step_id": { "type": "string", "minLength": 1 },
+        "summary": {}
+      }
+    },
+    "blobMetadata": {
+      "type": "object",
+      "required": [
+        "run_id",
+        "family",
+        "step_id",
+        "execution",
+        "relative_path",
+        "name",
+        "bytes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "run_id": { "type": "string", "minLength": 1 },
+        "family": { "type": "string", "enum": ["artifact", "evidence"] },
+        "step_id": { "type": "string", "minLength": 1 },
+        "execution": { "type": "integer", "minimum": 0 },
+        "relative_path": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "bytes": { "type": "integer", "minimum": 0 },
+        "created_at_ms": { "type": "integer", "minimum": 0 },
+        "descriptor": { "$ref": "#/$defs/blobDescriptor" }
+      }
+    },
+    "blobDescriptor": {
+      "type": "object",
+      "required": ["source_path"],
+      "additionalProperties": false,
+      "properties": {
+        "source_path": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "minLength": 1 },
+        "bytes": { "type": "integer", "minimum": 0 },
+        "invoke_id": { "type": "string", "minLength": 1 },
+        "status": { "type": "string", "minLength": 1 }
+      }
+    },
+    "failure": {
+      "type": "object",
+      "required": [
+        "failure_id",
+        "run_id",
+        "step_id",
+        "execution_attempt",
+        "failure_class",
+        "error_code",
+        "message_redacted",
+        "adapter_kind",
+        "retryable",
+        "safe_to_retry",
+        "requires_manual_attention",
+        "state_mutation_detected",
+        "first_seen_at_unix_ms",
+        "last_seen_at_unix_ms",
+        "occurrence_count"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "failure_id": { "type": "string", "minLength": 1 },
+        "run_id": { "type": "string", "minLength": 1 },
+        "step_id": { "type": "string", "minLength": 1 },
+        "execution_attempt": { "type": "integer", "minimum": 1 },
+        "last_stable_step_id": {
+          "type": ["string", "null"],
+          "minLength": 1
+        },
+        "failure_class": {
+          "type": "string",
+          "enum": [
+            "workflow_definition_error",
+            "input_validation_error",
+            "adapter_internal_error",
+            "tool_error",
+            "protocol_error",
+            "timeout",
+            "authorization_error",
+            "secret_resolution_error",
+            "rate_limit_error",
+            "transport_error",
+            "cancelled",
+            "policy_error",
+            "unknown_error"
+          ]
+        },
+        "error_code": { "type": "string", "minLength": 1 },
+        "message_redacted": { "type": "string" },
+        "adapter_kind": { "type": "string", "minLength": 1 },
+        "adapter_name": { "type": ["string", "null"], "minLength": 1 },
+        "tool_name": { "type": ["string", "null"], "minLength": 1 },
+        "retryable": { "type": "boolean" },
+        "safe_to_retry": { "type": "boolean" },
+        "requires_manual_attention": { "type": "boolean" },
+        "state_mutation_detected": { "type": "boolean" },
+        "first_seen_at_unix_ms": { "type": "integer", "minimum": 0 },
+        "last_seen_at_unix_ms": { "type": "integer", "minimum": 0 },
+        "occurrence_count": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "stepMetrics": {
+      "type": "object",
+      "required": ["step_id", "execution_count"],
+      "additionalProperties": false,
+      "properties": {
+        "step_id": { "type": "string", "minLength": 1 },
+        "execution_count": { "type": "integer", "minimum": 0 },
+        "status_counts": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "latest_execution": { "type": "object" },
+        "active_execution_duration_ms": { "type": "integer", "minimum": 0 },
+        "blocked_wait_duration_ms": { "type": "integer", "minimum": 0 },
+        "had_stderr": { "type": "boolean" },
+        "had_error": { "type": "boolean" }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "required": ["gate_id", "status", "step_id"],
+      "additionalProperties": false,
+      "properties": {
+        "gate_id": { "type": "string", "minLength": 1 },
+        "status": { "type": "string", "minLength": 1 },
+        "step_id": { "type": "string", "minLength": 1 },
+        "created_at_ms": { "type": "integer", "minimum": 0 },
+        "decision": {
+          "type": "object",
+          "required": ["state"],
+          "additionalProperties": false,
+          "properties": {
+            "state": { "type": "string", "minLength": 1 },
+            "actor": { "type": ["string", "null"], "minLength": 1 },
+            "reason": { "type": ["string", "null"] },
+            "decided_at_ms": { "type": ["integer", "null"], "minimum": 0 }
+          }
+        },
+        "decision_history": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["state"],
+            "additionalProperties": false,
+            "properties": {
+              "state": { "type": "string", "minLength": 1 },
+              "actor": { "type": ["string", "null"], "minLength": 1 },
+              "reason": { "type": ["string", "null"] },
+              "decided_at_ms": { "type": ["integer", "null"], "minimum": 0 }
+            }
+          }
+        },
+        "request_keys": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "request_summary": {
+          "type": "object"
+        }
+      }
+    },
+    "usageFact": {
+      "type": "object",
+      "required": [
+        "run_id",
+        "step_id",
+        "plugin_id",
+        "action",
+        "usage_reports"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "run_id": { "type": "string", "minLength": 1 },
+        "step_id": { "type": "string", "minLength": 1 },
+        "plugin_id": { "type": "string", "minLength": 1 },
+        "action": { "type": "string", "minLength": 1 },
+        "provider": { "type": "string", "minLength": 1 },
+        "model": { "type": "string", "minLength": 1 },
+        "input_tokens": { "type": "integer", "minimum": 0 },
+        "output_tokens": { "type": "integer", "minimum": 0 },
+        "total_tokens": { "type": "integer", "minimum": 0 },
+        "usage_reports": { "type": "integer", "minimum": 0 },
+        "observed_at_unix_ms": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "pluginTrust": {
+      "type": "object",
+      "required": ["id", "digest", "signature_verified", "trust_decision"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "digest": { "type": "string", "minLength": 1 },
+        "signature_verified": { "type": "boolean" },
+        "signer_key_id": { "type": "string", "minLength": 1 },
+        "trust_decision": { "type": "string", "minLength": 1 }
+      }
+    },
+    "externalTransferSummary": {
+      "type": "object",
+      "required": ["count"],
+      "additionalProperties": false,
+      "properties": {
+        "count": { "type": "integer", "minimum": 0 },
+        "external_transfers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["step_id", "evidence_path", "adapter_kind", "provider_kind", "timestamp_ms"],
+            "additionalProperties": false,
+            "properties": {
+              "step_id": { "type": "string", "minLength": 1 },
+              "evidence_path": { "type": "string", "minLength": 1 },
+              "destination": { "type": "string", "minLength": 1 },
+              "adapter_kind": { "type": "string", "minLength": 1 },
+              "provider": { "type": "string", "minLength": 1 },
+              "provider_kind": { "type": "string", "minLength": 1 },
+              "content_hash": { "type": "string", "minLength": 1 },
+              "timestamp_ms": { "type": "integer", "minimum": 0 }
+            }
+          }
+        }
+      }
+    },
+    "approverIdentity": {
+      "type": "object",
+      "required": ["gate_id", "decision"],
+      "additionalProperties": false,
+      "properties": {
+        "gate_id": { "type": "string", "minLength": 1 },
+        "decision": { "type": "string", "minLength": 1 },
+        "actor": { "type": ["string", "null"], "minLength": 1 },
+        "reason": { "type": ["string", "null"] },
+        "decided_at_ms": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "locality": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["step_id"],
+            "properties": {
+              "step_id": { "type": "string", "minLength": 1 },
+              "provider": { "type": "string", "minLength": 1 },
+              "model": { "type": "string", "minLength": 1 },
+              "provider_kind": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "external_transfers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["step_id", "execution", "timestamp_ms", "adapter_kind", "provider_kind", "policy_mode"],
+            "properties": {
+              "step_id": { "type": "string", "minLength": 1 },
+              "execution": { "type": "integer", "minimum": 0 },
+              "timestamp_ms": { "type": "integer", "minimum": 0 },
+              "destination": { "type": "string", "minLength": 1 },
+              "adapter_kind": { "type": "string", "minLength": 1 },
+              "provider": { "type": "string", "minLength": 1 },
+              "provider_kind": { "type": "string", "minLength": 1 },
+              "bytes_sent": { "type": "integer", "minimum": 0 },
+              "content_hash": { "type": "string", "minLength": 1 },
+              "policy_mode": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    "evidenceExport": {
+      "type": "object",
+      "required": ["command", "format"],
+      "additionalProperties": false,
+      "properties": {
+        "location": { "type": "string", "minLength": 1 },
+        "command": { "type": "string", "minLength": 1 },
+        "format": { "type": "string", "minLength": 1 },
+        "generated_at_ms": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

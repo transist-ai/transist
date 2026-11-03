@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://transist.dev/schemas/runtime/step-execution.v1.schema.json",
+  "title": "Immutable step completion and document publication record v1",
+  "type": "object",
+  "required": ["run_id", "step_id", "execution", "status"],
+  "properties": {
+    "run_id": { "$ref": "managed-documents.v1.schema.json#/$defs/identifier" },
+    "step_id": { "$ref": "managed-documents.v1.schema.json#/$defs/identifier" },
+    "execution": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+    "status": { "type": "string", "minLength": 1 },
+    "started_at_ms": { "type": "integer", "minimum": 0 },
+    "finished_at_ms": { "type": "integer", "minimum": 0 },
+    "retry_wait_until_ms": { "type": "integer", "minimum": 0 },
+    "request": { "$ref": "../tep/invoke.v1.schema.json" },
+    "result": { "$ref": "../tep/result.v1.schema.json" },
+    "metrics_validation_errors": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+    "state_mutations": { "type": "array", "items": { "oneOf": [
+      { "type": "object", "required": ["kind", "logical_path", "sha256"], "properties": { "kind": { "const": "artifact_written" }, "logical_path": { "type": "string" }, "sha256": { "type": "string" } }, "additionalProperties": false },
+      { "type": "object", "required": ["kind", "adapter_kind", "action"], "properties": { "kind": { "const": "adapter_acked" }, "adapter_kind": { "type": "string" }, "action": { "type": "string" } }, "additionalProperties": false }
+    ] } },
+    "document_revisions": { "$ref": "managed-documents.v1.schema.json#/$defs/candidates" }
+  },
+  "if": { "properties": { "document_revisions": { "minItems": 1 } }, "required": ["document_revisions"] },
+  "then": { "required": ["result"], "properties": { "status": { "const": "success" }, "result": { "properties": { "status": { "const": "success" } } } } },
+  "additionalProperties": false
+}

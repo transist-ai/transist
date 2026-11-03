@@ -1,0 +1,114 @@
+schema: transist.flow.v1
+id: demo_11_filesystem_policy
+version: 0.1.0
+plugins:
+  shell: 0.1.0
+network:
+  mode: none
+inputs:
+  repo_path:
+    type: string
+    required: true
+workspace:
+  path: "{{inputs.repo_path}}"
+  access: full
+steps:
+  - id: seed_workspace
+    uses: process:shell/exec
+    with:
+      command: sh
+      args:
+        - -eu
+        - -c
+        - |
+          mkdir -p src reports secrets
+          printf 'hello workspace\n' > src/input.txt
+          printf 'top secret\n' > secrets/token.txt
+          : > reports/seed.txt
+
+  - id: full_access_probe
+    uses: process:shell/exec
+    with:
+      command: sh
+      args:
+        - -eu
+        - -c
+        - |
+          expect_denied() {
+            if "$@" >/dev/null 2>&1; then
+              echo "unexpected success: $*" >&2
+              exit 1
+            fi
+          }
+
+          [ "$(cat src/input.txt)" = "hello workspace" ]
+          printf 'full mode write\n' > reports/full.txt
+          mv reports/full.txt reports/full-renamed.txt
+          rm reports/full-renamed.txt
+
+          expect_denied sh -c "printf 'blocked\n' > \"${HOME}/transist-policy-outside.txt\""
+
+          python3 -c 'import json; print(json.dumps({"workspace_readable": True, "workspace_mutations_allowed": True, "outside_write_denied": True}))'
+
+  - id: read_only_probe
+    uses: process:shell/exec
+    filesystem_policy:
+      workspace_access:
+        mode: read_only
+    with:
+      command: sh
+      args:
+        - -eu
+        - -c
+        - |
+          expect_denied() {
+            if "$@" >/dev/null 2>&1; then
+              echo "unexpected success: $*" >&2
+              exit 1
+            fi
+          }
+
+          [ "$(cat src/input.txt)" = "hello workspace" ]
+          expect_denied sh -c "printf 'blocked\n' > reports/read-only.txt"
+
+          python3 -c 'import json; print(json.dumps({"workspace_read_allowed": True, "workspace_write_denied": True}))'
+
+  - id: external_path_probe
+    uses: process:shell/exec
+    filesystem_policy:
+      # workspace_access stays at the workflow default (full)
+      # ~/.ssh is added here as a step-level read grant; ~/.gitconfig comes from
+      # the global settings.yaml grant. Both resolve to committed fixtures under
+      # the isolated home, so the probe is deterministic and host-independent.
+      read_allow_paths:
+        - ~/.ssh
+    with:
+      command: sh
+      args:
+        - -eu
+        - -c
+        - |
+          # ~/.gitconfig read access comes from the global settings.yaml grant.
+          test -f "${HOME}/.gitconfig"
+          cat "${HOME}/.gitconfig" > /dev/null
+          echo "external_read_home_gitconfig: true"
+
+          # ~/.ssh directory access comes from the merged step grant.
+          test -d "${HOME}/.ssh"
+          ls "${HOME}/.ssh" > /dev/null
+          echo "external_read_home_ssh: true"
+
+          python3 -c 'import json; print(json.dumps({"external_grants_demo": True}))'
+
+  - id: verify_workspace_intact
+    uses: process:shell/exec
+    with:
+      command: sh
+      args:
+        - -eu
+        - -c
+        - |
+          [ "$(cat src/input.txt)" = "hello workspace" ]
+          [ "$(cat secrets/token.txt)" = "top secret" ]
+          [ ! -e reports/full-renamed.txt ]
+          [ ! -e reports/read-only.txt ]

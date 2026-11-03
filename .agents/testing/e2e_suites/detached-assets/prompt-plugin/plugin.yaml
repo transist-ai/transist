@@ -1,0 +1,27 @@
+schema: transist.plugin.v1
+id: detached.prompt
+version: 1.0.0
+adapter: process
+default_provider_kind: local
+entrypoint:
+  type: process
+  command: plugin.py
+package:
+  files:
+    - plugin.py
+    - schemas/run.input.schema.json
+    - schemas/run.output.schema.json
+actions:
+  - name: run
+    input_schema: schemas/run.input.schema.json
+    output_schema: schemas/run.output.schema.json
+    secret_inputs: []
+    bindings:
+      transist_prompt_v1:
+        inline_field: prompt
+        file_field: prompt_file
+capabilities:
+  supports_cancel: false
+  supports_health: false
+  supports_artifact_hints: false
+  supports_evidence_hints: false

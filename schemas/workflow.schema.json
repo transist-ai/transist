@@ -1,0 +1,531 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://transist.dev/schemas/workflow.schema.json",
+  "title": "Transist Workflow Schema v1",
+  "type": "object",
+  "required": ["schema", "id", "version", "steps"],
+  "properties": {
+    "schema": { "type": "string", "enum": ["transist.flow.v1", "transist.module.v1"] },
+    "id": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+    "version": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+    "prerequisites": { "$ref": "#/$defs/prerequisiteSet" },
+    "plugins": {
+      "type": "object",
+      "default": {},
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+      }
+    },
+    "modules": {
+      "type": "object",
+      "default": {},
+      "additionalProperties": { "$ref": "#/$defs/moduleDeclaration" }
+    },
+    "inputs": {
+      "type": "object",
+      "default": {},
+      "propertyNames": { "minLength": 1 },
+      "additionalProperties": { "$ref": "#/$defs/inputSpec" }
+    },
+    "context": {
+      "type": "object",
+      "default": {},
+      "propertyNames": { "minLength": 1 },
+      "additionalProperties": { "$ref": "#/$defs/ordinaryData" }
+    },
+    "outputs": {
+      "description": "Module-local named export bindings, evaluated on successful completion.",
+      "type": "object",
+      "propertyNames": { "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$", "not": { "enum": ["subflow_id", "subflow_version", "child_run_id", "status", "bound_inputs", "child_steps", "failure"] } },
+      "additionalProperties": { "$ref": "#/$defs/ordinaryData" }
+    },
+    "artifacts": {
+      "type": "object",
+      "default": {},
+      "propertyNames": { "minLength": 1 },
+      "additionalProperties": { "$ref": "#/$defs/artifactSpec" }
+    },
+    "documents": {
+      "description": "Root-lexical bounded storage, inherited by modules. Process invoke action data may bind private read/write/update copies.",
+      "type": "object",
+      "propertyNames": { "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+      "additionalProperties": { "$ref": "runtime/managed-documents.v1.schema.json#/$defs/declaration" }
+    },
+    "profiles": {
+      "type": "object",
+      "default": {},
+      "propertyNames": { "minLength": 1 },
+      "additionalProperties": { "$ref": "#/$defs/profile" }
+    },
+    "workspace": { "$ref": "#/$defs/workspaceBinding" },
+    "filesystem_policy": { "$ref": "#/$defs/filesystemPolicy" },
+    "network": { "$ref": "#/$defs/networkPolicy" },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/step" }
+    },
+    "cleanup": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/cleanupStep" }
+    }
+  },
+  "additionalProperties": false,
+  "if": { "properties": { "schema": { "const": "transist.flow.v1" } } },
+  "then": { "not": { "required": ["outputs"] } },
+  "else": { "not": { "required": ["documents"] } },
+  "$defs": {
+    "ordinaryData": {
+      "description": "Ordinary JSON data; reserved document objects cannot select authority or appear outside invoke data.",
+      "if": { "type": "object" },
+      "then": { "not": { "required": ["$document"] }, "additionalProperties": { "$ref": "#/$defs/ordinaryData" } },
+      "else": { "if": { "type": "array" }, "then": { "items": { "$ref": "#/$defs/ordinaryData" } } }
+    },
+    "actionData": {
+      "if": { "type": "object" },
+      "then": {
+        "if": { "required": ["$document"] },
+        "then": { "$ref": "runtime/managed-documents.v1.schema.json#/$defs/binding" },
+        "else": {
+          "properties": {
+            "secret_refs": { "$ref": "#/$defs/ordinaryData" },
+            "command": { "$ref": "#/$defs/ordinaryData" },
+            "executable": { "$ref": "#/$defs/ordinaryData" },
+            "source": { "$ref": "#/$defs/ordinaryData" },
+            "source_file": { "$ref": "#/$defs/ordinaryData" },
+            "prompt_file": { "$ref": "#/$defs/ordinaryData" },
+            "repo_path": { "$ref": "#/$defs/ordinaryData" },
+            "workspace": { "$ref": "#/$defs/ordinaryData" },
+            "workspace_dir": { "$ref": "#/$defs/ordinaryData" },
+            "workspace_root": { "$ref": "#/$defs/ordinaryData" },
+            "cwd": { "$ref": "#/$defs/ordinaryData" },
+            "working_dir": { "$ref": "#/$defs/ordinaryData" },
+            "working_directory": { "$ref": "#/$defs/ordinaryData" }
+          },
+          "additionalProperties": { "$ref": "#/$defs/actionData" }
+        }
+      },
+      "else": { "if": { "type": "array" }, "then": { "items": { "$ref": "#/$defs/actionData" } } }
+    },
+    "ordinaryWith": { "type": "object", "additionalProperties": { "$ref": "#/$defs/ordinaryData" } },
+    "workspaceBinding": {
+      "type": "object",
+      "required": ["path", "access"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "access": { "type": "string", "enum": ["full", "read_only"] }
+      },
+      "additionalProperties": false
+    },
+    "artifactSpec": {
+      "type": "object",
+      "required": ["scope", "path"],
+      "properties": {
+        "scope": { "type": "string", "enum": ["run", "repository"] },
+        "path": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "profile": {
+      "type": "object",
+      "required": ["uses"],
+      "properties": {
+        "uses": { "type": "string", "pattern": "^[^:/\\s]+:[^/\\s]+/[^/\\s]+$" },
+        "with": { "$ref": "#/$defs/ordinaryWith" },
+        "prompt": { "type": "string", "minLength": 1 },
+        "prompt_file": { "type": "string", "minLength": 1 },
+        "skills": { "$ref": "#/$defs/skills" },
+        "filesystem_policy": { "$ref": "#/$defs/filesystemPolicy" },
+        "network": { "$ref": "#/$defs/networkPolicy" }
+      },
+      "additionalProperties": false
+    },
+    "inputSpec": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": { "const": "string" },
+            "required": { "type": "boolean", "default": false },
+            "default": { "type": "string" },
+            "description": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": { "const": "number" },
+            "required": { "type": "boolean", "default": false },
+            "default": { "type": "number" },
+            "description": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": { "const": "boolean" },
+            "required": { "type": "boolean", "default": false },
+            "default": { "type": "boolean" },
+            "description": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": { "const": "object" },
+            "required": { "type": "boolean", "default": false },
+            "default": { "type": "object", "$ref": "#/$defs/ordinaryData" },
+            "description": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": { "const": "array" },
+            "required": { "type": "boolean", "default": false },
+            "default": { "type": "array", "$ref": "#/$defs/ordinaryData" },
+            "description": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "with": {
+      "type": "object",
+      "default": {},
+      "$ref": "#/$defs/actionData"
+    },
+    "skills": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "ref": {
+      "type": "object",
+      "required": ["ref"],
+      "properties": {
+        "ref": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "ifBlock": {
+      "type": "object",
+      "required": ["guard", "then"],
+      "properties": {
+        "guard": { "type": "string", "minLength": 1 },
+        "then": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/ref" }
+        },
+        "else": {
+          "type": "array",
+          "default": [],
+          "items": { "$ref": "#/$defs/ref" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "loopBlock": {
+      "type": "object",
+      "required": ["body", "max_iters"],
+      "properties": {
+        "body": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/ref" }
+        },
+        "while": { "type": "string", "minLength": 1 },
+        "until": { "type": "string", "minLength": 1 },
+        "max_iters": { "type": "integer", "minimum": 1 },
+        "max_duration": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false,
+      "oneOf": [
+        { "required": ["while"], "not": { "required": ["until"] } },
+        { "required": ["until"], "not": { "required": ["while"] } }
+      ]
+    },
+    "set": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "minLength": 1 },
+      "additionalProperties": { "$ref": "#/$defs/ordinaryData" }
+    },
+    "workspaceAccessPolicy": {
+      "type": "object",
+      "properties": {
+        "mode": { "type": "string", "enum": ["full", "read_only"] }
+      },
+      "required": ["mode"],
+      "additionalProperties": false
+    },
+    "filesystemPolicy": {
+      "type": "object",
+      "properties": {
+        "workspace_access": { "$ref": "#/$defs/workspaceAccessPolicy" },
+        "read_allow_paths": {
+          "type": "array",
+          "default": [],
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "write_allow_paths": {
+          "type": "array",
+          "default": [],
+          "items": { "type": "string", "minLength": 1 }
+        }
+      },
+      "additionalProperties": false
+    },
+    "networkPolicy": {
+      "type": "object",
+      "properties": {
+        "mode": { "type": "string", "enum": ["any", "loopback", "allowlist", "none"] },
+        "allow_hosts": {
+          "type": "array",
+          "default": [],
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "allow_ports": {
+          "type": "array",
+          "default": [],
+          "items": { "type": "integer", "minimum": 1, "maximum": 65535 }
+        },
+        "tls_required": { "type": "boolean", "default": false },
+        "max_redirects": { "type": "integer", "minimum": 0, "default": 0 }
+      },
+      "additionalProperties": false
+    },
+    "invokeStep": {
+      "if": { "properties": { "uses": { "pattern": "^process:" } } },
+      "else": { "properties": { "with": { "$ref": "#/$defs/ordinaryWith" } } },
+      "type": "object",
+      "required": ["id", "uses"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+        "uses": { "type": "string", "pattern": "^[^:/\\s]+:[^/\\s]+/[^/\\s]+$" },
+        "profile": { "type": "string", "minLength": 1 },
+        "prompt": { "type": "string", "minLength": 1 },
+        "prompt_file": { "type": "string", "minLength": 1 },
+        "skills": { "$ref": "#/$defs/skills" },
+        "with": { "$ref": "#/$defs/with" },
+        "gate_decision": { "$ref": "#/$defs/gateDecisionBinding" },
+        "set": { "$ref": "#/$defs/set" },
+        "filesystem_policy": { "$ref": "#/$defs/filesystemPolicy" },
+        "network": { "$ref": "#/$defs/networkPolicy" }
+      },
+      "additionalProperties": false
+    },
+    "controlStep": {
+      "if": { "properties": { "control": { "const": "control.gate.manual" } } },
+      "then": { "properties": { "with": { "properties": {
+        "review_documents": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" } }
+      } } } },
+      "else": { "properties": { "with": { "not": { "required": ["review_documents"] } } } },
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["id", "control"],
+          "properties": {
+            "id": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+            "control": { "const": "control.noop" },
+            "with": { "$ref": "#/$defs/ordinaryWith" },
+            "if": { "$ref": "#/$defs/ifBlock" },
+            "loop": { "$ref": "#/$defs/loopBlock" }
+          },
+          "additionalProperties": false,
+          "not": {
+            "allOf": [
+              { "required": ["if"] },
+              { "required": ["loop"] }
+            ]
+          }
+        },
+        {
+          "type": "object",
+          "required": ["id", "control"],
+          "properties": {
+            "id": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+            "control": { "enum": ["control.finish", "control.gate.manual"] },
+            "with": { "$ref": "#/$defs/ordinaryWith" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "gateDecisionBinding": {
+      "type": "object",
+      "required": ["step"],
+      "properties": {
+        "step": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" }
+      },
+      "additionalProperties": false
+    },
+    "moduleDeclaration": {
+      "type": "object",
+      "required": ["path"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "moduleCall": {
+      "type": "object",
+      "required": ["ref"],
+      "properties": {
+        "ref": { "type": "string", "minLength": 1 },
+        "inputs": { "$ref": "#/$defs/ordinaryWith" },
+        "rerun_mode": { "type": "string", "enum": ["reuse", "fresh"] }
+      },
+      "additionalProperties": false
+    },
+    "moduleStep": {
+      "type": "object",
+      "required": ["id", "module"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+        "module": {
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "$ref": "#/$defs/moduleCall" }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "cleanupStep": {
+      "if": { "properties": { "uses": { "pattern": "^process:" } } },
+      "else": { "properties": { "with": { "$ref": "#/$defs/ordinaryWith" } } },
+      "type": "object",
+      "required": ["id", "when", "uses"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+        "when": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "enum": ["success", "failed", "canceled"]
+          }
+        },
+        "uses": { "type": "string", "pattern": "^[^:/\\s]+:[^/\\s]+/[^/\\s]+$" },
+        "prompt": { "type": "string", "minLength": 1 },
+        "prompt_file": { "type": "string", "minLength": 1 },
+        "skills": { "$ref": "#/$defs/skills" },
+        "with": { "$ref": "#/$defs/with" },
+        "filesystem_policy": { "$ref": "#/$defs/filesystemPolicy" },
+        "network": { "$ref": "#/$defs/networkPolicy" }
+      },
+      "additionalProperties": false
+    },
+    "prerequisiteSet": {
+      "type": "object",
+      "properties": {
+        "binaries": {
+          "type": "array",
+          "default": [],
+          "items": { "$ref": "#/$defs/binaryPrerequisite" }
+        },
+        "env": {
+          "type": "array",
+          "default": [],
+          "items": { "$ref": "#/$defs/envPrerequisite" }
+        },
+        "paths": {
+          "type": "array",
+          "default": [],
+          "items": { "$ref": "#/$defs/pathPrerequisite" }
+        },
+        "commands": {
+          "type": "array",
+          "default": [],
+          "items": { "$ref": "#/$defs/commandPrerequisite" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "binaryPrerequisite": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "required": { "type": "boolean", "default": true },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Legacy executable version requirement. Parsed for migration, then rejected at evaluation with legacy_executable_prerequisite_unsupported."
+        },
+        "version_check": {
+          "description": "Legacy executable version probe. Parsed for migration, never executed, and rejected at evaluation with legacy_executable_prerequisite_unsupported.",
+          "type": "object",
+          "required": ["argv"],
+          "properties": {
+            "argv": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "regex": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "envPrerequisite": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "required": { "type": "boolean", "default": true }
+      },
+      "additionalProperties": false
+    },
+    "pathPrerequisite": {
+      "type": "object",
+      "required": ["path"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "enum": ["any", "file", "dir"] },
+        "required": { "type": "boolean", "default": true }
+      },
+      "additionalProperties": false
+    },
+    "commandPrerequisite": {
+      "type": "object",
+      "description": "Legacy executable prerequisite. Parsed for migration, never executed, and rejected at evaluation with legacy_executable_prerequisite_unsupported.",
+      "required": ["argv"],
+      "properties": {
+        "argv": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "timeout_ms": { "type": "integer", "minimum": 0 },
+        "required": { "type": "boolean", "default": true }
+      },
+      "additionalProperties": false
+    },
+    "step": {
+      "oneOf": [
+        { "$ref": "#/$defs/invokeStep" },
+        { "$ref": "#/$defs/controlStep" },
+        { "$ref": "#/$defs/moduleStep" }
+      ]
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}{{ kind_label }} · {{ workflow_ref }}{% endblock %}
+{% block breadcrumb %}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="/inspect/workflows">Workflows</a><span class="sep">›</span>
+  <a class="mono" href="{{ back_url }}">{{ workflow_ref }}</a><span class="sep">›</span>
+  <span>{{ kind_label }}</span>
+</nav>
+{% endblock %}
+{% block content %}
+<h1>{{ kind_label }} · <span class="mono">{{ workflow_ref }}</span></h1>
+<p><a href="{{ other_url }}">view {{ other_label }}</a></p>
+{% match content_text %}
+{% when Some with (t) %}<p class="muted">content type: <code>{{ content_type }}</code></p><pre>{{ t }}</pre>
+{% when None %}<div class="empty-state">{{ kind_label }} is not available for this workflow.</div>
+{% endmatch %}
+{% endblock %}

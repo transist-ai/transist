@@ -1,0 +1,69 @@
+/target/
+**/*.rs.bk
+**/.DS_Store
+.vscode/
+
+/.transist/
+/.transist-dev/
+/.transist-tmp/
+/.tmp_transist_home/
+
+secrets.*
+!**/src/secrets.rs
+/tmp
+/.tmp
+**/__pycache__/
+.cargo/
+
+# Pinned Redocly CLI is installed into scripts/ci/redocly/node_modules from the
+# committed lockfile by install_ci_tools.sh; the lockfile is tracked, the
+# resolved node_modules tree is not.
+scripts/ci/redocly/node_modules/
+
+# Stray run-output directory (typo of redirect target)
+run:/
+
+# Release archive output (CI creates dist/ during release packaging)
+/dist/
+
+# Trust material staged into the repo workspace by CI jobs
+# (actions/download-artifact for the trust directory used by quickstart smoke;
+# these are untracked, so without an ignore they make the candidate-worktree
+# guard report a dirty tree and block release dry-runs).
+/trust-input/
+/trust-output/
+
+# Demo workflow output written into the repo workspace at runtime
+/artifact.txt
+
+# Fixture private keys are generated only in temporary test/admin directories.
+
+# Test run artifacts and local dev files
+demo/trust/
+secrets/
+reports/
+# Retain the Step 5 validation evidence while ignoring runtime reports.
+!/reports/
+/reports/*
+!/reports/companion-step-outputs-step-5-validation.md
+# Generated HTML, LCOV, and text coverage artifacts are local evidence.
+/coverage/
+*.key
+*.pub
+.retry-ok
+cleanup-success.txt
+src/input.txt
+
+# Committed demo-only quickstart trust root and detached signatures are
+# intentional release fixtures (never private key material) and must stay
+# tracked despite the broad *.pub / *.key ignores above.
+!examples/quickstart/trust/quickstart-demo.pub
+!examples/quickstart/quickstart.workflow.yaml.sig
+!plugins/shell.sig
+
+# Scratch/temp directories and files
+draft.md
+note.md
+
+# Cross-compilation build output
+/target-linux/

@@ -1,0 +1,39 @@
+[package]
+name = "transist-adapters"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Built-in process, HTTP, and MCP adapters for Transist"
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+legacy-curl = []
+
+[dependencies]
+anyhow = { workspace = true }
+libc = { workspace = true }
+reqwest = { workspace = true, features = ["blocking"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+yaml_serde = { workspace = true }
+transist-core = { workspace = true }
+transist-plugins = { workspace = true }
+transist-prerequisites = { workspace = true }
+transist-protocol = { workspace = true }
+transist-trust-digest = { workspace = true }
+tempfile = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]
+rcgen = { workspace = true }
+time = { workspace = true }
+transist-storage-local = { workspace = true }

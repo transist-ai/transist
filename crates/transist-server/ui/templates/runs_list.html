@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Runs · Transist Inspect{% endblock %}
+{% block content %}
+<h1>Runs</h1>
+<form class="filters" method="get" action="/inspect/runs">
+  <label>Status
+    <select name="status" id="filter-status">
+      <option value=""{% if filters.status.is_empty() %} selected{% endif %}>(any)</option>
+      {% for opt in status_options %}
+      <option value="{{ opt.value }}"{% if opt.selected %} selected{% endif %}>{{ opt.value }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <details class="filter-workflows-dropdown">
+    <summary>Workflow{% if workflow_options.is_empty() %}{% else %} <span class="muted">({{ workflow_selected_count }}/{{ workflow_options.len() }})</span>{% endif %}</summary>
+    <div class="dropdown-panel">
+    {% if workflow_options.is_empty() %}
+    <span class="muted">(no runs yet)</span>
+    {% else %}
+    {% for opt in workflow_options %}
+    <label class="checkbox-row"><input type="checkbox" name="workflow" value="{{ opt.value }}"{% if opt.selected %} checked{% endif %}><span class="mono">{{ opt.value }}</span></label>
+    {% endfor %}
+    {% endif %}
+    </div>
+  </details>
+  <label>Created after (UTC)
+    <input type="datetime-local" name="created_after" id="filter-created-after" step="1" value="{{ filters.created_after }}">
+  </label>
+  <label>Created before (UTC)
+    <input type="datetime-local" name="created_before" id="filter-created-before" step="1" value="{{ filters.created_before }}">
+  </label>
+  <label>Limit
+    <input type="number" name="limit" id="filter-limit" min="1" max="500" value="{{ filters.limit }}">
+  </label>
+  <div class="filter-actions">
+    <button type="submit">Apply</button>
+    <a href="/inspect/runs">Reset</a>
+  </div>
+</form>
+
+{% if runs.is_empty() %}
+<div class="empty-state">
+  <p>No runs match the current filters.</p>
+  <p class="mono">Hint: start one with <code>transist run …</code>.</p>
+</div>
+{% else %}
+<table>
+  <thead>
+    <tr>
+      <th scope="col" class="col-status">Status</th>
+      <th scope="col">Run ID</th>
+      <th scope="col">Workflow</th>
+      <th scope="col">Updated</th>
+      <th scope="col">Tokens</th>
+      <th scope="col">Duration</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for run in runs %}
+    <tr>
+      <td class="col-status"><span class="status-dot status-{{ run.status }}" title="{{ run.status }}" aria-label="{{ run.status }}"></span></td>
+      <td><a class="mono" href="/inspect/runs/{{ run.run_id }}" title="{{ run.run_id }}">{{ run.run_id }}</a></td>
+      <td class="mono">{{ run.workflow_id }}@{{ run.workflow_version }}</td>
+      <td class="mono">{{ run.updated_at }}</td>
+      <td>{{ run.total_tokens }}</td>
+      <td>{{ run.duration_label }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<nav class="pagination" aria-label="Pagination">
+  <span>showing {{ pagination.shown_lo }}–{{ pagination.shown_hi }} of {{ pagination.total }}</span>
+  {% match prev_url %}{% when Some with (p) %}<a href="{{ p }}">‹ prev</a>{% when None %}<span class="disabled">‹ prev</span>{% endmatch %}
+  {% match next_url %}{% when Some with (n) %}<a href="{{ n }}">next ›</a>{% when None %}<span class="disabled">next ›</span>{% endmatch %}
+</nav>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://transist.dev/schemas/app/handshake.response.v1.schema.json",
+  "title": "APP Handshake Response v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "protocol_version", "plugin", "adapter_kind", "capabilities"],
+  "properties": {
+    "type": { "const": "app.handshake.response.v1" },
+    "protocol_version": { "type": "string", "const": "app.v1" },
+    "plugin": { "$ref": "#/$defs/pluginIdentity" },
+    "adapter_kind": { "type": "string", "enum": ["process", "http", "mcp"] },
+    "capabilities": { "$ref": "#/$defs/capabilities" }
+  },
+  "$defs": {
+    "pluginIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actions", "supports_cancel", "supports_health", "supports_artifact_hints", "supports_evidence_hints"],
+      "properties": {
+        "actions": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "supports_cancel": { "type": "boolean" },
+        "supports_health": { "type": "boolean" },
+        "supports_artifact_hints": { "type": "boolean" },
+        "supports_evidence_hints": { "type": "boolean" }
+      }
+    }
+  }
+}

@@ -1,0 +1,5 @@
+[build]
+incremental = true
+
+[profile.dev]
+debug = "line-tables-only"

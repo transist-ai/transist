@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/transist-ai/transist/security/advisories/new
+    about: Do not open a public issue for security reports. Use GitHub private reporting when enabled, or email security@transist.ai. See SECURITY.md for supported versions and response targets.
+  - name: Design and feature proposals
+    url: https://github.com/transist-ai/transist/issues
+    about: Discuss architecture, propose features, and ask questions. Transist uses a curated upstream model; implementation pull requests are limited to invited trusted contributors and maintainers.

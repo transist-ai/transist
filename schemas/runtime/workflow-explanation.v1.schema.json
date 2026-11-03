@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://transist.dev/schemas/runtime/workflow-explanation.v1.schema.json",
+  "title": "Static authoring explanation (not validation, authorization, readiness, or consent)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "notice", "workflow", "definition_sha256", "assets", "pins", "documents", "scopes", "steps"],
+  "properties": {
+    "schema": {"const": "transist.workflow_explanation.v1"},
+    "notice": {"type": "string"},
+    "workflow": {
+      "type": "object", "additionalProperties": false, "required": ["id", "version"],
+      "properties": {"id": {"type": "string"}, "version": {"type": "string"}}
+    },
+    "definition_sha256": {"$ref": "#/$defs/digest"},
+    "assets": {
+      "type": "object", "additionalProperties": {
+        "type": "object", "additionalProperties": false, "required": ["sha256", "normalized_sha256"],
+        "properties": {"sha256": {"$ref": "#/$defs/digest"}, "normalized_sha256": {"$ref": "#/$defs/digest"}}
+      }
+    },
+    "pins": {
+      "type": "object", "additionalProperties": {
+        "type": "object", "additionalProperties": false, "required": ["status"],
+        "properties": {"status": {"enum": ["resolved", "unresolved_missing", "unresolved_invalid"]}, "sha256": {"$ref": "#/$defs/digest"}},
+        "if": {"properties": {"status": {"const": "resolved"}}},
+        "then": {"required": ["sha256"]}, "else": {"not": {"required": ["sha256"]}}
+      }
+    },
+    "documents": {
+      "type": "object", "additionalProperties": {
+        "type": "object", "additionalProperties": false, "required": ["kind", "max_bytes", "revision_state"],
+        "properties": {
+          "kind": {"enum": ["file", "tree"]}, "max_bytes": {"type": "integer", "minimum": 1},
+          "max_files": {"type": ["integer", "null"], "minimum": 1},
+          "initial_sha256": {"$ref": "#/$defs/digest"}, "revision_state": {"const": "not_created"}
+        }
+      }
+    },
+    "scopes": {"type": "object", "additionalProperties": {"$ref": "#/$defs/scope"}},
+    "steps": {"type": "object", "additionalProperties": {"$ref": "#/$defs/step"}},
+    "comparison": {
+      "type": "object", "additionalProperties": false, "required": ["previous_definition_sha256", "notice", "changes"],
+      "properties": {
+        "previous_definition_sha256": {"$ref": "#/$defs/digest"}, "notice": {"type": "string"},
+        "changes": {"type": "array", "items": {
+          "type": "object", "additionalProperties": false, "required": ["category", "path"],
+          "properties": {
+            "category": {"enum": ["assets", "pins", "actions", "gates", "limits", "authority", "bindings", "structure"]},
+            "path": {"type": "string"}, "before": true, "after": true
+          },
+          "anyOf": [{"required": ["before"]}, {"required": ["after"]}]
+        }}
+      }
+    }
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "strings": {"type": "array", "items": {"type": "string"}},
+    "data": {"description": "Explicitly open authored/action contract JSON data; never an execution result."},
+    "authority": {
+      "type": "object", "additionalProperties": false, "required": ["declared", "bound"],
+      "properties": {"declared": {"$ref": "#/$defs/authorityRequest"}, "bound": {"$ref": "#/$defs/authorityRequest"}}
+    },
+    "authorityRequest": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "resource_resolution", "workspace", "workflow_filesystem", "workflow_network", "step_filesystem", "step_network", "secret_refs"],
+      "properties": {
+        "status": {"const": "requested_not_authorized"}, "resource_resolution": {"const": "declared_not_canonicalized"},
+        "workspace": {"type": ["object", "null"]},
+        "workflow_filesystem": {"type": ["object", "null"]}, "workflow_network": {"type": ["object", "null"]},
+        "step_filesystem": {"type": ["object", "null"]}, "step_network": {"type": ["object", "null"]},
+        "secret_refs": {"$ref": "#/$defs/data"}
+      }
+    },
+    "scope": {
+      "type": "object", "additionalProperties": false,
+      "required": ["source", "inputs", "outputs", "authority_requests", "prerequisites", "step_order", "cleanup_order", "graph"],
+      "properties": {
+        "source": {"type": "string"},
+        "inputs": {"type": "object", "additionalProperties": {
+          "type": "object", "additionalProperties": false, "required": ["type", "required", "state"],
+          "properties": {
+            "type": {"enum": ["string", "number", "boolean", "object", "array"]}, "required": {"type": "boolean"},
+            "state": {"enum": ["provided", "default", "unset_null", "missing", "symbolic"]}, "value": true
+          },
+          "if": {"properties": {"state": {"const": "missing"}}},
+          "then": {"not": {"required": ["value"]}}, "else": {"required": ["value"]}
+        }},
+        "outputs": {"type": "object", "additionalProperties": {"$ref": "#/$defs/data"}},
+        "authority_requests": {"$ref": "#/$defs/authority"}, "prerequisites": {"$ref": "#/$defs/data"},
+        "step_order": {"$ref": "#/$defs/strings"}, "cleanup_order": {"$ref": "#/$defs/strings"},
+        "graph": {"type": ["object", "null"]}
+      }
+    },
+    "step": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "action", "pin", "contract_status", "contract", "behavior", "bindings", "bound_bindings", "variable_assignments", "dependencies", "documents", "gate", "gate_decision", "branch", "loop_limits", "cleanup_when", "module", "prompt", "skills", "authority_requests"],
+      "properties": {
+        "kind": {"enum": ["invoke", "control", "module"]}, "action": {"type": ["string", "null"]}, "pin": {"type": ["string", "null"]},
+        "contract_status": {"enum": ["resolved", "unresolved_missing", "unresolved_invalid", "unresolved_action", "unresolved_adapter", "not_applicable"]},
+        "contract": {
+          "description": "Actual pinned contract; null if unresolved. Action bindings, secret delivery declarations and prerequisites use the existing plugin-manifest data contract.",
+          "type": ["object", "null"], "additionalProperties": false, "required": ["action", "provider_kind", "package_prerequisites"],
+          "properties": {
+            "action": {"$ref": "../plugin/plugin-manifest.schema.json#/$defs/action"},
+            "provider_kind": {"enum": ["local", "external"]}, "package_prerequisites": {"type": "object"}
+          }
+        },
+        "behavior": {"enum": ["opaque_external_action", "kernel_control", "compiled_module"]},
+        "bindings": {"type": "object", "additionalProperties": {"$ref": "#/$defs/data"}},
+        "bound_bindings": {"type": "object", "additionalProperties": {"$ref": "#/$defs/data"}},
+        "variable_assignments": {"type": "object", "additionalProperties": {"$ref": "#/$defs/data"}},
+        "dependencies": {"type": "array", "items": {
+          "type": "object", "additionalProperties": false, "required": ["path", "selector"],
+          "properties": {"path": {"type": "string"}, "selector": {"type": "string"}}
+        }},
+        "documents": {"type": "array", "items": {
+          "type": "object", "additionalProperties": false, "required": ["path", "binding"],
+          "properties": {"path": {"type": "string"}, "binding": {
+            "type": "object", "additionalProperties": false, "required": ["$document", "access"],
+            "properties": {"$document": {"type": "string"}, "access": {"enum": ["read", "write", "update"]}, "reviewed_by": {"type": "string"}}
+          }}
+        }},
+        "gate": {
+          "type": ["object", "null"], "additionalProperties": false,
+          "required": ["gate_id", "review_documents", "decision_state", "revision_state"],
+          "properties": {"gate_id": {"type": "string"}, "review_documents": {"$ref": "#/$defs/strings"}, "decision_state": {"const": "not_created"}, "revision_state": {"const": "not_created"}}
+        },
+        "gate_decision": {
+          "type": ["object", "null"], "additionalProperties": false, "required": ["step", "decision_state", "contract_binding"],
+          "properties": {
+            "step": {"type": "string"}, "decision_state": {"const": "not_created"},
+            "contract_binding": {"type": ["object", "null"], "additionalProperties": false, "required": ["decision_field"], "properties": {"decision_field": {"type": "string"}}}
+          }
+        },
+        "branch": {
+          "type": ["object", "null"], "additionalProperties": false, "required": ["guard", "then", "else"],
+          "properties": {"guard": {"type": "string"}, "then": {"$ref": "#/$defs/stepRefs"}, "else": {"$ref": "#/$defs/stepRefs"}}
+        },
+        "loop_limits": {
+          "type": ["object", "null"], "additionalProperties": false, "required": ["body", "max_iters"],
+          "properties": {
+            "body": {"$ref": "#/$defs/stepRefs"}, "max_iters": {"type": "integer", "minimum": 1},
+            "while": {"type": "string"}, "until": {"type": "string"}, "max_duration": {"type": "string"}
+          }
+        },
+        "cleanup_when": {"type": "array", "items": {"enum": ["success", "canceled", "failed"]}},
+        "module": {"type": ["string", "null"]}, "prompt": {"$ref": "#/$defs/prompt"},
+        "skills": {"$ref": "#/$defs/strings"}, "authority_requests": {"$ref": "#/$defs/authority"}
+      }
+    },
+    "stepRefs": {"type": "array", "items": {
+      "type": "object", "additionalProperties": false, "required": ["ref"], "properties": {"ref": {"type": "string"}}
+    }},
+    "promptBinding": {
+      "type": ["object", "null"], "additionalProperties": false, "required": ["inline_field"],
+      "properties": {"inline_field": {"type": "string"}, "file_field": {"type": "string"}}
+    },
+    "prompt": {"oneOf": [
+      {"type": "null"},
+      {
+        "type": "object", "additionalProperties": false,
+        "required": ["source", "behavior", "binding_state", "sha256", "bound_sha256", "contract_binding"],
+        "properties": {
+          "source": {"const": "inline"}, "behavior": {"const": "opaque_prompt"}, "binding_state": {"enum": ["birth_known", "symbolic"]},
+          "sha256": {"$ref": "#/$defs/digest"}, "bound_sha256": {"$ref": "#/$defs/digest"}, "contract_binding": {"$ref": "#/$defs/promptBinding"}
+        }
+      },
+      {
+        "type": "object", "additionalProperties": false, "required": ["source", "behavior", "path", "sha256", "contract_binding"],
+        "properties": {
+          "source": {"const": "file"}, "behavior": {"const": "opaque_prompt"}, "path": {"type": "string"},
+          "sha256": {"$ref": "#/$defs/digest"}, "contract_binding": {"$ref": "#/$defs/promptBinding"}
+        }
+      }
+    ]}
+  }
+}

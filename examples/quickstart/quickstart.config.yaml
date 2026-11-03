@@ -1,0 +1,27 @@
+version: v1
+runtime:
+  mode: governed
+policy:
+  profile: allowlist
+  remote_secret_delivery:
+    process: false
+    http: false
+    mcp: false
+  grant_sets:
+    quickstart:
+      plugin_grants:
+      - plugin: shell@0.1.0
+        actions: [exec]
+      capabilities:
+      - capability: filesystem
+        resource: workspace://__WORKSPACE__
+        operations: [list, read, create, write, delete, rename]
+      - capability: filesystem
+        resource: run://artifacts
+        operations: [create, write]
+      - capability: filesystem
+        resource: run://evidence
+        operations: [create, write]
+  workflow_grants:
+    - workflow: quickstart.demo@0.1.0
+      use: [quickstart]

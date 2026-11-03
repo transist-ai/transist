@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "prompt": { "type": "string", "minLength": 1 },
+    "prompt_file": { "type": "string", "minLength": 1 },
+    "repo_path": { "type": "string" },
+    "context_files": { "type": "array", "items": { "type": "string" } },
+    "response_file": { "type": "string" },
+    "timeout_ms": { "type": "integer", "minimum": 1 },
+    "timeout_seconds": { "type": "integer", "minimum": 1 },
+    "skills_bundle": { "type": "object" },
+    "skills_rendered": { "type": "string", "minLength": 1 },
+    "model": { "type": "string" },
+    "profile": { "type": "string" },
+    "sandbox": { "type": "string", "enum": ["read-only", "workspace-write", "danger-full-access"] },
+    "skip_git_repo_check": { "type": "boolean" },
+    "extra_args": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,12 @@
+schema: transist.flow.v1
+id: enforcement_untrusted_plugin
+version: v1
+plugins:
+  shell: 0.1.0
+steps:
+  - id: run_demo
+    uses: process:shell/echo
+    with:
+      args:
+        - untrusted
+        - hello

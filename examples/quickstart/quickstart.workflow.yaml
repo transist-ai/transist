@@ -1,0 +1,36 @@
+schema: transist.flow.v1
+id: quickstart.demo
+version: 0.1.0
+plugins:
+  shell: 0.1.0
+inputs:
+  subject:
+    type: string
+    required: true
+filesystem_policy:
+  workspace_access:
+    mode: full
+network:
+  mode: none
+steps:
+  - id: wait_for_cancel_window
+    uses: process:shell/exec
+    with:
+      command: sh
+      args:
+        - -c
+        - |
+          echo "sleeping before report"
+          sleep 6
+  - id: write_report
+    uses: process:shell/exec
+    with:
+      command: sh
+      args:
+        - -c
+        - |
+          mkdir -p "$TRANSIST_EVIDENCE_DIR"
+          printf 'subject=%s\nstatus=completed\n' "$1" > "$TRANSIST_EVIDENCE_DIR/summary.txt"
+          printf 'completed quickstart for %s\n' "$1"
+        - --
+        - "{{inputs.subject}}"

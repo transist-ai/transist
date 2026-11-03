@@ -1,0 +1,25 @@
+{
+  "runtime_version": "0.1.0",
+  "catalog_version": "0.1.0",
+  "contract_version": 1,
+  "numeric_runtime_contracts": {
+    "asset_lock_version": {
+      "minimum": 0,
+      "maximum": 1,
+      "schema": "schemas/runtime/run-state.v1.schema.json",
+      "guards": {
+        "crates/transist-core/src/types.rs": "self.asset_lock_version",
+        "crates/transist-core/src/dispatch.rs": "asset_lock_version"
+      }
+    },
+    "capability_authority_version": {
+      "minimum": 0,
+      "maximum": 1,
+      "schema": "schemas/runtime/run-state.v1.schema.json",
+      "guards": {
+        "crates/transist-core/src/types.rs": "self.capability_authority_version"
+      }
+    }
+  },
+  "approved_release_notes": ["0.1.0"]
+}

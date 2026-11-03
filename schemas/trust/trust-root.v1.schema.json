@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://transist.dev/schemas/trust/trust-root.v1.schema.json",
+  "title": "Transist Trust Root v1",
+  "description": "Public trust-root record imported into a runtime trust store.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "name", "key_id", "public_key"],
+  "properties": {
+    "schema": { "type": "string", "const": "transist.trust_root.v1" },
+    "name": { "type": "string", "minLength": 1 },
+    "key_id": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "public_key": { "type": "string", "minLength": 1 }
+  }
+}

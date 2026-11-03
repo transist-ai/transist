@@ -1,0 +1,467 @@
+{% extends "base.html" %}
+{% block title %}Run {{ headline.run_id }} · Transist Inspect{% endblock %}
+{% block head %}
+{% if headline.auto_refresh_eligible %}<meta name="transist-auto-refresh" content="1">{% endif %}
+{% endblock %}
+{% block breadcrumb %}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="/inspect/runs">Runs</a>
+  <span class="sep">›</span>
+  {% match headline.parent_link %}{% when Some with (p) %}<a href="{{ p.href }}" class="mono">{{ p.label }}</a><span class="sep">›</span>{% when None %}{% endmatch %}
+  <span class="mono">{{ headline.run_id }}</span>
+</nav>
+{% endblock %}
+{% block content %}
+{% match status_banner %}{% when Some with (b) %}
+<aside class="status-banner status-banner-{{ b.status }}" role="status" aria-live="polite">
+  <div class="status-banner-headline">
+    <strong>{{ b.headline }}</strong>
+  </div>
+  {% match b.detail %}{% when Some with (d) %}<p class="status-banner-detail">{{ d }}</p>{% when None %}{% endmatch %}
+  {% if !b.blocked_gate_ids.is_empty() %}
+  <p class="status-banner-detail">Blocked gates:
+    {% for g in b.blocked_gate_ids %}<code>{{ g }}</code>{% if !loop.last %}, {% endif %}{% endfor %}
+  </p>
+  {% endif %}
+  {% if !b.preflight_blockers.is_empty() %}
+  <div class="status-banner-preflight">
+    <p class="status-banner-detail"><strong>Preflight blockers:</strong></p>
+    <ul class="status-banner-preflight-list">
+      {% for c in b.preflight_blockers %}
+      <li>
+        <span class="status-banner-preflight-kind mono">{{ c.kind }}</span>
+        <span class="status-banner-preflight-message">{{ c.message }}</span>
+        {% match c.plugin_id %}{% when Some with (p) %} <span class="status-banner-preflight-meta">(plugin <code>{{ p }}</code>{% match c.action %}{% when Some with (a) %}, action <code>{{ a }}</code>{% when None %}{% endmatch %})</span>{% when None %}{% endmatch %}
+        {% if !c.step_ids.is_empty() %}
+        <span class="status-banner-preflight-meta">— steps:
+          {% for sid in c.step_ids %}<code>{{ sid }}</code>{% if !loop.last %}, {% endif %}{% endfor %}
+        </span>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+  <p class="status-banner-actions">
+    {% match b.primary_link %}{% when Some with (l) %}
+    <a href="{{ l.href }}">{{ b.primary_link_label.unwrap_or("View step") }} <span class="mono">{{ l.label }}</span> →</a>
+    {% when None %}{% endmatch %}
+    {% match b.stderr_link %}{% when Some with (l) %}
+    <a href="{{ l.href }}">View <span class="mono">{{ l.label }}</span> →</a>
+    {% when None %}{% endmatch %}
+  </p>
+  {% match b.cli_hint %}{% when Some with (h) %}
+  <p class="status-banner-cli">CLI: <code>{{ h }}</code></p>
+  {% when None %}{% endmatch %}
+</aside>
+{% when None %}{% endmatch %}
+
+<div class="headline-strip">
+  <h1>
+    <span class="status-badge status-{{ headline.status }}">{{ headline.status }}</span>
+    Run <span class="mono">{{ headline.run_id }}</span>
+    <button type="button" class="copy-id" data-copy="{{ headline.run_id }}" aria-label="copy id">copy</button>
+  </h1>
+  <dl>
+    <div><dt>Workflow</dt><dd><a class="mono" href="{{ headline.workflow_link.href }}">{{ headline.workflow_link.label }}</a></dd></div>
+    <div><dt>Created</dt><dd class="mono">{{ headline.created_at }}</dd></div>
+    <div><dt>Updated</dt><dd class="mono">{{ headline.updated_at }}</dd></div>
+    {% match headline.started_at %}{% when Some with (s) %}<div><dt>Started</dt><dd class="mono">{{ s }}</dd></div>{% when None %}{% endmatch %}
+    {% match headline.finished_at %}{% when Some with (s) %}<div><dt>Finished</dt><dd class="mono">{{ s }}</dd></div>{% when None %}{% endmatch %}
+    {% match headline.duration_label %}{% when Some with (s) %}<div><dt>Wall clock</dt><dd>{{ s }}</dd></div>{% when None %}{% endmatch %}
+    <div><dt>Root</dt><dd><a class="mono" href="{{ headline.root_link.href }}">{{ headline.root_link.label }}</a></dd></div>
+    {% match headline.parent_link %}{% when Some with (p) %}<div><dt>Parent</dt><dd><a class="mono" href="{{ p.href }}">{{ p.label }}</a></dd></div>{% when None %}{% endmatch %}
+    <div><dt>Children</dt><dd>{{ headline.children_count }}</dd></div>
+  </dl>
+  {% if headline.auto_refresh_eligible %}
+  <p style="margin-top:8px;font-size:12px;">
+    <label><input type="checkbox" id="auto-refresh-toggle"> auto-refresh every 5s</label>
+  </p>
+  {% endif %}
+</div>
+
+<h2>Operator summary</h2>
+<dl class="kv-grid">
+  <dt>Action required</dt><dd>{% if operator_summary.action_required %}yes{% else %}no{% endif %}</dd>
+  <dt>Run status</dt><dd><span class="status-badge status-{{ headline.status }}">{{ headline.status }}</span></dd>
+  <dt>Current step</dt><dd class="mono">{{ operator_summary.current_step_id.as_deref().unwrap_or("—") }}</dd>
+  <dt>Blocked gates</dt><dd>{{ operator_summary.blocked_gate_count }}</dd>
+  {% match operator_summary.expected_user_action %}{% when Some with (s) %}<dt>Expected from user</dt><dd>{{ s }}</dd>{% when None %}{% endmatch %}
+  <dt>Recommended next action</dt><dd>{{ operator_summary.recommended_next_action }}</dd>
+</dl>
+
+<nav class="tabs" aria-label="Run tabs">
+  {% for t in tabs %}
+  <a href="{{ t.href }}"{% if t.active %} class="active" aria-current="page"{% endif %}>{{ t.label }}</a>
+  {% endfor %}
+</nav>
+
+{% if tab == "overview" %}
+{% match overview %}{% when Some with (o) %}
+<h2>Metrics</h2>
+{% match o.metrics %}{% when Some with (m) %}
+<dl class="kv-grid">
+  <dt>Step executions</dt><dd>{{ m.step_executions }}</dd>
+  <dt>Artifacts</dt><dd>{{ m.artifacts }}</dd>
+  <dt>Evidence files</dt><dd>{{ m.evidence_files }}</dd>
+  <dt>Tokens (in/out/total)</dt><dd>{{ m.input_tokens }} / {{ m.output_tokens }} / {{ m.total_tokens }}</dd>
+  <dt>Duration</dt><dd>{{ m.duration_label }}</dd>
+</dl>
+{% when None %}<p class="muted">No metrics available yet.</p>{% endmatch %}
+
+<h2>Inputs</h2>
+<details id="run-inputs"><summary>Show full JSON</summary><pre>{{ o.workflow_inputs_json }}</pre></details>
+
+<h2>Step counts</h2>
+<details id="run-step-counts"><summary>Show full JSON</summary><pre>{{ o.step_counts_json }}</pre></details>
+
+<h2>Trust &amp; Provenance</h2>
+{% if o.trust.trusted_execution_mode %}
+<dl class="kv-grid">
+  <dt>Trusted execution</dt><dd>enabled</dd>
+  <dt>Workflow</dt><dd class="mono">{{ o.trust.workflow_label.as_deref().unwrap_or("—") }}</dd>
+  <dt>Workflow digest</dt><dd class="mono">{{ o.trust.workflow_digest.as_deref().unwrap_or("—") }}</dd>
+  <dt>Workflow signature</dt><dd>{{ o.trust.workflow_signature_status.as_deref().unwrap_or("—") }}</dd>
+  <dt>Workflow signer</dt><dd class="mono">{{ o.trust.workflow_signer_key_id.as_deref().unwrap_or("—") }}</dd>
+  <dt>Trust decision</dt><dd>{{ o.trust.decision_outcome.as_deref().unwrap_or("—") }}</dd>
+  <dt>Decision reason</dt><dd class="mono">{{ o.trust.decision_reason.as_deref().unwrap_or("—") }}</dd>
+  <dt>Policy mode</dt><dd class="mono">{{ o.trust.policy_mode.as_deref().unwrap_or("—") }}</dd>
+  <dt>Policy reason</dt><dd class="mono">{{ o.trust.policy_reason_code.as_deref().unwrap_or("—") }}</dd>
+</dl>
+{% if o.trust.plugins.is_empty() %}
+<p class="muted">No plugin trust metadata recorded.</p>
+{% else %}
+<table>
+  <thead><tr><th>Plugin</th><th>Version</th><th>Digest</th><th>Signature</th><th>Signer</th></tr></thead>
+  <tbody>
+  {% for p in o.trust.plugins %}
+    <tr>
+      <td class="mono">{{ p.id }}</td>
+      <td class="mono">{{ p.version }}</td>
+      <td class="mono">{{ p.digest }}</td>
+      <td>{{ p.signature_status }}</td>
+      <td class="mono">{{ p.signer_key_id.as_deref().unwrap_or("—") }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% else %}
+<p class="muted">Trusted execution was not enabled for this run.</p>
+{% endif %}
+
+<h2>Data Locality</h2>
+{% if o.locality.steps.is_empty() %}
+<p class="muted">No provider/model locality rows were recorded for this run.</p>
+{% else %}
+<table>
+  <thead><tr><th>Step</th><th>Provider</th><th>Model</th><th>Provider kind</th></tr></thead>
+  <tbody>
+  {% for s in o.locality.steps %}
+    <tr>
+      <td class="mono">{{ s.step_id }}</td>
+      <td>{{ s.provider }}</td>
+      <td class="mono">{{ s.model }}</td>
+      <td>{{ s.provider_kind }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<h3>External Transfers</h3>
+{% if o.locality.external_transfers.is_empty() %}
+<p class="muted"><code>external_transfers: []</code></p>
+{% else %}
+<table>
+  <thead><tr><th>Step</th><th>Time</th><th>Destination</th><th>Provider</th><th>Kind</th><th>Policy mode</th></tr></thead>
+  <tbody>
+  {% for t in o.locality.external_transfers %}
+    <tr>
+      <td class="mono">{{ t.step_id }}</td>
+      <td class="mono">{{ t.timestamp }}</td>
+      <td>{{ t.destination }}</td>
+      <td>{{ t.provider }}</td>
+      <td>{{ t.provider_kind }}</td>
+      <td class="mono">{{ t.policy_mode }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<h2>Evidence Export</h2>
+<dl class="kv-grid">
+  <dt>Format</dt><dd>{{ o.evidence_export.format }}</dd>
+  <dt>Command</dt><dd><code>{{ o.evidence_export.command }}</code></dd>
+  {% match o.evidence_export.location %}{% when Some with (loc) %}
+  <dt>Location</dt><dd><code>{{ loc }}</code></dd>
+  {% when None %}
+  <dt>Location</dt><dd class="muted">no evidence export generated yet</dd>
+  {% endmatch %}
+  <dt>Generated at</dt><dd class="mono">{{ o.evidence_export.generated_at.as_deref().unwrap_or("—") }}</dd>
+</dl>
+
+{% match o.recovery_state %}{% when Some with (s) %}<h2>Recovery state</h2><p class="mono">{{ s }}</p>{% when None %}{% endmatch %}
+{% match o.cleanup_state %}{% when Some with (s) %}<h2>Cleanup</h2><p class="mono">{{ s }}</p>{% when None %}{% endmatch %}
+{% when None %}<p class="muted">Overview not available.</p>{% endmatch %}
+
+{% else if tab == "steps" %}
+{% if steps.is_empty() %}
+<div class="empty-state">No steps recorded yet.</div>
+{% else %}
+<table>
+  <thead><tr><th>Step</th><th>Kind</th><th>Status</th><th>Started</th><th>Finished</th><th>Art</th><th>Ev</th><th>Subflow</th></tr></thead>
+  <tbody>
+  {% for s in steps %}
+    <tr>
+      <td><a class="mono" href="/inspect/runs/{{ headline.run_id }}/steps/{{ s.step_id }}">{{ s.step_id }}</a></td>
+      <td>{{ s.step_kind }}</td>
+      <td><span class="status-badge status-{{ s.status }}">{{ s.status }}</span></td>
+      <td class="mono">{{ s.started_at.as_deref().unwrap_or("—") }}</td>
+      <td class="mono">{{ s.finished_at.as_deref().unwrap_or("—") }}</td>
+      <td>{{ s.artifact_count }}</td>
+      <td>{{ s.evidence_count }}</td>
+      <td>{% match s.child_run_id %}{% when Some with (c) %}<a class="mono" href="/inspect/runs/{{ c }}">{{ c }}</a>{% when None %}—{% endmatch %}</td>
+    </tr>
+    <tr class="step-output-preview">
+      <td colspan="8">
+        <details class="step-outputs">
+          <summary>Latest output preview for <span class="mono">{{ s.step_id }}</span></summary>
+          <p>Output execution: {% match s.output_execution %}{% when Some with (ordinal) %}{{ ordinal }}{% when None %}none{% endmatch %}
+            · Status: <span class="status-badge status-{{ s.output_status }}">{{ s.output_status }}</span>
+            · Source: <code>{{ s.output_source }}</code></p>
+          {% match s.output_preview.text %}{% when Some with (text) %}
+          <pre class="output-text">{{ text }}</pre>
+          {% when None %}<p class="muted">No persisted result for this execution.</p>{% endmatch %}
+          {% if s.output_preview.truncated %}<p class="muted">Preview truncated</p>{% endif %}
+          <a href="{{ s.output_url }}">View outputs</a>
+        </details>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% else if tab == "events" %}
+<form class="filters" method="get" action="/inspect/runs/{{ headline.run_id }}">
+  <input type="hidden" name="tab" value="events">
+  <label>Order
+    <select name="order" id="filter-order">
+      <option value="desc">desc</option>
+      <option value="asc">asc</option>
+    </select>
+  </label>
+  <label>Limit
+    <input type="number" name="limit" id="filter-events-limit" min="1" max="500">
+  </label>
+  <label>Before (event id)<input type="text" name="before" id="filter-before"></label>
+  <label>After (event id)<input type="text" name="after" id="filter-after"></label>
+  <button type="submit">Apply</button>
+</form>
+{% if events.is_empty() %}
+<div class="empty-state">No events recorded yet.</div>
+{% else %}
+<table>
+  <thead><tr><th>ID</th><th>Time</th><th>Type</th><th>Step</th><th>Summary</th></tr></thead>
+  <tbody>
+  {% for e in events %}
+    <tr>
+      <td class="mono">{{ e.event_id }}</td>
+      <td class="mono">{{ e.timestamp }}</td>
+      <td>{{ e.event_type }}</td>
+      <td class="mono">{{ e.step_id.as_deref().unwrap_or("—") }}</td>
+      <td class="mono">{{ e.summary_short }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% else if tab == "gates" %}
+{% if gates.is_empty() %}
+<div class="empty-state">No gate decisions recorded on this run.</div>
+{% if operator_summary.action_required %}
+<p class="muted">This run is waiting on a manual gate in a nested actionable run. {{ operator_summary.recommended_next_action }}</p>
+{% endif %}
+{% else %}
+<table>
+  <thead><tr><th>Gate</th><th>Status</th><th>Step</th><th>Created</th><th>Expected from user</th><th>Decision options</th><th>Decision</th><th>Actor</th><th>Reason</th><th>At</th></tr></thead>
+  <tbody>
+  {% for g in gates %}
+    <tr>
+      <td class="mono">{{ g.gate_id }}</td>
+      <td><span class="status-badge status-{{ g.status }}">{{ g.status }}</span></td>
+      <td class="mono">{{ g.step_id }}</td>
+      <td class="mono">{{ g.created_at.as_deref().unwrap_or("—") }}</td>
+      <td>{{ g.guidance.expected_response.as_deref().or(g.guidance.prompt.as_deref()).or(g.guidance.summary.as_deref()).unwrap_or("—") }}</td>
+      <td>{% if g.guidance.options.is_empty() %}—{% else %}{% for option in g.guidance.options %}<code>{{ option }}</code>{% if !loop.last %}, {% endif %}{% endfor %}{% endif %}</td>
+      <td>{{ g.decision_state.as_deref().unwrap_or("—") }}</td>
+      <td class="mono">{{ g.decision_actor.as_deref().unwrap_or("—") }}</td>
+      <td>{{ g.decision_reason.as_deref().unwrap_or("—") }}</td>
+      <td class="mono">{{ g.decision_at.as_deref().unwrap_or("—") }}</td>
+    </tr>
+    {% if !g.review_documents.is_empty() %}
+    <tr><td colspan="10"><strong>Reviewed documents ({{ g.review_documents.len() }}):</strong>
+      <ul>{% for d in g.review_documents %}<li><strong>{{ d.revision.document }}</strong> — {{ d.revision.size_bytes }} bytes, {{ d.revision.file_count }} files;
+        revision <code>{{ d.revision.revision_id }}</code>, SHA-256 <code>{{ d.revision.blob.sha256 }}</code>;
+        <a href="{{ d.links.metadata }}">revision / tree members</a> · <a href="{{ d.links.content }}">content</a></li>{% endfor %}</ul>
+      Document review does not approve arbitrary workspace mutations.
+    </td></tr>
+    {% endif %}
+    {% if g.guidance.prompt.is_some() || g.guidance.reason.is_some() %}
+    <tr>
+      <td colspan="10">
+        {% match g.guidance.prompt %}{% when Some with (p) %}<strong>Prompt:</strong> {{ p }}{% when None %}{% endmatch %}
+        {% if g.guidance.prompt.is_some() && g.guidance.reason.is_some() %}<br>{% endif %}
+        {% match g.guidance.reason %}{% when Some with (r) %}<strong>Reason:</strong> {{ r }}{% when None %}{% endmatch %}
+      </td>
+    </tr>
+    {% endif %}
+  {% endfor %}
+  </tbody>
+</table>
+<p class="muted" style="font-size:12px;color:var(--muted);">CLI hint: <code>transist approve {{ headline.run_id }} [gate-id]</code></p>
+{% endif %}
+
+{% else if tab == "failures" %}
+{% if failures.is_empty() %}
+<div class="empty-state">No classified failures recorded on this run.</div>
+{% else %}
+<table>
+  <thead><tr><th>Failure</th><th>Step</th><th>Exec</th><th>Class</th><th>Error</th><th>Adapter</th><th>Tool</th><th>Retryable</th><th>Safe</th><th>Manual</th><th>Mutation</th><th>Message</th><th>Last seen</th></tr></thead>
+  <tbody>
+  {% for f in failures %}
+    <tr>
+      <td class="mono">{{ f.failure_id }}</td>
+      <td><a class="mono" href="/inspect/runs/{{ headline.run_id }}/steps/{{ f.step_id }}">{{ f.step_id }}</a></td>
+      <td>{{ f.execution }}</td>
+      <td><code>{{ f.failure_class }}</code></td>
+      <td><code>{{ f.error_code }}</code></td>
+      <td><code>{{ f.adapter_kind }}</code> / <code>{{ f.adapter_name }}</code></td>
+      <td><code>{{ f.tool_name }}</code></td>
+      <td>{% if f.retryable %}yes{% else %}no{% endif %}</td>
+      <td>{% if f.safe_to_retry %}yes{% else %}no{% endif %}</td>
+      <td>{% if f.requires_manual_attention %}yes{% else %}no{% endif %}</td>
+      <td>{% if f.state_mutation_detected %}yes{% else %}no{% endif %}</td>
+      <td>{{ f.message_redacted }}</td>
+      <td class="mono">{{ f.last_seen_at }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% else if tab == "artifacts" %}
+<form method="get" class="filters-inline" aria-label="Iteration filter">
+  <input type="hidden" name="tab" value="artifacts">
+  <label for="artifacts-iteration-select">Iteration</label>
+  <select id="artifacts-iteration-select" name="iteration">
+    <option value="all" {% if iteration_scope == "all" %}selected{% endif %}>all iterations</option>
+    <option value="last" {% if iteration_scope == "last" %}selected{% endif %}>last iteration</option>
+    {% for iter in available_iterations %}
+    <option value="{{ iter }}" {% match selected_iteration %}{% when Some with (selected) %}{% if *selected == *iter %}selected{% endif %}{% when None %}{% endmatch %}>iteration {{ iter }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit">Apply</button>
+</form>
+{% if artifacts.is_empty() %}<div class="empty-state">No artifacts.</div>{% else %}
+<table>
+  <thead><tr><th>Name</th><th>Size</th><th>Type</th><th>Step</th><th>Exec</th><th></th></tr></thead>
+  <tbody>
+  {% for a in artifacts %}
+    <tr>
+      <td class="mono">{{ a.name }}</td>
+      <td>{{ a.size }}</td>
+      <td>{{ a.media_type }}</td>
+      <td class="mono">{{ a.producing_step_id }}</td>
+      <td>{{ a.execution }}</td>
+      <td><a href="{{ a.detail_url }}">view</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% else if tab == "evidence" %}
+<form method="get" class="filters-inline" aria-label="Iteration filter">
+  <input type="hidden" name="tab" value="evidence">
+  <label for="evidence-iteration-select">Iteration</label>
+  <select id="evidence-iteration-select" name="iteration">
+    <option value="all" {% if iteration_scope == "all" %}selected{% endif %}>all iterations</option>
+    <option value="last" {% if iteration_scope == "last" %}selected{% endif %}>last iteration</option>
+    {% for iter in available_iterations %}
+    <option value="{{ iter }}" {% match selected_iteration %}{% when Some with (selected) %}{% if *selected == *iter %}selected{% endif %}{% when None %}{% endmatch %}>iteration {{ iter }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit">Apply</button>
+</form>
+{% if evidence.is_empty() %}<div class="empty-state">No evidence.</div>{% else %}
+<table>
+  <thead><tr><th>Name</th><th>Size</th><th>Type</th><th>Step</th><th>Exec</th><th></th></tr></thead>
+  <tbody>
+  {% for a in evidence %}
+    <tr>
+      <td class="mono">{{ a.name }}</td>
+      <td>{{ a.size }}</td>
+      <td>{{ a.media_type }}</td>
+      <td class="mono">{{ a.producing_step_id }}</td>
+      <td>{{ a.execution }}</td>
+      <td><a href="{{ a.detail_url }}">view</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% else if tab == "workflow-files" %}
+<form method="get" class="filters-inline" aria-label="Iteration filter">
+  <input type="hidden" name="tab" value="workflow-files">
+  <label for="workflow-files-iteration-select">Iteration</label>
+  <select id="workflow-files-iteration-select" name="iteration">
+    <option value="all" {% if iteration_scope == "all" %}selected{% endif %}>all iterations</option>
+    <option value="last" {% if iteration_scope == "last" %}selected{% endif %}>last iteration</option>
+    {% for iter in available_iterations %}
+    <option value="{{ iter }}" {% match selected_iteration %}{% when Some with (selected) %}{% if *selected == *iter %}selected{% endif %}{% when None %}{% endmatch %}>iteration {{ iter }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit">Apply</button>
+</form>
+{% if workflow_files.is_empty() %}<div class="empty-state">No workflow files.</div>{% else %}
+<table>
+  <thead><tr><th>Field</th><th>Name</th><th>Path</th><th>Size</th><th>Step</th><th>Exec</th><th></th></tr></thead>
+  <tbody>
+  {% for w in workflow_files %}
+    <tr>
+      <td>{{ w.field_name }}</td>
+      <td class="mono">{{ w.name }}</td>
+      <td class="mono">{{ w.path }}</td>
+      <td>{{ w.size }}</td>
+      <td class="mono">{{ w.producing_step_id }}</td>
+      <td>{{ w.execution }}</td>
+      <td>{% match w.detail_url %}{% when Some with (url) %}<a href="{{ url }}">view</a>{% when None %}unavailable{% endmatch %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% else if tab == "children" %}
+{% if children.is_empty() %}<div class="empty-state">No nested runs.</div>{% else %}
+<ul class="tree">
+  {% for c in children %}
+  <li style="margin-left: {{ c.depth }}em;">
+    <span class="status-badge status-{{ c.status }}">{{ c.status }}</span>
+    <a class="mono" href="/inspect/runs/{{ c.run_id }}">{{ c.run_id }}</a>
+    <span class="mono">{{ c.workflow_label }}</span>
+    art:{{ c.artifact_count }} ev:{{ c.evidence_count }}
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+{% else %}
+<div class="error-box">Unknown tab: <code>{{ tab }}</code></div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,224 @@
+{
+  "kind": "transist.inspection.snapshot",
+  "schema_version": 1,
+  "source_id": "src_example",
+  "workspace_id": "example/workflows",
+  "operator_label": "laptop-a",
+  "produced_at_unix_ms": 5000,
+  "tree_version": 7,
+  "root_run_id": "root",
+  "tree_fingerprint": "0000000000000000000000000000000000000000000000000000000000000000",
+  "runs": [
+    {
+      "run_id": "root",
+      "run_summary": {
+        "run_id": "root",
+        "workflow_id": "root_wf",
+        "workflow_version": "v1",
+        "status": "success",
+        "created_at_ms": 100,
+        "updated_at_ms": 360,
+        "started_at_ms": 100,
+        "finished_at_ms": 360,
+        "current_step_id": null,
+        "has_blocked_gates": false,
+        "has_artifacts": false,
+        "has_events": true,
+        "artifact_count": 0,
+        "evidence_count": 0,
+        "root_run_id": "root",
+        "parent_run_id": null
+      },
+      "run_detail_summary": {
+        "summary": {
+          "run_id": "root"
+        },
+        "input_keys": [],
+        "input_types": {},
+        "input_presence": {},
+        "input_sources": {},
+        "blocked_gate_ids": [],
+        "step_count": 1
+      },
+      "step_metrics": [
+        {
+          "step_id": "subflow",
+          "execution_count": 1,
+          "status_counts": { "success": 1 },
+          "active_execution_duration_ms": 260,
+          "had_stderr": false,
+          "had_error": false
+        }
+      ],
+      "gates": [
+        {
+          "gate_id": "plan-review",
+          "status": "blocked",
+          "step_id": "plugin_step",
+          "created_at_ms": 320,
+          "decision": {
+            "state": "request_changes",
+            "reason": "Need a tighter plan.",
+            "decided_at_ms": 330
+          },
+          "decision_history": [
+            {
+              "state": "request_changes",
+              "reason": "Need a tighter plan.",
+              "decided_at_ms": 330
+            }
+          ],
+          "request_keys": ["prompt", "ticket"],
+          "request_summary": {
+            "prompt_excerpt": "Refine the migration plan.",
+            "ticket": "TICKET-123"
+          }
+        }
+      ],
+      "events": [
+        {
+          "event_seq": 1,
+          "timestamp_unix_ms": 1000,
+          "event_type": "run_created",
+          "summary": { "kind": "run_created" }
+        },
+        {
+          "event_seq": 2,
+          "timestamp_unix_ms": 1100,
+          "event_type": "step_finished",
+          "step_id": "subflow",
+          "summary": { "kind": "step_finished" }
+        }
+      ],
+      "artifacts": [],
+      "evidence": [],
+      "failures": [],
+      "usage_facts": [],
+      "run_fingerprint": "1111111111111111111111111111111111111111111111111111111111111111",
+      "last_event_seq": 2
+    },
+    {
+      "run_id": "root__child",
+      "run_summary": {
+        "run_id": "root__child",
+        "workflow_id": "child_wf",
+        "workflow_version": "v1",
+        "status": "success",
+        "created_at_ms": 200,
+        "updated_at_ms": 350,
+        "started_at_ms": 200,
+        "finished_at_ms": 350,
+        "current_step_id": null,
+        "has_blocked_gates": false,
+        "has_artifacts": false,
+        "has_events": true,
+        "artifact_count": 0,
+        "evidence_count": 0,
+        "root_run_id": "root",
+        "parent_run_id": "root"
+      },
+      "run_detail_summary": {
+        "summary": {
+          "run_id": "root__child"
+        },
+        "input_keys": ["ticket"],
+        "input_types": { "ticket": "string" },
+        "input_presence": { "ticket": true },
+        "input_sources": { "ticket": "unknown" },
+        "blocked_gate_ids": [],
+        "step_count": 1
+      },
+      "step_metrics": [
+        {
+          "step_id": "plugin_step",
+          "execution_count": 2,
+          "status_counts": { "failed": 1, "success": 1 },
+          "active_execution_duration_ms": 300,
+          "had_stderr": true,
+          "had_error": true
+        }
+      ],
+      "gates": [],
+      "events": [
+        {
+          "event_seq": 1,
+          "timestamp_unix_ms": 1200,
+          "event_type": "step_finished",
+          "step_id": "plugin_step",
+          "summary": { "kind": "step_finished" }
+        }
+      ],
+      "artifacts": [],
+      "evidence": [],
+      "failures": [
+        {
+          "failure_id": "failure_root_child_plugin_step_1",
+          "run_id": "root__child",
+          "step_id": "plugin_step",
+          "execution_attempt": 1,
+          "last_stable_step_id": null,
+          "failure_class": "tool_error",
+          "error_code": "tool_execution_error",
+          "message_redacted": "exit code 1",
+          "adapter_kind": "process",
+          "adapter_name": "ai.planner",
+          "tool_name": "complete",
+          "retryable": true,
+          "safe_to_retry": false,
+          "requires_manual_attention": false,
+          "state_mutation_detected": true,
+          "first_seen_at_unix_ms": 350,
+          "last_seen_at_unix_ms": 350,
+          "occurrence_count": 1
+        }
+      ],
+      "usage_facts": [
+        {
+          "run_id": "root__child",
+          "step_id": "plugin_step",
+          "plugin_id": "ai.planner",
+          "action": "complete",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 11,
+          "output_tokens": 19,
+          "total_tokens": 30,
+          "usage_reports": 1,
+          "observed_at_unix_ms": 350
+        }
+      ],
+      "run_fingerprint": "2222222222222222222222222222222222222222222222222222222222222222",
+      "last_event_seq": 1
+    }
+  ],
+  "extensions": {},
+  "provider_facts": {},
+  "policy_facts": {},
+  "trusted_execution_mode": true,
+  "workflow_digest": "deadbeef",
+  "workflow_signature_status": "verified",
+  "workflow_signer_key_id": "admin-key-1",
+  "plugin_trust": [
+    {
+      "id": "ai.planner",
+      "version": "v1",
+      "digest": "plugin-digest-1",
+      "signature_verified": true,
+      "signer_key_id": "admin-key-1",
+      "trust_decision": "verified"
+    }
+  ],
+  "trust_decision": "allowed",
+  "external_transfer_summary": {
+    "count": 0
+  },
+  "approver_identity": [
+    {
+      "gate_id": "plan-review",
+      "decision": "approved",
+      "actor": "reviewer@example.com",
+      "reason": "Need a tighter plan.",
+      "decided_at_ms": 330
+    }
+  ]
+}

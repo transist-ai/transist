@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Transist Inspect{% endblock %}</title>
+  <link rel="stylesheet" href="/inspect/static/inspect.css">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <header class="site-header" role="banner">
+    <h1><a href="/inspect/runs">Transist Inspect</a></h1>
+    <nav class="site-nav" role="navigation" aria-label="Primary">
+      <a href="/inspect/runs">Runs</a>
+      <a href="/inspect/workflows">Workflows</a>
+    </nav>
+  </header>
+  <main role="main">
+    {% block breadcrumb %}{% endblock %}
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="site-footer" role="contentinfo">
+    transist-server (read-only) · <a href="/health">health</a> · <a href="/metrics">metrics</a>
+  </footer>
+  <script src="/inspect/static/inspect.js" defer></script>
+</body>
+</html>

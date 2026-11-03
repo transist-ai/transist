@@ -1,0 +1,64 @@
+name: PR Guard
+
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: pr-guard-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  guard:
+    name: Guard trusted-contributor PRs
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Close non-collaborator pull requests
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const allowed = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+            const association = context.payload.pull_request.author_association;
+            const number = context.payload.pull_request.number;
+            const htmlUrl = context.payload.pull_request.html_url;
+            if (allowed.has(association)) {
+              console.log(`author association ${association} is allowed; leaving PR #${number} open`);
+              return;
+            }
+            console.log(`author association ${association} is not a collaborator; closing PR #${number}`);
+            const repo = context.repo;
+            const body = [
+              `Hi @${context.payload.pull_request.user.login},`,
+              ``,
+              `Thanks for your interest in Transist. This repository uses a **curated upstream development model**:`,
+              `implementation pull requests to the official repository are limited to invited trusted contributors and maintainers, so this PR is being closed automatically.`,
+              ``,
+              `Please read [CONTRIBUTING.md](https://github.com/${repo.owner}/${repo.repo}/blob/main/CONTRIBUTING.md) before proposing a change, and route your idea through one of these channels:`,
+              ``,
+              `- **[Issues](https://github.com/${repo.owner}/${repo.repo}/issues)** — bug reports, reproducible test cases, feature proposals, design discussion and architectural proposals`,
+              `- **[Security reports](https://github.com/${repo.owner}/${repo.repo}/security/advisories/new)** — do not open a public issue for vulnerabilities (see [SECURITY.md](https://github.com/${repo.owner}/${repo.repo}/blob/main/SECURITY.md))`,
+              ``,
+              `You remain free to fork and modify Transist under the terms of its [license](https://github.com/${repo.owner}/${repo.repo}/blob/main/LICENSE). Trusted contributors may be granted collaborator access over time.`,
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: repo.owner,
+              repo: repo.repo,
+              issue_number: number,
+              body: body,
+            });
+            await github.rest.pulls.update({
+              owner: repo.owner,
+              repo: repo.repo,
+              pull_number: number,
+              state: 'closed',
+            });
+            console.log(`closed ${htmlUrl}`);

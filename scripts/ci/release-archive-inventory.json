@@ -1,0 +1,128 @@
+{
+  "version": 1,
+  "description": "Canonical release archive inventory. released_archives lists every supported target triple and the deterministic archive name each release publishes. archive_contents declares the exact members of the minimal evaluation bundle: required_files and linux_required_files are explicit root/partial files, retained_trees are directories copied recursively with every README.md file excluded, tracked_trees are complete Git-backed trees copied without Markdown filtering, and forbidden_paths lists paths that must never appear in an archive. supported-platforms.md, check_release_archive.sh, and release_manifest.sh all derive their inventory from this single source; drift between them fails CI via scripts/ci/check_release_inventory.sh.",
+  "released_archives": [
+    {
+      "target_triple": "x86_64-unknown-linux-gnu",
+      "archive_file": "transist-<tag>-x86_64-unknown-linux-gnu.tar.gz",
+      "os": "linux",
+      "architecture": "x86_64",
+      "abi": "gnu",
+      "includes_sandbox_launcher": true
+    },
+    {
+      "target_triple": "x86_64-unknown-linux-musl",
+      "archive_file": "transist-<tag>-x86_64-unknown-linux-musl.tar.gz",
+      "os": "linux",
+      "architecture": "x86_64",
+      "abi": "musl",
+      "includes_sandbox_launcher": true
+    },
+    {
+      "target_triple": "aarch64-apple-darwin",
+      "archive_file": "transist-<tag>-aarch64-apple-darwin.tar.gz",
+      "os": "macos",
+      "architecture": "aarch64",
+      "abi": "darwin",
+      "includes_sandbox_launcher": false
+    },
+    {
+      "target_triple": "x86_64-apple-darwin",
+      "archive_file": "transist-<tag>-x86_64-apple-darwin.tar.gz",
+      "os": "macos",
+      "architecture": "x86_64",
+      "abi": "darwin",
+      "includes_sandbox_launcher": false
+    },
+    {
+      "target_triple": "aarch64-unknown-linux-gnu",
+      "archive_file": "transist-<tag>-aarch64-unknown-linux-gnu.tar.gz",
+      "os": "linux",
+      "architecture": "aarch64",
+      "abi": "gnu",
+      "includes_sandbox_launcher": true
+    },
+    {
+      "target_triple": "aarch64-unknown-linux-musl",
+      "archive_file": "transist-<tag>-aarch64-unknown-linux-musl.tar.gz",
+      "os": "linux",
+      "architecture": "aarch64",
+      "abi": "musl",
+      "includes_sandbox_launcher": true
+    }
+  ],
+  "archive_contents": {
+    "required_files": [
+      "bin/transist",
+      "bin/transist-server",
+      "bin/transist-admin",
+      "plugins/shell.sig",
+      "README.md",
+      "LICENSE",
+      "NOTICE",
+      "THIRD_PARTY_NOTICES.md",
+      "build-provenance.json",
+      "packaging-provenance.json"
+    ],
+    "linux_required_files": [
+      "bin/transist-sandbox-launcher"
+    ],
+    "retained_trees": [
+      "plugins/shell",
+      "examples/quickstart",
+      "workflows/demos/getting_started"
+    ],
+    "tracked_trees": [
+      ".agents/skills"
+    ],
+    "exclude_readmes_in_trees": true,
+    "forbidden_paths": [
+      ".agents/CORE_CHANGE_CHECKLIST.md",
+      ".agents/development",
+      ".agents/testing",
+      "docs",
+      "schemas",
+      "scripts",
+      "transist-admin",
+      "workflows/inspection_e2e",
+      "examples/inspection-snapshot",
+      "AGENTS.md",
+      "ARCHITECTURE.md",
+      "CODE_OF_CONDUCT.md",
+      "CONTRIBUTING.md",
+      "MAINTAINERS.md",
+      "ROADMAP.md",
+      "SECURITY.md",
+      "SUPPORT.md",
+      "VISION.md",
+      "transist-release.minisign.pub"
+    ],
+    "required_dirs": [
+      "bin",
+      "plugins",
+      "plugins/shell",
+      "examples",
+      "examples/quickstart",
+      "examples/quickstart/trust",
+      "workflows",
+      "workflows/demos",
+      "workflows/demos/getting_started",
+      ".agents",
+      ".agents/skills"
+    ],
+    "release_contents_docs": [
+      "README.md",
+      "scripts/ci/distribution-README.md",
+      "docs/public/reference/supported-platforms.md",
+      "docs/public/reference/release-artifact-verification.md",
+      "docs/public/reference/compatibility-and-stability.md",
+      "docs/public/reference/reproducibility.md",
+      "docs/public/guides/getting-started/installation-and-local-setup.md",
+      "docs/public/guides/getting-started/quickstart.md",
+      "docs/public/guides/trust/trusted-execution-walkthrough.md",
+      "docs/public/guides/authoring/ai-assisted-authoring-with-repo-skills.md",
+      ".agents/skills/transist-runtime-setup/SKILL.md",
+      ".agents/skills/transist-runtime-setup/references/runtime-installation.md"
+    ]
+  }
+}

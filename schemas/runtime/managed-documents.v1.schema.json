@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://transist.dev/schemas/runtime/managed-documents.v1.schema.json",
+  "title": "Managed document revision v1",
+  "$ref": "#/$defs/revision",
+  "$defs": {
+    "binding": {
+      "description": "Reserved process invoke action-data binding. reviewed_by names a recipe-local manual gate and requires the exact revision ID and digest.",
+      "type": "object", "required": ["$document", "access"],
+      "properties": {
+        "$document": { "$ref": "#/$defs/identifier" },
+        "access": { "enum": ["read", "write", "update"] },
+        "reviewed_by": { "$ref": "#/$defs/identifier" }
+      },
+      "if": { "required": ["reviewed_by"] },
+      "then": { "properties": { "access": { "const": "read" } } },
+      "additionalProperties": false
+    },
+    "bindingLocation": {
+      "type": "object", "required": ["path", "binding"],
+      "properties": {
+        "path": { "type": "string", "pattern": "^(?:$|/)" },
+        "binding": { "$ref": "#/$defs/binding" }
+      },
+      "additionalProperties": false
+    },
+    "identifier": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+    "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "memberPath": {
+      "type": "string", "minLength": 1, "maxLength": 4096,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))[^/]+(?:/[^/]+)*$"
+    },
+    "declaration": {
+      "type": "object", "required": ["kind", "max_bytes"],
+      "properties": {
+        "kind": { "enum": ["file", "tree"] },
+        "max_bytes": { "type": "integer", "minimum": 1, "maximum": 18446744073709551615 },
+        "max_files": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+        "initial": { "type": "string", "description": "Literal UTF-8 file bytes, bounded by max_bytes in compiler/storage validation." }
+      },
+      "if": { "properties": { "kind": { "const": "tree" } } },
+      "then": { "required": ["max_files"], "not": { "required": ["initial"] } },
+      "else": { "not": { "required": ["max_files"] } },
+      "additionalProperties": false
+    },
+    "blob": {
+      "type": "object", "required": ["sha256", "size_bytes"],
+      "properties": {
+        "sha256": { "$ref": "#/$defs/digest" },
+        "size_bytes": { "type": "integer", "minimum": 0, "maximum": 18446744073709551615 }
+      },
+      "additionalProperties": false
+    },
+    "treeManifest": {
+      "type": "object", "required": ["files", "directories"],
+      "properties": {
+        "files": { "type": "object", "propertyNames": { "$ref": "#/$defs/memberPath" }, "additionalProperties": { "$ref": "#/$defs/blob" } },
+        "directories": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/memberPath" } }
+      },
+      "additionalProperties": false
+    },
+    "revision": {
+      "type": "object",
+      "required": ["schema", "revision_id", "root_run_id", "document", "run_id", "step_id", "execution", "commit_sequence", "kind", "blob", "size_bytes", "file_count"],
+      "properties": {
+        "schema": { "const": "transist.document_revision.v1" },
+        "revision_id": { "$ref": "#/$defs/digest" },
+        "root_run_id": { "$ref": "#/$defs/identifier" },
+        "document": { "$ref": "#/$defs/identifier" },
+        "run_id": { "$ref": "#/$defs/identifier" },
+        "step_id": { "type": "string", "minLength": 1 },
+        "execution": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "commit_sequence": { "type": "integer", "minimum": 0, "maximum": 18446744073709551615 },
+        "kind": { "enum": ["file", "tree"] },
+        "blob": { "$ref": "#/$defs/blob" },
+        "size_bytes": { "type": "integer", "minimum": 0, "maximum": 18446744073709551615 },
+        "file_count": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+      },
+      "allOf": [
+        { "if": { "properties": { "execution": { "const": 0 } } },
+          "then": { "properties": { "step_id": { "const": "__transist_document_initialization" }, "commit_sequence": { "const": 0 }, "kind": { "const": "file" } } },
+          "else": { "properties": { "step_id": { "$ref": "#/$defs/identifier" }, "commit_sequence": { "minimum": 1 } } } },
+        { "if": { "properties": { "kind": { "const": "file" } } }, "then": { "properties": { "file_count": { "const": 1 } } } }
+      ],
+      "additionalProperties": false
+    },
+    "initialization": {
+      "type": "object", "required": ["schema", "root_run_id", "declarations_sha256", "document_revisions"],
+      "properties": {
+        "schema": { "const": "transist.document_initialization.v1" },
+        "root_run_id": { "$ref": "#/$defs/identifier" },
+        "declarations_sha256": { "$ref": "#/$defs/digest" },
+        "document_revisions": { "type": "array", "items": { "allOf": [{ "$ref": "#/$defs/revision" }, { "properties": { "execution": { "const": 0 } } }] } }
+      },
+      "additionalProperties": false
+    },
+    "candidates": { "type": "array", "items": { "allOf": [{ "$ref": "#/$defs/revision" }, { "properties": { "execution": { "minimum": 1 } } }] } },
+    "heads": { "type": "object", "propertyNames": { "$ref": "#/$defs/identifier" }, "additionalProperties": { "$ref": "#/$defs/revision" } }
+  }
+}

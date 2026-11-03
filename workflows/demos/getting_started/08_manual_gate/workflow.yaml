@@ -1,0 +1,22 @@
+schema: transist.flow.v1
+id: demo_08_manual_gate
+version: 0.1.0
+plugins:
+  shell: 0.1.0
+network:
+  mode: none
+steps:
+  - id: pre_gate
+    uses: process:shell/echo
+    with:
+      args: ["pre-gate", "step", "ran"]
+
+  - id: review_gate
+    control: control.gate.manual
+    with:
+      gate_id: review-gate
+
+  - id: post_gate
+    uses: process:shell/echo
+    with:
+      args: ["post-gate", "step", "ran"]
