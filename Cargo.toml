@@ -37,7 +37,7 @@ anyhow = "1.0"
 askama = "0.14"
 assert_cmd = "2.0"
 axum = "0.8"
-base64 = "0.22"
+base64 = "0.23"
 clap = { version = "4.5", features = ["derive"] }
 crossterm = "0.28"
 criterion = { version = "0.5", features = ["html_reports"] }
