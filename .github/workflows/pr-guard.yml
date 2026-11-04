@@ -30,12 +30,29 @@ jobs:
             const association = context.payload.pull_request.author_association;
             const number = context.payload.pull_request.number;
             const htmlUrl = context.payload.pull_request.html_url;
-            if (allowed.has(association)) {
-              console.log(`author association ${association} is allowed; leaving PR #${number} open`);
+            const repo = context.repo;
+            let trusted = allowed.has(association);
+            if (!trusted) {
+              // Event associations can lag current repository permissions.
+              // Query the PR author, never the actor who reopened the PR.
+              try {
+                const response = await github.rest.repos.getCollaboratorPermissionLevel({
+                  owner: repo.owner,
+                  repo: repo.repo,
+                  username: context.payload.pull_request.user.login,
+                });
+                trusted = new Set(['admin', 'maintain', 'write']).has(response.data.permission);
+              } catch (error) {
+                if (error.status !== 404) {
+                  core.setFailed('Unable to verify PR author repository permission; access remains denied.');
+                }
+              }
+            }
+            if (trusted) {
+              console.log(`PR author is trusted; leaving PR #${number} open`);
               return;
             }
-            console.log(`author association ${association} is not a collaborator; closing PR #${number}`);
-            const repo = context.repo;
+            console.log(`PR author lacks verified contributor access; closing PR #${number}`);
             const body = [
               `Hi @${context.payload.pull_request.user.login},`,
               ``,

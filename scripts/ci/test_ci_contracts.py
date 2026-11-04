@@ -7,6 +7,7 @@ repository's block-job/step formatting, not general YAML; actionlint remains
 the YAML/Actions syntax validator. No builds, package installs or network calls.
 """
 
+import json
 import os
 from pathlib import Path
 import re
@@ -244,6 +245,89 @@ def mutate_job(text: str, name: str, old: str, new: str) -> str:
     if old not in body:
         raise AssertionError(f"stale mutation: {name}/{old}")
     return text[: match.start(2)] + body.replace(old, new, 1) + text[match.end(2) :]
+
+
+class ContributorGuard(unittest.TestCase):
+    """Execute the actual trusted-base guard script with hermetic API responses."""
+
+    def test_author_permission_fallback(self) -> None:
+        """Preserve trusted associations and deny unverified fallback identities."""
+        workflow = (ROOT / ".github/workflows/pr-guard.yml").read_text()
+        script = workflow.split("          script: |\n", 1)[1]
+        script = "\n".join(line[12:] for line in script.splitlines())
+        harness = r"""
+const fs = require('node:fs');
+const input = JSON.parse(fs.readFileSync(0, 'utf8'));
+const calls = [];
+const context = {
+  actor: 'different-admin',
+  repo: {owner: 'fixture', repo: 'repo'},
+  payload: {pull_request: {
+    number: 33, html_url: 'https://example.test/pr/33',
+    author_association: input.association, user: {login: 'pr-author'},
+  }},
+};
+const github = {rest: {
+  repos: {getCollaboratorPermissionLevel: async (args) => {
+    calls.push({kind: 'lookup', ...args});
+    if (input.error) throw {status: input.error};
+    return {data: {permission: input.permission}};
+  }},
+  issues: {createComment: async () => calls.push({kind: 'comment'})},
+  pulls: {update: async (args) => calls.push({kind: 'update', ...args})},
+}};
+const core = {setFailed: () => calls.push({kind: 'failed'})};
+const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+new AsyncFunction('github', 'context', 'core', 'console', input.script)(
+  github, context, core, {log: () => {}}
+).then(() => process.stdout.write(JSON.stringify(calls)))
+ .catch(() => process.exit(1));
+"""
+        cases = [
+            (association, "none", None, True, False)
+            for association in ("OWNER", "MEMBER", "COLLABORATOR")
+        ] + [
+            ("CONTRIBUTOR", role, None, True, True)
+            for role in ("admin", "maintain", "write")
+        ] + [
+            (association, role, None, False, True)
+            for association in ("CONTRIBUTOR", "NONE", "FIRST_TIME_CONTRIBUTOR")
+            for role in ("read", "triage", "none", "unknown", None)
+        ] + [
+            ("CONTRIBUTOR", None, status, False, True)
+            for status in (403, 404, 429, 500)
+        ]
+        for association, permission, error, trusted, lookup in cases:
+            with self.subTest(association=association, role=permission, error=error):
+                result = subprocess.run(
+                    ["node", "-e", harness],
+                    input=json.dumps(
+                        dict(
+                            script=script,
+                            association=association,
+                            permission=permission,
+                            error=error,
+                        )
+                    ),
+                    text=True,
+                    capture_output=True,
+                    check=True,
+                    timeout=15,
+                )
+                calls = json.loads(result.stdout)
+                lookups = [call for call in calls if call["kind"] == "lookup"]
+                self.assertEqual(len(lookups), int(lookup))
+                if lookups:
+                    self.assertEqual(lookups[0]["username"], "pr-author")
+                    self.assertEqual(lookups[0]["owner"], "fixture")
+                    self.assertEqual(lookups[0]["repo"], "repo")
+                updates = [call for call in calls if call["kind"] == "update"]
+                self.assertEqual(len(updates), int(not trusted))
+                if updates:
+                    self.assertEqual(updates[0]["state"], "closed")
+                    self.assertEqual(updates[0]["pull_number"], 33)
+                failures = [call for call in calls if call["kind"] == "failed"]
+                self.assertEqual(len(failures), int(error not in (None, 404)))
 
 
 class WorkflowContracts(unittest.TestCase):
