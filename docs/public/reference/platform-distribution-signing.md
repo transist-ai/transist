@@ -70,7 +70,7 @@ installer, signing path, or path example is published for unsupported targets.
 - CI minisign signing uses a dedicated release key stored only in repository or
   organization secrets so signing remains non-interactive
 - the committed `transist-release.minisign.pub` (key ID
-  `9B91C4C6F8E61392`) is the only verification-key source; verification docs
+  `202B06AC561F2B56`) is the only verification-key source; verification docs
   require a byte-for-byte comparison before trusting a downloaded key
 - key rotation and compromise response are documented alongside the release playbook
 - compromised keys trigger signature revocation guidance and a fresh key rollout
