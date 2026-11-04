@@ -202,7 +202,7 @@ See [Release Artifact Verification](docs/public/reference/release-artifact-verif
 to verify checksums, minisign signatures, the release manifest, SBOMs, and
 GitHub attestations for downloaded releases. The committed release
 verification key is `transist-release.minisign.pub` (key ID
-`9B91C4C6F8E61392`); compare a downloaded copy byte-for-byte with the
+`202B06AC561F2B56`); compare a downloaded copy byte-for-byte with the
 committed file before trusting it. The key ID is only a human-readable
 cross-check.
 

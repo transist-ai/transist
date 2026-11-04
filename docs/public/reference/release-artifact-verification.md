@@ -10,7 +10,7 @@ for the exact release target matrix.
 
 The release verification key is committed to the repository at
 `transist-release.minisign.pub`. Its
-key ID is `9B91C4C6F8E61392`.
+key ID is `202B06AC561F2B56`.
 
 **Before trusting a downloaded key, compare it byte-for-byte with the committed
 file.** The key ID is useful as a human-readable cross-check, but it does not
@@ -18,8 +18,8 @@ replace the exact comparison. Do not trust a key downloaded from the same
 untrusted release alone.
 
 ```text
-untrusted comment: minisign public key 9B91C4C6F8E61392
-RWSSE+b4xsSRm/mpwoZ+/FzrLu3r3eBtXq84/AUvbYpu75L/89598Mdu
+untrusted comment: minisign public key 202B06AC561F2B56
+RWRWKx9WrAYrIHlPpT1eTyTodKHmYcLdXqanG4RFeYWFA8cBu39siM9h
 ```
 
 ## Expected Assets
@@ -140,7 +140,7 @@ cmp -s transist-release.minisign.pub /path/to/transist/transist-release.minisign
 
 # Optional human-readable cross-check:
 head -1 /path/to/transist/transist-release.minisign.pub
-# Should show: untrusted comment: minisign public key 9B91C4C6F8E61392
+# Should show: untrusted comment: minisign public key 202B06AC561F2B56
 ```
 
 Then verify each archive:
