@@ -250,8 +250,8 @@ def mutate_job(text: str, name: str, old: str, new: str) -> str:
 class ContributorGuard(unittest.TestCase):
     """Execute the actual trusted-base guard script with hermetic API responses."""
 
-    def test_author_permission_fallback(self) -> None:
-        """Preserve trusted associations and deny unverified fallback identities."""
+    def run_guard(self, **inputs: object) -> list[dict]:
+        """Execute the workflow's actual script with supplied event/API fixtures."""
         workflow = (ROOT / ".github/workflows/pr-guard.yml").read_text()
         script = workflow.split("          script: |\n", 1)[1]
         script = "\n".join(line[12:] for line in script.splitlines())
@@ -260,11 +260,14 @@ const fs = require('node:fs');
 const input = JSON.parse(fs.readFileSync(0, 'utf8'));
 const calls = [];
 const context = {
-  actor: 'different-admin',
+  actor: input.actor || 'different-admin',
   repo: {owner: 'fixture', repo: 'repo'},
   payload: {pull_request: {
     number: 33, html_url: 'https://example.test/pr/33',
-    author_association: input.association, user: {login: 'pr-author'},
+    author_association: input.association,
+    user: input.user || {login: 'pr-author'},
+    head: {repo: input.headRepo === undefined ? {id: 123} : input.headRepo},
+    base: {repo: {id: 123}},
   }},
 };
 const github = {rest: {
@@ -283,6 +286,45 @@ new AsyncFunction('github', 'context', 'core', 'console', input.script)(
 ).then(() => process.stdout.write(JSON.stringify(calls)))
  .catch(() => process.exit(1));
 """
+        result = subprocess.run(
+            ["node", "-e", harness],
+            input=json.dumps(dict(script=script, **inputs)),
+            text=True,
+            capture_output=True,
+            check=True,
+            timeout=15,
+        )
+        return json.loads(result.stdout)
+
+    def test_dependabot_identity(self) -> None:
+        """Only the authenticated same-repository bot gets the closure exception."""
+        bot = {"login": "dependabot[bot]", "id": 49699333, "type": "Bot"}
+        cases = [
+            ({}, True),
+            ({"user": {**bot, "id": 999}}, False),
+            ({"user": {**bot, "id": "49699333"}}, False),
+            ({"user": {**bot, "login": "impostor"}}, False),
+            ({"user": {**bot, "type": "User"}}, False),
+            ({"user": {"login": "impostor", "name": "dependabot[bot]"}}, False),
+            ({"user": {"login": "impostor"}, "actor": "dependabot[bot]"}, False),
+            ({"headRepo": {"id": 456}}, False),
+            ({"headRepo": None}, False),
+            ({"headRepo": {}}, False),
+        ]
+        for overrides, accepted in cases:
+            with self.subTest(overrides=overrides):
+                inputs = dict(user=bot, association="NONE", permission="none")
+                inputs.update(overrides)
+                calls = self.run_guard(**inputs)
+                self.assertEqual(
+                    [call["kind"] for call in calls],
+                    [] if accepted else ["lookup", "comment", "update"],
+                )
+                if not accepted:
+                    self.assertEqual(calls[-1]["state"], "closed")
+
+    def test_author_permission_fallback(self) -> None:
+        """Preserve trusted associations and deny unverified fallback identities."""
         cases = [
             (association, "none", None, True, False)
             for association in ("OWNER", "MEMBER", "COLLABORATOR")
@@ -299,22 +341,9 @@ new AsyncFunction('github', 'context', 'core', 'console', input.script)(
         ]
         for association, permission, error, trusted, lookup in cases:
             with self.subTest(association=association, role=permission, error=error):
-                result = subprocess.run(
-                    ["node", "-e", harness],
-                    input=json.dumps(
-                        dict(
-                            script=script,
-                            association=association,
-                            permission=permission,
-                            error=error,
-                        )
-                    ),
-                    text=True,
-                    capture_output=True,
-                    check=True,
-                    timeout=15,
+                calls = self.run_guard(
+                    association=association, permission=permission, error=error
                 )
-                calls = json.loads(result.stdout)
                 lookups = [call for call in calls if call["kind"] == "lookup"]
                 self.assertEqual(len(lookups), int(lookup))
                 if lookups:

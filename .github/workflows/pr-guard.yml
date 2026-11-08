@@ -31,6 +31,20 @@ jobs:
             const number = context.payload.pull_request.number;
             const htmlUrl = context.payload.pull_request.html_url;
             const repo = context.repo;
+            const pr = context.payload.pull_request;
+            // Match GitHub's authenticated bot identity, never display names,
+            // commit authors, or the actor who triggered/reopened this PR.
+            // This only permits review; normal CI and merge policy still apply.
+            const isDependabot =
+              pr.user.id === 49699333 &&
+              pr.user.login === 'dependabot[bot]' &&
+              pr.user.type === 'Bot' &&
+              Number.isSafeInteger(pr.base.repo.id) &&
+              pr.head.repo?.id === pr.base.repo.id;
+            if (isDependabot) {
+              console.log(`Verified same-repository Dependabot PR #${number}; leaving open for review`);
+              return;
+            }
             let trusted = allowed.has(association);
             if (!trusted) {
               // Event associations can lag current repository permissions.

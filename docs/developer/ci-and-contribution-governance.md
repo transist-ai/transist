@@ -168,10 +168,18 @@ exception of requirement §16.3) for one reason only: `pull_request` runs with a
 read-only token and no PR-write permission, so it cannot close a PR or comment.
 `pull_request_target` runs with repository-level privileges, so the guard **never
 checks out or executes PR content** — it has no `actions/checkout` step and only
-reads `author_association` from the event payload. Its permissions are limited
+reads GitHub-provided PR metadata and verifies current author permissions when
+the association is not trusted. Its permissions are limited
 to `contents: read`, `pull-requests: write`, and `issues: write` (the minimum
 needed to comment and close). All used actions are SHA-pinned and reviewed
 (requirement §16.4).
+
+Same-repository Dependabot updates are exempt from automatic closure only when
+the PR author matches GitHub's account ID `49699333`, login `dependabot[bot]`,
+and account type `Bot`, and the source repository ID matches the target ID.
+Display names, commit authors, and the actor reopening a PR grant no exception.
+This permits review only: CI, security checks, and maintainer merge policy
+remain unchanged. The guard still executes no PR code.
 
 > **Operational note:** the guard closes non-collaborator PRs on `opened`,
 > `reopened`, and `ready_for_review`. It does not prevent GitHub from already

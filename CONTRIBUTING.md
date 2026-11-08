@@ -23,7 +23,8 @@ and only maintainers may merge them.
 - **Unsolicited external pull requests are not accepted.** If you are not a
   trusted contributor, use an Issue first. `pr-guard.yml`
   automatically closes pull requests from accounts without repository
-  collaborator access.
+  collaborator access, except verified same-repository Dependabot updates.
+  That exception permits review only; CI and maintainer merge requirements remain.
 - **Discuss substantial changes before implementing them.** Open an issue
   first; implementation should normally follow architectural
   agreement rather than precede it.
