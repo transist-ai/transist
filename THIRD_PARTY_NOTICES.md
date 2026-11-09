@@ -5010,8 +5010,8 @@ Used by:
 - `syn 2.0.119`
 - `syn 3.0.3`
 - `sync_wrapper 1.0.2`
-- `thiserror-impl 2.0.20`
-- `thiserror 2.0.20`
+- `thiserror-impl 2.0.21`
+- `thiserror 2.0.21`
 - `time-core 0.1.9`
 - `time-macros 0.2.32`
 - `time 0.3.55`
