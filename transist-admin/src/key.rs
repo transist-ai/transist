@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use ed25519_dalek::SigningKey;
-use rand::{RngCore, rngs::OsRng};
+use rand::{TryRng, rngs::SysRng};
 use serde::Serialize;
 use std::path::Path;
 use transist_core::{TRUST_ROOT_SCHEMA_V1, TrustRootRecord};
@@ -41,7 +41,7 @@ pub fn generate_key(name: &str, output: &Path) -> Result<GeneratedKeySummary> {
     let name = validate_name(name)?;
     // Fill the seed locally so key generation does not couple rand_core versions.
     let mut secret = [0u8; 32];
-    OsRng
+    SysRng
         .try_fill_bytes(&mut secret)
         .context("failed obtaining OS randomness for admin key")?;
     let signing_key = SigningKey::from_bytes(&secret);
