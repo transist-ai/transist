@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MPL-2.0
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::hint::black_box;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::OnceLock;
 
-use criterion::{BatchSize, Criterion, black_box, criterion_group, criterion_main};
+use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use tempfile::TempDir;
 use transist::{
     PreflightMeasurement, PreflightMeasurementPhase, PreflightMeasurementScope,
