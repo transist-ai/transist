@@ -4974,7 +4974,6 @@ limitations under the License.
 
 Used by:
 
-- `allocator-api2 0.2.21`
 - `anes 0.1.6`
 - `anyhow 1.0.104`
 - `fiat-crypto 0.2.9`
@@ -5866,7 +5865,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 Used by:
 
-- `lru 0.18.2`
+- `lru 0.19.0`
 
 ```text
 MIT License
@@ -6453,5 +6452,6 @@ the following restrictions:
 
 3. This notice may not be removed or altered from any source distribution.
 ```
+
 
 
