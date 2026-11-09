@@ -67,7 +67,7 @@ jobs:
       checks: read
       actions: read
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: refs/tags/${{ inputs.release_tag }}
           fetch-depth: 0
@@ -119,7 +119,7 @@ jobs:
     env:
       RELEASE_TAG: ${{ inputs.release_tag }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: refs/tags/${{ inputs.release_tag }}
           fetch-depth: 0
@@ -134,7 +134,7 @@ jobs:
         # "fatal: not a git repository". Now that install_alpine_tools.sh has
         # installed git, re-checkout so the workspace is a real repository.
         if: matrix.target == 'x86_64-unknown-linux-musl'
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: refs/tags/${{ inputs.release_tag }}
           fetch-depth: 0
@@ -227,7 +227,7 @@ jobs:
       CI_CONTAINER_IMAGE: rust:1.88.0-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0
       CI_RUNNER_IMAGE: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: refs/tags/${{ inputs.release_tag }}
           fetch-depth: 0
@@ -351,7 +351,7 @@ jobs:
       RELEASE_TAG: ${{ inputs.release_tag }}
       CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: refs/tags/${{ inputs.release_tag }}
           fetch-depth: 0
@@ -366,7 +366,7 @@ jobs:
         # dies with "fatal: not a git repository". Now that install_alpine_tools.sh
         # has installed git, re-checkout so the workspace is a real repository.
         if: matrix.target == 'x86_64-unknown-linux-musl'
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: refs/tags/${{ inputs.release_tag }}
           fetch-depth: 0
@@ -432,7 +432,7 @@ jobs:
       checks: read
       actions: read
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: refs/tags/${{ inputs.release_tag }}
           fetch-depth: 0
@@ -605,7 +605,7 @@ jobs:
       contents: write
       id-token: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: refs/tags/${{ inputs.release_tag }}
           fetch-depth: 0
@@ -689,7 +689,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: refs/tags/${{ inputs.release_tag }}
       - name: Download attestation digest set

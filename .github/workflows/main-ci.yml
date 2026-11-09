@@ -44,7 +44,7 @@ jobs:
             cache_key: main-ci-platform-smoke-macOS
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Install Rust toolchain
@@ -79,7 +79,7 @@ jobs:
       CARGO_INCREMENTAL: 0
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Install Alpine runtime and sandbox tools
@@ -90,7 +90,7 @@ jobs:
         # so actions/checkout fell back to the GitHub REST-API tarball and created
         # NO local `.git`. Now that install_alpine_tools.sh has installed git,
         # re-checkout so the workspace is a real repository.
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Cargo build cache (Alpine)
@@ -116,7 +116,7 @@ jobs:
       options: --cap-add=SYS_ADMIN --cap-add=NET_ADMIN --security-opt apparmor=unconfined --security-opt seccomp=unconfined
     steps:
       - name: Checkout main
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Install Rust toolchain and coverage component
@@ -163,7 +163,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout main
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Require every mainline validation job
         env:
           PLATFORM_RESULT: ${{ needs.platform-smoke.result }}
