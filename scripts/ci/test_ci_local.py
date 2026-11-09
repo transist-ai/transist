@@ -466,7 +466,7 @@ class DockerPlan(unittest.TestCase):
                 encoding="utf-8"
             )
         )
-        self.assertEqual(ci.YAML_VERSION, "4.3.2")
+        self.assertEqual(ci.YAML_VERSION, "5.5.0")
         self.assertEqual(
             lock["packages"]["node_modules/js-yaml"]["version"], ci.YAML_VERSION
         )
