@@ -34,12 +34,12 @@ fn evaluate_expression(expr: &str, ctx: &EvaluationContext<'_>) -> Option<bool> 
         return evaluate_all(&parts, ctx);
     }
     if let Some((lhs, op, rhs)) = split_comparison(trimmed) {
-        let lhs_value = parse_operand(lhs, ctx);
-        let rhs_value = parse_operand(rhs, ctx);
+        let lhs_value = parse_operand(lhs, ctx, true);
+        let rhs_value = parse_operand(rhs, ctx, true);
         return compare_json_values(lhs_value?, op, rhs_value?);
     }
 
-    let value = parse_operand(trimmed, ctx)?;
+    let value = parse_operand(trimmed, ctx, false)?;
     Some(truthy(&value))
 }
 
@@ -221,7 +221,11 @@ fn split_comparison(expr: &str) -> Option<(&str, NumericOp, &str)> {
     None
 }
 
-fn parse_operand(raw: &str, ctx: &EvaluationContext<'_>) -> Option<Value> {
+fn parse_operand(
+    raw: &str,
+    ctx: &EvaluationContext<'_>,
+    comparison_operand: bool,
+) -> Option<Value> {
     let trimmed = trim_wrapping_parens(raw.trim());
     if trimmed.is_empty() {
         return None;
@@ -258,8 +262,26 @@ fn parse_operand(raw: &str, ctx: &EvaluationContext<'_>) -> Option<Value> {
     {
         return None;
     }
+    if ctx.strict_operands
+        && (trimmed.starts_with("inputs.")
+            || trimmed.starts_with("vars.")
+            || trimmed.starts_with("steps.")
+            || trimmed.starts_with("out.")
+            || matches!(trimmed, "out" | "executions" | "status" | "result.status"))
+    {
+        return resolve_reference(trimmed, ctx);
+    }
     if let Some(value) = resolve_reference(trimmed, ctx) {
         return Some(value);
+    }
+    // The legacy fallback also accepted incomplete syntax as a truthy string.
+    // Marked loop guards keep unquoted literal operands, but syntax fragments
+    // cannot become values and authorize either branch.
+    if ctx.strict_operands
+        && (!comparison_operand
+            || trimmed.contains(['(', ')', '&', '|', '=', '<', '>', '!', '\'', '"']))
+    {
+        return None;
     }
     Some(Value::String(trimmed.to_string()))
 }

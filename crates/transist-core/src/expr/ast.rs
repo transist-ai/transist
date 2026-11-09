@@ -17,6 +17,8 @@ pub(crate) struct EvaluationContext<'a> {
     pub(crate) workflow_inputs: Option<&'a BTreeMap<String, KernelValue>>,
     pub(crate) workflow_vars: Option<&'a BTreeMap<String, KernelValue>>,
     pub(crate) deferred_inputs: Option<&'a std::collections::BTreeSet<String>>,
+    /// Marked loop guards reject unresolved references and incomplete operands.
+    pub(crate) strict_operands: bool,
 }
 
 impl<'a> EvaluationContext<'a> {
@@ -32,6 +34,7 @@ impl<'a> EvaluationContext<'a> {
             workflow_inputs,
             workflow_vars,
             deferred_inputs: None,
+            strict_operands: false,
         }
     }
 }

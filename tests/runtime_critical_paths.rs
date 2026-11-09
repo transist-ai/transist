@@ -113,6 +113,80 @@ use transist::{
 };
 
 #[test]
+fn loop_cap_routing_control_only_reproducer_takes_successor_once() {
+    // Corrected expectations are separate from the historical defect-asserting
+    // release-CLI reproducer retained in the original investigation evidence.
+    for (condition, early) in [
+        ("until: 'false'", false),
+        ("while: 'true'", false),
+        ("until: 'true'", true),
+        ("while: 'false'", true),
+    ] {
+        for cap in [1, 2] {
+            let repo = tempfile::tempdir_in("/tmp").expect("tempdir");
+            init_repo(repo.path());
+            let flow = write_flow(
+                repo.path(),
+                "loop.flow.yaml",
+                &format!(
+                    r#"
+schema: transist.flow.v1
+id: loop_successor_reproducer
+version: 0.1.0
+network: {{mode: none}}
+steps:
+- id: repeat
+  control: control.noop
+  loop:
+    body: [{{ref: body}}]
+    {condition}
+    max_iters: {cap}
+    max_duration: 1m
+- id: body
+  control: control.noop
+- id: mandatory_successor
+  control: control.noop
+- id: finish
+  control: control.finish
+"#
+                ),
+            );
+            compile_prepare(
+                repo.path(),
+                &flow,
+                "loop_successor_reproducer@0.1.0",
+                "repro",
+                BTreeMap::new(),
+            );
+            let report = transist::TransistContext::repo_local(repo.path())
+                .run_started_run("repro")
+                .expect("run");
+            assert_eq!(report.status, "success", "{condition}, cap {cap}");
+            let state = read_state(repo.path(), "repro");
+            let wrappers = if early { 1 } else { cap };
+            for (id, count) in [
+                ("repeat", wrappers),
+                ("body", wrappers - 1),
+                ("mandatory_successor", 1),
+                ("finish", 1),
+            ] {
+                assert_eq!(
+                    state["steps"][id]["executions"], count,
+                    "{condition}, cap {cap}, {id}: {state}"
+                );
+                if count > 0 {
+                    assert_eq!(state["steps"][id]["status"], "succeeded");
+                }
+            }
+            let recipe: transist_protocol::Recipe =
+                yaml_serde::from_str(&read_recipe(repo.path(), "repro")).unwrap();
+            assert_eq!(recipe.graph.as_ref().unwrap().loop_routing_version, Some(1));
+            transist_protocol::validate_recipe_loop_routing(&recipe).unwrap();
+        }
+    }
+}
+
+#[test]
 fn successful_workflow_execution_persists_state_inputs_recipe_and_events() {
     let repo = tempfile::tempdir().expect("tempdir");
     init_repo(repo.path());

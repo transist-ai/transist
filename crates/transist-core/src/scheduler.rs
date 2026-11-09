@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
-use crate::execution_graph::{ExecutionGraph, dependencies};
-use crate::gate_state::{allows_transition, evaluate_guard_expression};
+use crate::execution_graph::{ExecutionGraph, GraphEdge, dependencies};
+use crate::gate_state::{
+    allows_transition, evaluate_guard_expression, evaluate_loop_route_guard_expression,
+};
 use crate::types::{KernelRunSnapshot, KernelStepState, KernelStepStatus};
 use std::collections::BTreeMap;
 use transist_protocol::KernelValue;
@@ -95,8 +97,10 @@ pub(crate) fn incoming_edge_reachability(
         };
         for edge in dep_node.outgoing.iter().filter(|edge| edge.to == step_id) {
             match edge_reachability(
-                edge.event.as_str(),
-                edge.guard.as_deref(),
+                edge,
+                dep_node
+                    .loop_max_iters
+                    .filter(|_| graph.loop_routing_version == Some(1)),
                 dep_state,
                 snapshot,
                 workflow_inputs,
@@ -123,23 +127,48 @@ enum EdgeReachability {
 }
 
 fn edge_reachability(
-    event: &str,
-    guard: Option<&str>,
+    edge: &GraphEdge,
+    loop_max_iters: Option<u32>,
     dep_state: &KernelStepState,
     snapshot: &KernelRunSnapshot,
     workflow_inputs: &BTreeMap<String, KernelValue>,
     workflow_vars: &BTreeMap<String, KernelValue>,
 ) -> EdgeReachability {
-    match event {
+    match edge.event.as_str() {
         "on_success" => match dep_state.status {
             KernelStepStatus::Succeeded => {
-                if allows_transition(evaluate_guard_expression(
-                    guard,
-                    Some(dep_state),
-                    Some(snapshot),
-                    Some(workflow_inputs),
-                    Some(workflow_vars),
-                )) {
+                // Only cap exhaustion overrides guards. Below the cap, use the
+                // current scope's guard evaluation, including fail-closed unknowns.
+                if let (Some(route), Some(cap)) = (&edge.loop_route, loop_max_iters) {
+                    if dep_state.activation_executions() >= cap {
+                        return match route.role {
+                            transist_protocol::RecipeLoopRouteRole::Enter => {
+                                EdgeReachability::GuardBlocked
+                            }
+                            transist_protocol::RecipeLoopRouteRole::Exit => {
+                                EdgeReachability::Satisfied
+                            }
+                        };
+                    }
+                }
+                let gate = if edge.loop_route.is_some() && loop_max_iters.is_some() {
+                    evaluate_loop_route_guard_expression(
+                        edge.guard.as_deref(),
+                        dep_state,
+                        snapshot,
+                        workflow_inputs,
+                        workflow_vars,
+                    )
+                } else {
+                    evaluate_guard_expression(
+                        edge.guard.as_deref(),
+                        Some(dep_state),
+                        Some(snapshot),
+                        Some(workflow_inputs),
+                        Some(workflow_vars),
+                    )
+                };
+                if allows_transition(gate) {
                     EdgeReachability::Satisfied
                 } else {
                     EdgeReachability::GuardBlocked
@@ -163,6 +192,10 @@ fn edge_reachability(
         _ => EdgeReachability::DependencyFailed,
     }
 }
+
+#[cfg(test)]
+#[path = "scheduler_loop_cap_routing_tests.rs"]
+mod loop_cap_routing_tests;
 
 #[cfg(test)]
 mod tests {

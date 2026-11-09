@@ -177,8 +177,14 @@ This contract protects the local runtime behavior that must not drift silently w
   consumption, including embedded main and cleanup recipes. Unsupported versions,
   explicit null/malformed metadata, unversioned edge records, and incomplete or
   conflicting topology fail closed. Loading never infers or repairs metadata.
-  Omitted fields retain legacy routing and serialization. This metadata-support
-  stage does not emit markers from the compiler or change scheduling semantics.
+  Omitted fields retain legacy routing and serialization. Newly compiled graphs
+  containing authored loops emit version 1. For a successful marked owner whose
+  activation-local execution count reaches `max_iters`, entry is blocked and the
+  normal exit is satisfied, regardless of the predicate. Below the cap, guards
+  read current variables/results; unresolved references or malformed predicates
+  authorize neither branch. Failed/canceled owners never gain successful exits.
+  The existing counting convention remains: a constant-continuing loop with cap
+  N executes its wrapper N times and body N−1 times. A normal exit is not approval.
 - **Typed Execution Phases**: Loaded-run execution uses consuming internal handoffs (`RecoveredLoadedRun`, `ActivatedLoadedRun`, `PreflightedLoadedRun`, and `ScheduledLoadedRun`) with explicit canceled and preflight-finished outcomes. These are implementation boundaries only: they add no persisted fields or events and preserve persisted bytes, event ordering, dispatch order, and every durability boundary.
 - **Kernel-Owned Protected Mutation**: Recipe snapshot synchronization and persisted trusted-execution refresh are kernel operations. The root application supplies the exact compiled recipe source bytes and composes the trust-decision resolver; the kernel validates the input, acquires the root-tree mutation lease, persists the protected run-state changes, and releases the lease.
 - **Kernel-Owned Gate Mutation**: Manual-gate decisions are validated by a kernel use case and persisted through the run-store port. Local storage owns gate-directory creation, active-record replacement, and immutable history-file durability; application code does not write protected gate or control-request state directly.

@@ -5,7 +5,6 @@ use transist_protocol::{Recipe, RecipeGraphEdge, RecipeLoop};
 #[derive(Debug, Clone)]
 pub struct GraphEdge {
     /// Explicit compiler-owned bounded-loop route, absent for legacy edges.
-    #[allow(dead_code)] // Propagated now; scheduler consumption follows in Step 2.
     pub loop_route: Option<transist_protocol::RecipeLoopRoute>,
     pub to: String,
     pub event: String,
@@ -15,6 +14,8 @@ pub struct GraphEdge {
 
 #[derive(Debug, Clone)]
 pub struct StepNode {
+    /// Validated wrapper cap, used only for explicitly versioned loop routes.
+    pub loop_max_iters: Option<u32>,
     pub dependencies: BTreeSet<String>,
     pub outgoing: Vec<GraphEdge>,
 }
@@ -23,7 +24,6 @@ pub struct StepNode {
 /// Runtime dependency graph derived from workflow recipe topology.
 pub struct ExecutionGraph {
     /// Opt-in bounded-loop routing revision from the persisted recipe.
-    #[allow(dead_code)] // Propagated now; scheduler consumption follows in Step 2.
     pub loop_routing_version: Option<u32>,
     /// Entry step id used as the first frontier candidate.
     pub entry: String,
@@ -56,6 +56,17 @@ pub fn build_execution_graph(recipe: &Recipe) -> anyhow::Result<ExecutionGraph> 
         nodes.insert(
             step.id.clone(),
             StepNode {
+                loop_max_iters: match step.with.get("__transist_loop") {
+                    Some(transist_protocol::KernelValue::Object(meta)) => {
+                        meta.get("max_iters").and_then(|value| match value {
+                            transist_protocol::KernelValue::Number(n) => {
+                                n.as_u64().and_then(|n| u32::try_from(n).ok())
+                            }
+                            _ => None,
+                        })
+                    }
+                    _ => None,
+                },
                 dependencies: BTreeSet::new(),
                 outgoing: Vec::new(),
             },
@@ -249,6 +260,8 @@ mod tests {
         recipe.graph.as_mut().unwrap().edges[0].loop_route = Some(route.clone());
         let marked = build_execution_graph(&recipe).unwrap();
         assert_eq!(marked.loop_routing_version, Some(1));
+        assert_eq!(marked.nodes["loop"].loop_max_iters, Some(2));
+        assert_eq!(marked.nodes["body"].loop_max_iters, None);
         assert_eq!(marked.nodes["loop"].outgoing[0].loop_route, Some(route));
         assert_eq!(
             marked.nodes["loop"].outgoing[0].guard.as_deref(),
@@ -264,6 +277,7 @@ mod tests {
             nodes.insert(
                 id.into(),
                 StepNode {
+                    loop_max_iters: None,
                     dependencies: BTreeSet::new(),
                     outgoing: Vec::new(),
                 },

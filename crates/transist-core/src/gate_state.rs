@@ -51,6 +51,32 @@ pub(crate) fn evaluate_guard_expression_in_scope(
     workflow_vars: Option<&BTreeMap<String, KernelValue>>,
     deferred_inputs: &std::collections::BTreeSet<String>,
 ) -> GateState {
+    let mut ctx =
+        EvaluationContext::new(dependency_state, snapshot, workflow_inputs, workflow_vars);
+    ctx.deferred_inputs = Some(deferred_inputs);
+    evaluate_guard_in_context(guard, &ctx)
+}
+
+/// Evaluates a marked loop edge's guard against current state, keeping missing
+/// references unknown rather than using the legacy unquoted-literal fallback.
+pub(crate) fn evaluate_loop_route_guard_expression(
+    guard: Option<&str>,
+    dependency_state: &KernelStepState,
+    snapshot: &KernelRunSnapshot,
+    workflow_inputs: &BTreeMap<String, KernelValue>,
+    workflow_vars: &BTreeMap<String, KernelValue>,
+) -> GateState {
+    let mut ctx = EvaluationContext::new(
+        Some(dependency_state),
+        Some(snapshot),
+        Some(workflow_inputs),
+        Some(workflow_vars),
+    );
+    ctx.strict_operands = true;
+    evaluate_guard_in_context(guard, &ctx)
+}
+
+fn evaluate_guard_in_context(guard: Option<&str>, ctx: &EvaluationContext<'_>) -> GateState {
     let Some(expr) = guard.map(str::trim).filter(|expr| !expr.is_empty()) else {
         return GateState::ConditionTrue;
     };
@@ -66,10 +92,7 @@ pub(crate) fn evaluate_guard_expression_in_scope(
         Ok(value) => value,
         Err(_) => return GateState::NotEvaluated,
     };
-    let mut ctx =
-        EvaluationContext::new(dependency_state, snapshot, workflow_inputs, workflow_vars);
-    ctx.deferred_inputs = Some(deferred_inputs);
-    match parsed.evaluate(&ctx) {
+    match parsed.evaluate(ctx) {
         Ok(serde_json::Value::Bool(true)) => GateState::ConditionTrue,
         Ok(serde_json::Value::Bool(false)) => GateState::ConditionFalse,
         _ => GateState::NotEvaluated,

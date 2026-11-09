@@ -2272,8 +2272,15 @@ fn compiler_accepts_loop_until_referencing_var_set_in_body() {
     let recipe = compile_flow_in_home(&home_dir, &flow)
         .expect("loop until referencing body-set var should compile");
     let graph = recipe.graph.as_ref().unwrap();
-    assert_eq!(graph.loop_routing_version, None);
-    assert!(graph.edges.iter().all(|edge| edge.loop_route.is_none()));
+    assert_eq!(graph.loop_routing_version, Some(1));
+    assert_eq!(
+        graph
+            .edges
+            .iter()
+            .filter(|edge| edge.loop_route.is_some())
+            .count(),
+        1
+    );
     transist_protocol::validate_recipe_loop_routing(&recipe).unwrap();
 }
 

@@ -123,7 +123,7 @@ pub(crate) fn compile_flow_internal_mode(
                     loop_block
                         .body
                         .iter()
-                        .map(|entry| KernelValue::String(entry.ref_step.clone()))
+                        .map(|entry| KernelValue::String(entry.ref_step.trim().to_string()))
                         .collect(),
                 ),
             );
@@ -311,6 +311,7 @@ pub(crate) fn compile_flow_internal_mode(
         capabilities_persisted: false,
     };
     transist_protocol::validate_document_reviews(&recipe).map_err(anyhow::Error::msg)?;
+    transist_protocol::validate_recipe_loop_routing(&recipe).map_err(anyhow::Error::msg)?;
     Ok(recipe)
 }
 
