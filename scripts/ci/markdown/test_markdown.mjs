@@ -193,7 +193,7 @@ test("patched KaTeX retains math tokenization and the extension's HTML API", asy
 
 test("CLI exits distinguish success, rule failures, invalid config and pin mismatch", async (t) => {
   const root = await fixture(t, { "README.md": valid });
-  const run = (version = "0.41.1") =>
+  const run = (version = "0.42.0") =>
     spawnSync(process.execPath, [runner, version], {
       cwd: root,
       encoding: "utf8",
