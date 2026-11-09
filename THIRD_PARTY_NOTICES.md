@@ -3703,7 +3703,7 @@ Used by:
 - `tempfile 3.27.0`
 - `tinytemplate 1.2.1`
 - `url 2.5.8`
-- `uuid 1.24.1`
+- `uuid 1.26.1`
 - `version_check 0.9.5`
 - `wasi 0.11.1+wasi-snapshot-preview1`
 - `wasip2 1.0.4+wasi-0.2.12`
