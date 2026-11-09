@@ -4997,7 +4997,7 @@ Used by:
 - `serde 1.0.229`
 - `serde_core 1.0.229`
 - `serde_derive 1.0.229`
-- `serde_json 1.0.151`
+- `serde_json 1.0.154`
 - `serde_urlencoded 0.7.1`
 - `shlex 2.0.1`
 - `syn 2.0.119`
@@ -6453,5 +6453,4 @@ the following restrictions:
 
 3. This notice may not be removed or altered from any source distribution.
 ```
-
 
