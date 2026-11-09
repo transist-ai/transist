@@ -2929,7 +2929,7 @@ name = "transist"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "base64 0.22.1",
+ "base64 0.23.1",
  "criterion",
  "ed25519-dalek",
  "hex",
@@ -2985,7 +2985,7 @@ name = "transist-admin"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "base64 0.22.1",
+ "base64 0.23.1",
  "clap",
  "ed25519-dalek",
  "libc",
@@ -3007,7 +3007,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
- "base64 0.22.1",
+ "base64 0.23.1",
  "clap",
  "crossterm",
  "ctrlc",
@@ -3053,7 +3053,7 @@ name = "transist-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "base64 0.22.1",
+ "base64 0.23.1",
  "ed25519-dalek",
  "libc",
  "serde",
@@ -3172,7 +3172,7 @@ dependencies = [
  "anyhow",
  "askama",
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "jsonschema",
  "mime_guess",
  "serde",
