@@ -3001,7 +3001,7 @@ limitations under the License.
 
 Used by:
 
-- `ed25519 2.2.3`
+- `ed25519 3.0.0`
 
 ```text
                               Apache License
@@ -4137,11 +4137,17 @@ limitations under the License.
 Used by:
 
 - `block-buffer 0.10.4`
+- `block-buffer 0.12.1`
 - `cpufeatures 0.2.17`
+- `cpufeatures 0.3.0`
 - `crypto-common 0.1.7`
+- `crypto-common 0.2.2`
 - `digest 0.10.7`
+- `digest 0.11.3`
+- `hybrid-array 0.4.15`
 - `sha2 0.10.9`
-- `signature 2.2.0`
+- `sha2 0.11.1`
+- `signature 3.0.0`
 
 ```text
                               Apache License
@@ -4352,6 +4358,7 @@ limitations under the License.
 
 Used by:
 
+- `rand_core 0.10.1`
 - `rand_core 0.6.4`
 
 ```text
@@ -4977,7 +4984,7 @@ Used by:
 - `allocator-api2 0.2.21`
 - `anes 0.1.6`
 - `anyhow 1.0.104`
-- `fiat-crypto 0.2.9`
+- `fiat-crypto 0.3.0`
 - `half 2.7.1`
 - `itoa 1.0.18`
 - `libc 0.2.189`
@@ -5132,7 +5139,46 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 Used by:
 
-- `ed25519-dalek 2.2.0`
+- `curve25519-dalek 5.0.0`
+
+```text
+Copyright (c) 2016-2021 isis agora lovecruft. All rights reserved.
+Copyright (c) 2016-2021 Henry de Valence. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+1. Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the
+documentation and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+```
+
+## BSD 3-Clause &quot;New&quot; or &quot;Revised&quot; License
+
+Used by:
+
+- `ed25519-dalek 3.0.0`
 
 ```text
 Copyright (c) 2017-2019 isis agora lovecruft. All rights reserved.
@@ -5163,27 +5209,6 @@ PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
 LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
 NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
-
-```
-
-## BSD 3-Clause &quot;New&quot; or &quot;Revised&quot; License
-
-Used by:
-
-- `curve25519-dalek 4.1.3`
-
-```text
-Copyright (c) <year> <owner>. 
-
-Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
-
-1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
-
-2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
-
-3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ```
 
