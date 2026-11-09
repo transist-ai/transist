@@ -345,7 +345,7 @@ fn step_outputs_api_openapi_enforces_presence_and_omission_rules() {
     replace_component_refs(&mut defs);
     normalize_openapi_nullable(&mut defs);
     let root = json!({"$defs": defs, "$ref": "#/$defs/StepOutput"});
-    let validator = jsonschema::JSONSchema::compile(&root).unwrap();
+    let validator = jsonschema::Validator::new(&root).unwrap();
     let no_result = json!({"execution": null, "status": "pending", "source": "state_snapshot", "result_present": false});
     assert!(validator.is_valid(&no_result));
     let mut invalid = no_result.clone();

@@ -3,12 +3,11 @@
 
 use crate::manifest::ActionDescriptor;
 use anyhow::{Context, Result, bail};
-use jsonschema::{Draft, JSONSchema, SchemaResolver, SchemaResolverError};
+use jsonschema::{Draft, Retrieve, Uri, Validator};
 use serde_json::Value;
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
-use std::sync::Arc;
 use url::Url;
 
 const PACKAGE_SCHEMA_SCHEME: &str = "transist-plugin";
@@ -18,7 +17,7 @@ mod partial;
 
 #[derive(Default)]
 pub(crate) struct SchemaCache {
-    roots: std::collections::BTreeMap<(PathBuf, String), JSONSchema>,
+    roots: std::collections::BTreeMap<(PathBuf, String), Validator>,
     documents: std::collections::BTreeMap<(PathBuf, String), Vec<(String, Value)>>,
     partial: partial::PartialCache,
 }
@@ -45,12 +44,7 @@ impl SchemaCache {
         )
     }
     /// Compiles a package-local root once and returns its operation-scoped validator.
-    pub(crate) fn compile(
-        &mut self,
-        dir: &Path,
-        relative: &str,
-        kind: &str,
-    ) -> Result<&JSONSchema> {
+    pub(crate) fn compile(&mut self, dir: &Path, relative: &str, kind: &str) -> Result<&Validator> {
         let key = (dir.to_path_buf(), relative.to_string());
         if !self.roots.contains_key(&key) {
             let documents = load_schema_documents(dir, relative, kind)?;
@@ -325,12 +319,12 @@ fn compile_documents(
     plugin_dir: &Path,
     documents: &[(String, Value)],
     schema_kind: &str,
-) -> Result<JSONSchema> {
+) -> Result<Validator> {
     crate::record_validation_work(crate::ValidationWork::SchemaCompilation);
     let root = documents
         .first()
         .expect("schema document collection always contains its root document");
-    let resolver = PackageSchemaResolver {
+    let retriever = PackageSchemaRetriever {
         plugin_dir: fs::canonicalize(plugin_dir).with_context(|| {
             format!(
                 "failed canonicalizing plugin directory '{}'",
@@ -338,10 +332,10 @@ fn compile_documents(
             )
         })?,
     };
-    let mut options = JSONSchema::options();
+    let mut options = jsonschema::options();
     options
         .with_draft(Draft::Draft202012)
-        .with_resolver(resolver);
+        .with_retriever(retriever);
 
     let root_schema = compile_one(&mut options, &root.1, schema_kind, &root.0)?;
     for (relative_path, document) in documents.iter().skip(1) {
@@ -351,12 +345,12 @@ fn compile_documents(
 }
 
 fn compile_one(
-    options: &mut jsonschema::CompilationOptions,
+    options: &mut jsonschema::ValidationOptions,
     document: &Value,
     schema_kind: &str,
     relative_path: &str,
-) -> Result<JSONSchema> {
-    options.compile(document).map_err(|error| {
+) -> Result<Validator> {
+    options.build(document).map_err(|error| {
         anyhow::anyhow!(
             "invalid {schema_kind} JSON Schema '{relative_path}' at schema path '{}'",
             error.schema_path
@@ -385,7 +379,81 @@ fn load_schema_documents(
         &mut visited,
         &mut documents,
     )?;
+    validate_reference_targets(&root, schema_kind, &mut visited, &mut documents)?;
     Ok(documents)
+}
+
+/// Guards static reference targets as schemas, including otherwise opaque data.
+/// Newly reached documents use the same normalization and package containment checks.
+fn validate_reference_targets(
+    plugin_root: &Path,
+    schema_kind: &str,
+    loaded: &mut BTreeSet<String>,
+    documents: &mut Vec<(String, Value)>,
+) -> Result<()> {
+    let mut pending: Vec<_> = documents
+        .iter()
+        .map(|(name, _)| (name.clone(), String::new()))
+        .collect();
+    let mut visited = BTreeSet::new();
+    while let Some((document, pointer)) = pending.pop() {
+        if !visited.insert((document.clone(), pointer.clone())) {
+            continue;
+        }
+        let root = &documents
+            .iter()
+            .find(|(name, _)| name == &document)
+            .unwrap()
+            .1;
+        let Some(target) = root.pointer(&pointer) else {
+            // Invalid pointers remain compilation errors, never retrieval authority.
+            continue;
+        };
+        if !pointer.is_empty() {
+            normalize_document(target, &document, schema_kind)?;
+        }
+        let references = validate_static_references(target, schema_kind)?;
+        for reference in references {
+            let path = resolve_reference_path(&document, &reference, schema_kind)?;
+            let name = path.to_string_lossy().replace('\\', "/");
+            let previous_len = documents.len();
+            collect_schema_documents(plugin_root, &path, schema_kind, loaded, documents)?;
+            pending.extend(
+                documents[previous_len..]
+                    .iter()
+                    .map(|(name, _)| (name.clone(), String::new())),
+            );
+            let fragment = reference
+                .split_once('#')
+                .map_or("", |(_, fragment)| fragment);
+            let pointer = decode_reference_fragment(fragment)?;
+            if pointer.is_empty() || pointer.starts_with('/') {
+                pending.push((name, pointer));
+            }
+            // Named anchors are registered at schema locations already guarded by
+            // normalization; arbitrary JSON Pointer targets need this extra walk.
+        }
+    }
+    Ok(())
+}
+
+/// Decodes URI fragment bytes before interpreting JSON Pointer escapes.
+fn decode_reference_fragment(fragment: &str) -> Result<String> {
+    let mut bytes = fragment.bytes();
+    let mut decoded = Vec::new();
+    while let Some(byte) = bytes.next() {
+        if byte == b'%' {
+            let high = bytes.next().and_then(|byte| (byte as char).to_digit(16));
+            let low = bytes.next().and_then(|byte| (byte as char).to_digit(16));
+            match (high, low) {
+                (Some(high), Some(low)) => decoded.push((high * 16 + low) as u8),
+                _ => bail!("invalid schema reference fragment encoding"),
+            }
+        } else {
+            decoded.push(byte);
+        }
+    }
+    String::from_utf8(decoded).context("invalid schema reference fragment UTF-8")
 }
 
 fn collect_schema_documents(
@@ -537,6 +605,7 @@ fn package_file(plugin_root: &Path, relative_path: &Path, schema_kind: &str) -> 
 
 fn normalize_document(source: &Value, relative_path: &str, schema_kind: &str) -> Result<Value> {
     let base = package_uri(relative_path)?;
+    validate_static_references(source, schema_kind)?;
     validate_nested_ids(source, true, schema_kind)?;
     let Value::Object(object) = source else {
         return Ok(source.clone());
@@ -550,6 +619,55 @@ fn normalize_document(source: &Value, relative_path: &str, schema_kind: &str) ->
     }
     normalized.insert("$id".to_string(), Value::String(base.as_str().to_string()));
     Ok(Value::Object(normalized))
+}
+
+/// Rejects dynamic references only at schema locations, before full or partial
+/// validation, and collects static references for the reachable-target walk.
+/// Property names, annotations, and literal instance data are opaque.
+fn validate_static_references(schema: &Value, schema_kind: &str) -> Result<Vec<String>> {
+    let Value::Object(object) = schema else {
+        return Ok(Vec::new());
+    };
+    if object.contains_key("$dynamicRef") {
+        bail!("{schema_kind} schema $dynamicRef is unsupported; use package-local $ref paths");
+    }
+    let mut references = Vec::new();
+    if let Some(reference) = object.get("$ref").and_then(Value::as_str) {
+        references.push(reference.to_string());
+    }
+    for (keyword, value) in object {
+        match keyword.as_str() {
+            "$defs" | "definitions" | "properties" | "patternProperties" | "dependentSchemas" => {
+                if let Value::Object(schemas) = value {
+                    for child in schemas.values() {
+                        references.extend(validate_static_references(child, schema_kind)?);
+                    }
+                }
+            }
+            "allOf" | "anyOf" | "oneOf" | "prefixItems" => {
+                if let Value::Array(schemas) = value {
+                    for child in schemas {
+                        references.extend(validate_static_references(child, schema_kind)?);
+                    }
+                }
+            }
+            "additionalProperties"
+            | "unevaluatedProperties"
+            | "propertyNames"
+            | "items"
+            | "unevaluatedItems"
+            | "contains"
+            | "not"
+            | "if"
+            | "then"
+            | "else"
+            | "contentSchema" => {
+                references.extend(validate_static_references(value, schema_kind)?);
+            }
+            _ => {}
+        }
+    }
+    Ok(references)
 }
 
 fn validate_nested_ids(value: &Value, root: bool, schema_kind: &str) -> Result<()> {
@@ -604,19 +722,20 @@ fn package_uri(relative_path: &str) -> Result<Url> {
         .context("failed creating package-local schema URI")
 }
 
-struct PackageSchemaResolver {
+struct PackageSchemaRetriever {
     plugin_dir: PathBuf,
 }
 
-impl SchemaResolver for PackageSchemaResolver {
-    fn resolve(
-        &self,
-        _root_schema: &Value,
-        url: &Url,
-        original_reference: &str,
-    ) -> Result<Arc<Value>, SchemaResolverError> {
+impl Retrieve for PackageSchemaRetriever {
+    /// Loads a normalized schema only from the canonical plugin package root.
+    /// Other schemes, authorities, and paths escaping that root are rejected.
+    fn retrieve(&self, uri: &Uri<&str>) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        let url = Url::parse(uri.as_str())?;
         if url.scheme() != PACKAGE_SCHEMA_SCHEME || url.host_str().is_some() {
-            bail!("schema reference '{original_reference}' resolved outside the plugin package");
+            return Err(anyhow::anyhow!(
+                "schema reference '{uri}' resolved outside the plugin package"
+            )
+            .into());
         }
         let relative = url.path().trim_start_matches('/');
         let relative = validate_relative_path(relative, "referenced")?;
@@ -627,17 +746,250 @@ impl SchemaResolver for PackageSchemaResolver {
         let source: Value = serde_json::from_str(&raw).with_context(|| {
             format!("invalid JSON in referenced schema '{}'", relative.display())
         })?;
-        Ok(Arc::new(normalize_document(
+        Ok(normalize_document(
             &source,
             &relative.to_string_lossy().replace('\\', "/"),
             "referenced",
-        )?))
+        )?)
     }
 }
 
 #[cfg(test)]
 mod reuse_tests {
     use super::*;
+
+    #[test]
+    fn normalization_rejects_dynamic_refs_only_at_schema_locations() {
+        use serde_json::json;
+
+        for schema in [
+            json!({"$dynamicRef": "#node"}),
+            json!({"properties": {"value": {"$dynamicRef": "#node"}}}),
+            json!({"properties": {"enum": {"$dynamicRef": "#node"}}}),
+            json!({"properties": {"const": {"$dynamicRef": "#node"}}}),
+            json!({"$defs": {"node": {"$dynamicRef": "#node"}}}),
+            json!({"dependentSchemas": {"value": {"$dynamicRef": "#node"}}}),
+            json!({"allOf": [{"$dynamicRef": "#node"}]}),
+            json!({"prefixItems": [{"$dynamicRef": "#node"}]}),
+            json!({"items": {"$dynamicRef": "#node"}}),
+            json!({"if": true, "then": {"$dynamicRef": "#node"}}),
+            json!({"unevaluatedProperties": {"$dynamicRef": "#node"}}),
+        ] {
+            let error = normalize_document(&schema, "input.json", "input").unwrap_err();
+            assert!(error.to_string().contains("$dynamicRef is unsupported"));
+            assert!(error.to_string().contains("package-local $ref"));
+        }
+
+        let schema = json!({
+            "properties": {"$dynamicRef": {"type": "string"}},
+            "patternProperties": {"$dynamicRef": true},
+            "$defs": {"$dynamicRef": {"type": "string"}},
+            "dependentSchemas": {"$dynamicRef": true},
+            "enum": [{"$dynamicRef": "literal", "nested": {"$dynamicRef": "literal"}}],
+            "const": {"$dynamicRef": "literal", "nested": {"$dynamicRef": "literal"}},
+            "default": {"$dynamicRef": "literal"},
+            "examples": [{"$dynamicRef": "literal"}]
+        });
+        let normalized = normalize_document(&schema, "input.json", "input").unwrap();
+        for (key, value) in schema.as_object().unwrap() {
+            assert_eq!(&normalized[key], value);
+        }
+    }
+
+    #[test]
+    fn full_and_partial_validation_reject_dynamic_refs_in_local_assets() {
+        use serde_json::json;
+
+        let dir = tempfile::tempdir_in("/tmp").unwrap();
+        fs::write(dir.path().join("input.json"), r#"{"$ref":"value.json"}"#).unwrap();
+        fs::write(
+            dir.path().join("value.json"),
+            r##"{"$dynamicRef":"#node"}"##,
+        )
+        .unwrap();
+        let mut cache = SchemaCache::default();
+        let error = cache
+            .validate(dir.path(), "input.json", "input", &json!({}))
+            .unwrap_err();
+        assert!(error.to_string().contains("$dynamicRef is unsupported"));
+        let error = cache
+            .validate_partial(dir.path(), "input.json", &json!({}), &["/value".into()])
+            .unwrap_err();
+        assert!(error.to_string().contains("$dynamicRef is unsupported"));
+    }
+
+    #[test]
+    fn full_and_partial_validation_guard_opaque_static_ref_targets() {
+        use serde_json::json;
+
+        for (pointer, payload) in [
+            ("/x-schema", json!({"x-schema": {"$dynamicRef": "#node"}})),
+            (
+                "/x-schema",
+                json!({"x-schema": {"properties": {"value": {"$dynamicRef": "#node"}}}}),
+            ),
+            ("/enum/0", json!({"enum": [{"$dynamicRef": "#node"}]})),
+            (
+                "/enum/0",
+                json!({"enum": [{"$ref": "#/enum/1"}, {"$dynamicRef": "#node"}]}),
+            ),
+            (
+                "/enum/0",
+                json!({"enum": [{"$ref": "hidden.json#/x-schema"}]}),
+            ),
+            ("/x%2Dschema", json!({"x-schema": {"$dynamicRef": "#node"}})),
+            ("/x~1schema", json!({"x/schema": {"$dynamicRef": "#node"}})),
+        ] {
+            for external in [false, true] {
+                let dir = tempfile::tempdir_in("/tmp").unwrap();
+                let reference = format!("{}#{pointer}", if external { "value.json" } else { "" });
+                let mut schema = if external { json!({}) } else { payload.clone() };
+                schema["$ref"] = json!(reference);
+                fs::write(dir.path().join("input.json"), schema.to_string()).unwrap();
+                fs::write(dir.path().join("value.json"), payload.to_string()).unwrap();
+                fs::write(
+                    dir.path().join("hidden.json"),
+                    json!({"x-schema": {"$dynamicRef": "#node"}}).to_string(),
+                )
+                .unwrap();
+                let action: ActionDescriptor = serde_json::from_value(json!({
+                    "name": "test",
+                    "input_schema": "input.json",
+                    "output_schema": "input.json"
+                }))
+                .unwrap();
+                let mut cache = SchemaCache::default();
+                for result in [
+                    cache.validate(dir.path(), "input.json", "input", &json!({})),
+                    cache.validate_partial(
+                        dir.path(),
+                        "input.json",
+                        &json!({}),
+                        &["/value".into()],
+                    ),
+                    validate_action_input(dir.path(), &action, &json!({})),
+                    validate_action_input_partial(
+                        dir.path(),
+                        &action,
+                        &json!({}),
+                        &["/value".into()],
+                    ),
+                ] {
+                    let error = result.unwrap_err();
+                    assert!(
+                        error.to_string().contains("$dynamicRef is unsupported"),
+                        "{reference}: {error:#}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn document_loading_handles_reachable_static_ref_cycles_and_opaque_literals() {
+        use serde_json::json;
+
+        let dir = tempfile::tempdir_in("/tmp").unwrap();
+        fs::write(
+            dir.path().join("input.json"),
+            json!({"$ref": "value.json#/x-schema", "x-schema": {
+                "type": "object",
+                "properties": {"child": {"$ref": "value.json#/x-schema"}}
+            }})
+            .to_string(),
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join("value.json"),
+            json!({"x-schema": {"$ref": "input.json#/x-schema"},
+                "enum": [{"$dynamicRef": "literal"}],
+                "default": {"$dynamicRef": "literal"}
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let documents = load_schema_documents(dir.path(), "input.json", "input").unwrap();
+        assert_eq!(documents.len(), 2);
+        assert_eq!(documents[1].1["enum"], json!([{"$dynamicRef": "literal"}]));
+    }
+
+    #[test]
+    fn static_refs_preserve_dynamic_ref_named_properties_and_literal_values() {
+        use serde_json::json;
+
+        let dir = tempfile::tempdir_in("/tmp").unwrap();
+        fs::write(
+            dir.path().join("input.json"),
+            r#"{"type":"object","properties":{"$dynamicRef":{"$ref":"value.json"}},"required":["$dynamicRef"]}"#,
+        )
+        .unwrap();
+        let literal = json!({"$dynamicRef": "literal", "$ref": "#/x-schema"});
+        fs::write(
+            dir.path().join("value.json"),
+            json!({
+                "enum": [literal.clone()], "const": literal.clone(),
+                "default": {"$ref": "#/x-schema"},
+                "x-schema": {"$dynamicRef": "#node"}
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let instance = json!({"$dynamicRef": literal});
+        let mut cache = SchemaCache::default();
+        cache
+            .validate(dir.path(), "input.json", "input", &instance)
+            .unwrap();
+        cache
+            .validate_partial(dir.path(), "input.json", &instance, &[])
+            .unwrap();
+        assert!(
+            cache
+                .validate(
+                    dir.path(),
+                    "input.json",
+                    "input",
+                    &json!({"$dynamicRef": "wrong"})
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn package_retriever_rejects_external_schemes_and_authorities() {
+        let dir = tempfile::tempdir_in("/tmp").unwrap();
+        let retriever = PackageSchemaRetriever {
+            plugin_dir: fs::canonicalize(dir.path()).unwrap(),
+        };
+        for reference in [
+            "https://example.com/schema.json",
+            "http://localhost/schema.json",
+            "file:///tmp/schema.json",
+            "transist-plugin://other/schema.json",
+        ] {
+            let uri = Uri::parse(reference).unwrap();
+            let error = retriever.retrieve(&uri).unwrap_err();
+            assert!(error.to_string().contains("outside the plugin package"));
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn package_retriever_rejects_symlink_escape() {
+        let dir = tempfile::tempdir_in("/tmp").unwrap();
+        let outside = tempfile::tempdir_in("/tmp").unwrap();
+        fs::write(outside.path().join("schema.json"), "true").unwrap();
+        std::os::unix::fs::symlink(
+            outside.path().join("schema.json"),
+            dir.path().join("linked.json"),
+        )
+        .unwrap();
+        let retriever = PackageSchemaRetriever {
+            plugin_dir: fs::canonicalize(dir.path()).unwrap(),
+        };
+        let uri = Uri::parse("transist-plugin:///linked.json").unwrap();
+        let error = retriever.retrieve(&uri).unwrap_err();
+        assert!(error.to_string().contains("escapes the plugin package"));
+    }
 
     #[test]
     fn validation_reuse_schema_root_compiles_once_with_local_references() {
@@ -672,10 +1024,10 @@ mod reuse_tests {
                 .is_err()
         );
         assert_eq!(cache.roots.len(), 1);
-        let root = cache.compile(dir.path(), "input.json", "input").unwrap() as *const JSONSchema;
+        let root = cache.compile(dir.path(), "input.json", "input").unwrap() as *const Validator;
         assert_eq!(
             root,
-            cache.compile(dir.path(), "input.json", "input").unwrap() as *const JSONSchema
+            cache.compile(dir.path(), "input.json", "input").unwrap() as *const Validator
         );
         fs::write(dir.path().join("value.json"), "invalid JSON").unwrap();
         assert!(

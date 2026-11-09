@@ -369,9 +369,9 @@ fn review2_unevaluated_known_extra_field_blocks_birth_without_any_plugin_startup
         "../schemas/runtime/workflow-reports.v1.schema.json"
     ))
     .unwrap();
-    let report_validator = jsonschema::JSONSchema::options()
+    let report_validator = jsonschema::options()
         .with_draft(jsonschema::Draft::Draft202012)
-        .compile(&report_schema)
+        .build(&report_schema)
         .unwrap();
     assert!(report_validator.is_valid(&serde_json::to_value(&report).unwrap()));
     assert!(!report.is_validation_passed(), "{report:#?}");
@@ -450,9 +450,9 @@ fn producer_consumer_validates_prepares_and_dispatches_typed_data() {
         "../schemas/runtime/workflow-reports.v1.schema.json"
     ))
     .unwrap();
-    let validator = jsonschema::JSONSchema::options()
+    let validator = jsonschema::options()
         .with_draft(jsonschema::Draft::Draft202012)
-        .compile(&schema)
+        .build(&schema)
         .unwrap();
     assert!(validator.is_valid(&serde_json::to_value(&report).unwrap()));
     assert!(validator.is_valid(&serde_json::to_value(&summary).unwrap()));
