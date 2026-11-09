@@ -72,7 +72,7 @@ tracing-subscriber = { version = "0.3", features = ["fmt"] }
 tui-textarea = "0.7"
 url = "2.5"
 uuid = { version = "1.8", features = ["v4", "v7"] }
-which = "7.0"
+which = "8.0"
 # Internal dependencies
 transist = { path = ".", default-features = false }
 transist-adapters = { path = "crates/transist-adapters" }
