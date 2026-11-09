@@ -4138,10 +4138,17 @@ limitations under the License.
 Used by:
 
 - `block-buffer 0.10.4`
+- `block-buffer 0.12.1`
+- `const-oid 0.10.2`
 - `cpufeatures 0.2.17`
+- `cpufeatures 0.3.0`
 - `crypto-common 0.1.7`
+- `crypto-common 0.2.2`
 - `digest 0.10.7`
+- `digest 0.11.3`
+- `hybrid-array 0.4.15`
 - `sha2 0.10.9`
+- `sha2 0.11.1`
 - `signature 2.2.0`
 
 ```text

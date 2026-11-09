@@ -855,7 +855,10 @@ fn inject_prompt_binding(
                             lock.sha256
                         )
                     })?;
-                let actual = format!("{:x}", Sha256::digest(&bytes));
+                let actual: String = Sha256::digest(&bytes)
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect();
                 if actual != lock.sha256 {
                     bail!(
                         "run '{}' prompt_file snapshot blob '{}' has changed; found '{}'",
@@ -889,8 +892,10 @@ fn inject_prompt_binding(
                     )?;
                 }
                 if let Some(lock) = prompt_file_lock {
-                    let injected_sha256 =
-                        format!("{:x}", Sha256::digest(prompt_path.content.as_bytes()));
+                    let injected_sha256: String = Sha256::digest(prompt_path.content.as_bytes())
+                        .iter()
+                        .map(|byte| format!("{byte:02x}"))
+                        .collect();
                     if injected_sha256 != lock.sha256 {
                         bail!(
                             "prompt_file '{}' locked by step '{}' has changed; expected digest '{}' but found '{}'",

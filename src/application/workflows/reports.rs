@@ -874,10 +874,11 @@ mod tests {
             .as_ref()
             .unwrap()
             .missing_capabilities;
-        let digest = format!(
-            "{:x}",
+        let digest: String =
             Sha256::digest(serde_json::to_vec(&(&full.workflow, missing)).unwrap())
-        );
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect();
         assert!(
             summary
                 .policy_output

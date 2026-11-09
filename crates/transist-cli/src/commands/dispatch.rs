@@ -1588,7 +1588,13 @@ fn workflow_install_is_unchanged(
         .join(format!("{workflow_id}-{workflow_version}.yaml"));
     let recipe_matches = entry["recipe_sha256"].as_str().is_some_and(|expected| {
         fs::read(&recipe_path)
-            .map(|bytes| format!("{:x}", Sha256::digest(bytes)) == expected)
+            .map(|bytes| {
+                Sha256::digest(bytes)
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>()
+                    == expected
+            })
             .unwrap_or(false)
     });
     Ok(entry["workflow_definition_sha256"] == digest
@@ -1919,7 +1925,10 @@ pub(crate) fn readiness_fingerprint(evidence: &Value) -> Result<String> {
 }
 
 fn canonical_fingerprint(value: &Value) -> Result<String> {
-    Ok(format!("{:x}", Sha256::digest(canonical_json(value)?)))
+    Ok(Sha256::digest(canonical_json(value)?)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect())
 }
 
 fn canonical_json(value: &Value) -> Result<Vec<u8>> {
@@ -1944,7 +1953,10 @@ fn filesystem_snapshot(path: &Path) -> Result<Value> {
     if file_type.is_file() {
         return Ok(serde_json::json!({
             "kind": "file",
-            "sha256": format!("{:x}", Sha256::digest(fs::read(path)?)),
+            "sha256": Sha256::digest(fs::read(path)?)
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>(),
         }));
     }
     if file_type.is_symlink() {

@@ -1393,7 +1393,10 @@ fn tree_fingerprint(runs: &[InspectionSnapshotRun]) -> Result<String> {
 fn fingerprint_hex(value: &impl Serialize) -> Result<String> {
     let bytes =
         serde_json::to_vec(value).context("failed serializing snapshot fingerprint input")?;
-    Ok(format!("{:x}", Sha256::digest(bytes)))
+    Ok(Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect())
 }
 
 fn last_fingerprint_step(detail: &InspectionRunDetail) -> Option<&InspectionStep> {

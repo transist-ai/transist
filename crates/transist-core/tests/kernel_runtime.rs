@@ -112,7 +112,10 @@ impl PromptFilePort for TestPromptFiles {
         let content = std::fs::read_to_string(&resolved)
             .map_err(|error| anyhow::anyhow!("prompt file does not exist: {error}"))?;
         Ok(PromptFileReference {
-            sha256: format!("{:x}", sha2::Sha256::digest(content.as_bytes())),
+            sha256: sha2::Sha256::digest(content.as_bytes())
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect(),
             path: resolved,
             content,
         })
@@ -158,7 +161,10 @@ impl PromptFilePort for DispatchChangingPromptFiles {
         Ok(PromptFileReference {
             path,
             content: content.to_string(),
-            sha256: format!("{:x}", Sha256::digest(content.as_bytes())),
+            sha256: Sha256::digest(content.as_bytes())
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect(),
         })
     }
 }
@@ -2074,7 +2080,11 @@ fn recipe_snapshot_sha(recipe: &Recipe) -> String {
     let yaml = yaml_serde::to_string(recipe).expect("recipe yaml");
     let mut hasher = Sha256::new();
     hasher.update(yaml.as_bytes());
-    format!("{:x}", hasher.finalize())
+    hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 fn allowed_trust_decision(
@@ -5477,7 +5487,10 @@ fn current_run_missing_persisted_capability_map_fails_before_dispatch() {
     let mut record: PersistedRunRecord =
         serde_json::from_value(run_store.run_json(&run_id)).expect("record");
     record.recipe_snapshot.as_mut().expect("snapshot").sha256 =
-        format!("{:x}", Sha256::digest(patched_yaml.as_bytes()));
+        Sha256::digest(patched_yaml.as_bytes())
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
     run_store.inject_record(record);
 
     let error = kernel

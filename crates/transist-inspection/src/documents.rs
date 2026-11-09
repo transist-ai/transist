@@ -77,10 +77,10 @@ impl InspectionGate {
 }
 
 fn member_id(revision: &str, path: &str) -> String {
-    format!(
-        "{:x}",
-        Sha256::digest(format!("{revision}\0{path}").as_bytes())
-    )
+    Sha256::digest(format!("{revision}\0{path}").as_bytes())
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 pub(crate) fn get_document(home: &Path, run: &str, id: &str) -> Result<Option<InspectionDocument>> {
