@@ -4980,7 +4980,7 @@ Used by:
 - `fiat-crypto 0.2.9`
 - `half 2.7.1`
 - `itoa 1.0.18`
-- `libc 0.2.189`
+- `libc 0.2.191`
 - `miniz_oxide 0.8.9`
 - `num-cmp 0.1.0`
 - `num-conv 0.2.2`
@@ -6453,4 +6453,5 @@ the following restrictions:
 
 3. This notice may not be removed or altered from any source distribution.
 ```
+
 
