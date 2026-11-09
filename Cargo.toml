@@ -39,7 +39,7 @@ assert_cmd = "2.0"
 axum = "0.8"
 base64 = "0.22"
 clap = { version = "4.5", features = ["derive"] }
-crossterm = "0.28"
+crossterm = "0.29"
 criterion = { version = "0.5", features = ["html_reports"] }
 ctrlc = "3.4"
 dialoguer = "0.11"
@@ -52,6 +52,7 @@ lru = "0.18"
 mime_guess = "2.0"
 rand = "0.8"
 ratatui = "0.30"
+ratatui-textarea = "0.9.4"
 rcgen = { version = "0.14.8", default-features = false, features = ["pem", "ring"] }
 regex = "1.11"
 reqwest = { version = "0.12.24", default-features = false, features = ["rustls-tls", "json", "gzip"] }
@@ -69,7 +70,6 @@ tokio = { version = "1.44", features = ["macros", "rt-multi-thread", "time"] }
 tower = { version = "0.5", features = ["util"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt"] }
-tui-textarea = "0.7"
 url = "2.5"
 uuid = { version = "1.8", features = ["v4", "v7"] }
 which = "7.0"

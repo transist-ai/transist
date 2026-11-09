@@ -57,7 +57,7 @@ fn fullscreen_prompt_depth_dec() -> usize {
         next
     })
 }
-use tui_textarea::TextArea;
+use ratatui_textarea::TextArea;
 
 use crate::cli::CliUiMode;
 use crate::display::spinner::LiveProgress;

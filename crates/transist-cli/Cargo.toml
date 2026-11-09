@@ -34,13 +34,13 @@ dialoguer = { workspace = true }
 libc = { workspace = true }
 lru = { workspace = true }
 ratatui = { workspace = true }
+ratatui-textarea = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 yaml_serde = { workspace = true }
 shell-words = { workspace = true }
 time = { workspace = true }
-tui-textarea = { workspace = true }
 transist = { workspace = true }
 uuid = { workspace = true }
 
