@@ -1057,7 +1057,7 @@ fn collect_projected_capability_requirements(
     granted: &mut BTreeSet<CapabilityRequest>,
     depth: usize,
     workflow_stack: &mut Vec<WorkflowRef>,
-) {
+) -> Result<()> {
     if !recipe.prerequisites.is_empty()
         && evaluate_prerequisites(
             &recipe.prerequisites,
@@ -1065,14 +1065,14 @@ fn collect_projected_capability_requirements(
         )
         .map_or(true, |report| report.has_blockers())
     {
-        return;
+        return Ok(());
     }
     let reachable = transist_core::reachable_recipe_step_ids_in_scope(
         recipe,
         None,
         Some(inputs),
         deferred_inputs,
-    );
+    )?;
     for step in recipe
         .steps
         .iter()
@@ -1109,7 +1109,7 @@ fn collect_projected_capability_requirements(
                 granted,
                 child_depth,
                 workflow_stack,
-            );
+            )?;
             workflow_stack.pop();
         } else {
             for requests in child.capabilities.values() {
@@ -1128,6 +1128,7 @@ fn collect_projected_capability_requirements(
             collect_projected_step_grants(requests, exact_grants, plugin_grants, required, granted);
         }
     }
+    Ok(())
 }
 
 fn collect_projected_step_grants(
@@ -1206,7 +1207,7 @@ fn collect_static_recipe_validation(
         None,
         Some(inputs),
         deferred_inputs,
-    );
+    )?;
     for step in recipe
         .steps
         .iter()

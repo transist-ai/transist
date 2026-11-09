@@ -54,6 +54,7 @@ pub(crate) fn compile_graph(flow: &Flow) -> RecipeGraph {
                 event: EVENT_ON_SUCCESS.to_string(),
                 guard: None,
                 r#loop: None,
+                loop_route: None,
             });
         }
     }
@@ -62,6 +63,7 @@ pub(crate) fn compile_graph(flow: &Flow) -> RecipeGraph {
         entry: flow.steps.first().expect("validated step").id.clone(),
         edges,
         max_iterations: Some(10_000),
+        loop_routing_version: None,
     }
 }
 
@@ -92,6 +94,7 @@ fn compile_if_edges(
             event: EVENT_ON_SUCCESS.to_string(),
             guard: Some(if_block.guard.trim().to_string()),
             r#loop: None,
+            loop_route: None,
         });
     }
     if let Some(first) = else_first {
@@ -101,6 +104,7 @@ fn compile_if_edges(
             event: EVENT_ON_SUCCESS.to_string(),
             guard: Some(format!("NOT ({})", if_block.guard.trim())),
             r#loop: None,
+            loop_route: None,
         });
     } else if let Some(next) = next_after.clone() {
         edges.push(RecipeGraphEdge {
@@ -109,6 +113,7 @@ fn compile_if_edges(
             event: EVENT_ON_SUCCESS.to_string(),
             guard: Some(format!("NOT ({})", if_block.guard.trim())),
             r#loop: None,
+            loop_route: None,
         });
     }
 
@@ -167,6 +172,7 @@ fn compile_loop_edges(
             event: EVENT_ON_SUCCESS.to_string(),
             guard: Some(loop_guard.0),
             r#loop: None,
+            loop_route: None,
         });
     }
     if let Some(next) = next_after.clone() {
@@ -176,6 +182,7 @@ fn compile_loop_edges(
             event: EVENT_ON_SUCCESS.to_string(),
             guard: Some(loop_guard.1),
             r#loop: None,
+            loop_route: None,
         });
     }
 
@@ -191,6 +198,7 @@ fn compile_loop_edges(
                 until_expr: None,
                 max_iters: None,
             }),
+            loop_route: None,
         });
     }
 }
@@ -207,6 +215,7 @@ fn add_linear_branch_edges(
             event: EVENT_ON_SUCCESS.to_string(),
             guard: None,
             r#loop: None,
+            loop_route: None,
         });
     }
     if let (Some(last), Some(next)) = (ids.last(), next_after) {
@@ -216,6 +225,7 @@ fn add_linear_branch_edges(
             event: EVENT_ON_SUCCESS.to_string(),
             guard: None,
             r#loop: None,
+            loop_route: None,
         });
     }
 }

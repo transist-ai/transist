@@ -4,6 +4,9 @@ use transist_protocol::{Recipe, RecipeGraphEdge, RecipeLoop};
 
 #[derive(Debug, Clone)]
 pub struct GraphEdge {
+    /// Explicit compiler-owned bounded-loop route, absent for legacy edges.
+    #[allow(dead_code)] // Propagated now; scheduler consumption follows in Step 2.
+    pub loop_route: Option<transist_protocol::RecipeLoopRoute>,
     pub to: String,
     pub event: String,
     pub guard: Option<String>,
@@ -19,6 +22,9 @@ pub struct StepNode {
 #[derive(Debug, Clone)]
 /// Runtime dependency graph derived from workflow recipe topology.
 pub struct ExecutionGraph {
+    /// Opt-in bounded-loop routing revision from the persisted recipe.
+    #[allow(dead_code)] // Propagated now; scheduler consumption follows in Step 2.
+    pub loop_routing_version: Option<u32>,
     /// Entry step id used as the first frontier candidate.
     pub entry: String,
     /// Optional graph-level iteration ceiling for loop traversal.
@@ -28,7 +34,10 @@ pub struct ExecutionGraph {
 }
 
 /// Builds a dependency graph from the recipe graph edges or falls back to a linear chain.
-pub fn build_execution_graph(recipe: &Recipe) -> ExecutionGraph {
+/// Rejects invalid loop-routing metadata, including in embedded recipes, without
+/// producing an executable graph or modifying the supplied recipe.
+pub fn build_execution_graph(recipe: &Recipe) -> anyhow::Result<ExecutionGraph> {
+    transist_protocol::validate_recipe_loop_routing(recipe).map_err(anyhow::Error::msg)?;
     let entry = recipe
         .graph
         .as_ref()
@@ -65,6 +74,7 @@ pub fn build_execution_graph(recipe: &Recipe) -> ExecutionGraph {
                 event: "on_success".to_string(),
                 guard: None,
                 r#loop: None,
+                loop_route: None,
             })
             .collect()
     };
@@ -81,15 +91,20 @@ pub fn build_execution_graph(recipe: &Recipe) -> ExecutionGraph {
                 event: edge.event,
                 guard: edge.guard,
                 r#loop: edge.r#loop,
+                loop_route: edge.loop_route,
             });
         }
     }
 
-    ExecutionGraph {
+    Ok(ExecutionGraph {
+        loop_routing_version: recipe
+            .graph
+            .as_ref()
+            .and_then(|graph| graph.loop_routing_version),
         entry,
         max_iterations,
         nodes,
-    }
+    })
 }
 
 /// Returns direct dependency step ids for the provided step.
@@ -178,35 +193,69 @@ fn guard_depends_on_runtime_state(guard: &str) -> bool {
 
 /// Returns the authored recipe step ids that remain reachable for the supplied
 /// persisted run snapshot and workflow inputs.
+/// Returns an error if recursive loop-routing validation fails.
 pub fn reachable_recipe_step_ids(
     recipe: &Recipe,
     snapshot: Option<&crate::types::KernelRunSnapshot>,
     workflow_inputs: Option<&BTreeMap<String, transist_protocol::KernelValue>>,
-) -> BTreeSet<String> {
-    let graph = build_execution_graph(recipe);
-    reachable_steps(&graph, snapshot, workflow_inputs)
+) -> anyhow::Result<BTreeSet<String>> {
+    let graph = build_execution_graph(recipe)?;
+    Ok(reachable_steps(&graph, snapshot, workflow_inputs))
 }
 
 /// Returns potential recipe reachability in a typed partial module-input scope.
 /// Unknown input values cannot prune authority, secret, or static prerequisite checks.
+/// Returns an error if recursive loop-routing validation fails.
 pub fn reachable_recipe_step_ids_in_scope(
     recipe: &Recipe,
     snapshot: Option<&crate::types::KernelRunSnapshot>,
     workflow_inputs: Option<&BTreeMap<String, transist_protocol::KernelValue>>,
     deferred_inputs: &BTreeSet<String>,
-) -> BTreeSet<String> {
-    reachable_steps_in_scope(
-        &build_execution_graph(recipe),
+) -> anyhow::Result<BTreeSet<String>> {
+    Ok(reachable_steps_in_scope(
+        &build_execution_graph(recipe)?,
         snapshot,
         workflow_inputs,
         deferred_inputs,
-    )
+    ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use transist_protocol::{RecipeGraph, RecipeStep, StepExecutionDescriptor, WorkflowRef};
+
+    #[test]
+    fn loop_routing_graph_rejects_invalid_metadata_and_preserves_legacy_loading() {
+        let mut recipe: Recipe = serde_json::from_value(serde_json::json!({
+            "schema": "transist.recipe.v1", "workflow": {"id":"test", "version":"v1"},
+            "steps": [{"id":"loop", "execution":{"kind":"control", "primitive":"control.noop"},
+                "with":{"__transist_loop":{"body_steps":["body"], "max_iters":2}}},
+                {"id":"body", "execution":{"kind":"control", "primitive":"control.noop"}}],
+            "graph": {"entry":"loop", "edges":[
+                {"from":"loop", "to":"body", "event":"on_success", "guard":"true"},
+                {"from":"body", "to":"loop", "event":"on_success", "loop":{}}]}
+        }))
+        .unwrap();
+        let legacy = build_execution_graph(&recipe).unwrap();
+        assert_eq!(legacy.loop_routing_version, None);
+        assert!(legacy.nodes["loop"].outgoing[0].loop_route.is_none());
+        recipe.graph.as_mut().unwrap().loop_routing_version = Some(1);
+        assert!(build_execution_graph(&recipe).is_err());
+        let route = transist_protocol::RecipeLoopRoute {
+            owner_step_id: "loop".into(),
+            role: transist_protocol::RecipeLoopRouteRole::Enter,
+        };
+        recipe.graph.as_mut().unwrap().edges[0].loop_route = Some(route.clone());
+        let marked = build_execution_graph(&recipe).unwrap();
+        assert_eq!(marked.loop_routing_version, Some(1));
+        assert_eq!(marked.nodes["loop"].outgoing[0].loop_route, Some(route));
+        assert_eq!(
+            marked.nodes["loop"].outgoing[0].guard.as_deref(),
+            Some("true")
+        );
+        assert!(marked.nodes["body"].outgoing[0].r#loop.is_some());
+    }
 
     #[test]
     fn review_partial_guard_scope_preserves_unknown_branches_and_known_short_circuits() {
@@ -232,11 +281,13 @@ mod tests {
                 event: "on_success".into(),
                 guard: Some(guard.into()),
                 r#loop: None,
+                loop_route: None,
             });
         }
         let graph = ExecutionGraph {
             entry: "guard".into(),
             max_iterations: None,
+            loop_routing_version: None,
             nodes,
         };
         let inputs = BTreeMap::from([
@@ -312,7 +363,7 @@ mod tests {
             capabilities_persisted: false,
             documents: Default::default(),
         };
-        let graph = build_execution_graph(&recipe);
+        let graph = build_execution_graph(&recipe).unwrap();
         assert_eq!(graph.entry, "a");
         assert_eq!(dependencies(&graph, "b"), vec!["a"]);
         assert_eq!(dependencies(&graph, "c"), vec!["b"]);
@@ -343,14 +394,16 @@ mod tests {
                     event: "on_success".to_string(),
                     guard: Some("true".to_string()),
                     r#loop: None,
+                    loop_route: None,
                 }],
                 max_iterations: Some(5),
+                loop_routing_version: None,
             }),
             capabilities: Default::default(),
             capabilities_persisted: false,
             documents: Default::default(),
         };
-        let graph = build_execution_graph(&recipe);
+        let graph = build_execution_graph(&recipe).unwrap();
         assert_eq!(graph.entry, "b");
         assert_eq!(graph.max_iterations, Some(5));
         let outgoing = outgoing_edges(&graph, "b");
@@ -389,12 +442,14 @@ mod tests {
                 event: "then".to_string(),
                 guard: Some("steps.inspect.out.ready == true".to_string()),
                 r#loop: None,
+                loop_route: None,
             }],
             max_iterations: None,
+            loop_routing_version: None,
         });
 
         assert_eq!(
-            reachable_recipe_step_ids(&recipe, None, None),
+            reachable_recipe_step_ids(&recipe, None, None).unwrap(),
             BTreeSet::from(["conditional".to_string(), "inspect".to_string()])
         );
     }

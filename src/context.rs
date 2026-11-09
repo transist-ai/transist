@@ -184,7 +184,8 @@ impl TransistContext {
                     .collect()
             })
             .unwrap_or_default();
-        let reachable = reachable_recipe_step_ids(&recipe, Some(&snapshot), Some(&workflow_inputs));
+        let reachable =
+            reachable_recipe_step_ids(&recipe, Some(&snapshot), Some(&workflow_inputs))?;
         Ok(Some(
             recipe
                 .steps

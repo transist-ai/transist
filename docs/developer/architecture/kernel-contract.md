@@ -170,6 +170,15 @@ This contract protects the local runtime behavior that must not drift silently w
   their structured preflight behavior.
 - **Protected Workspace Boundary**: The kernel treats `ExecutionRequest.paths.workspace_dir` as the default user-visible root. It rejects runtime-resolved paths outside that workspace before handing work to an adapter and records the denial durably. The kernel rejects `workspace_access.mode: custom` at compile time, preflight, and adapter dispatch with the uniform `filesystem_custom_mode_unsupported` reason code on both Linux and macOS; only `full` and `read_only` workspace access modes are supported.
 - **Kernel-Owned Orchestration**: All control flow (loops, guards) and subflow logic is owned by the Kernel and durably reflected in the run state.
+- **Explicit Loop Routing Metadata**: Recipes may carry graph-level
+  `loop_routing_version: 1` and edge-level `loop_route` records identifying a
+  recipe-local wrapper and `enter`/`exit` role. Recursive validation checks every
+  marked wrapper against its ordered body and normal successor before graph
+  consumption, including embedded main and cleanup recipes. Unsupported versions,
+  explicit null/malformed metadata, unversioned edge records, and incomplete or
+  conflicting topology fail closed. Loading never infers or repairs metadata.
+  Omitted fields retain legacy routing and serialization. This metadata-support
+  stage does not emit markers from the compiler or change scheduling semantics.
 - **Typed Execution Phases**: Loaded-run execution uses consuming internal handoffs (`RecoveredLoadedRun`, `ActivatedLoadedRun`, `PreflightedLoadedRun`, and `ScheduledLoadedRun`) with explicit canceled and preflight-finished outcomes. These are implementation boundaries only: they add no persisted fields or events and preserve persisted bytes, event ordering, dispatch order, and every durability boundary.
 - **Kernel-Owned Protected Mutation**: Recipe snapshot synchronization and persisted trusted-execution refresh are kernel operations. The root application supplies the exact compiled recipe source bytes and composes the trust-decision resolver; the kernel validates the input, acquires the root-tree mutation lease, persists the protected run-state changes, and releases the lease.
 - **Kernel-Owned Gate Mutation**: Manual-gate decisions are validated by a kernel use case and persisted through the run-store port. Local storage owns gate-directory creation, active-record replacement, and immutable history-file durability; application code does not write protected gate or control-request state directly.

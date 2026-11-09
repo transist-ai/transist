@@ -83,6 +83,49 @@ fn compiled_recipe_serializes_to_golden_bytes() {
 }
 
 #[test]
+fn loop_routing_legacy_recipe_preserves_golden_bytes_and_hash() {
+    use sha2::{Digest, Sha256};
+    let original = read_fixture(RECIPE_GOLDEN);
+    let recipe: transist_protocol::Recipe = yaml_serde::from_str(&original).unwrap();
+    transist_protocol::validate_recipe_loop_routing(&recipe).unwrap();
+    assert_eq!(recipe.graph.as_ref().unwrap().loop_routing_version, None);
+    let serialized = yaml_serde::to_string(&recipe).unwrap();
+    assert_eq!(serialized, original);
+    assert_eq!(
+        Sha256::digest(serialized.as_bytes()),
+        Sha256::digest(original.as_bytes())
+    );
+}
+
+#[test]
+fn loop_routing_yaml_metadata_round_trips_and_rejects_explicit_null() {
+    use transist_protocol::{RecipeGraph, RecipeGraphEdge};
+    let yaml = "loop_routing_version: 1\nentry: loop\nedges:\n- from: loop\n  to: body\n  event: on_success\n  loop_route:\n    owner_step_id: loop\n    role: enter\n";
+    let graph: RecipeGraph = yaml_serde::from_str(yaml).unwrap();
+    let restored: RecipeGraph =
+        yaml_serde::from_str(&yaml_serde::to_string(&graph).unwrap()).unwrap();
+    assert_eq!(graph, restored);
+    for value in ["null", "~", "", "false", "[]", "1.5", "-1", "4294967296"] {
+        assert!(
+            yaml_serde::from_str::<RecipeGraph>(&format!(
+                "entry: loop\nloop_routing_version: {value}\n"
+            ))
+            .is_err(),
+            "accepted {value:?}"
+        );
+    }
+    for value in ["null", "~", "", "false", "[]", "{}"] {
+        assert!(
+            yaml_serde::from_str::<RecipeGraphEdge>(&format!(
+                "from: loop\nto: body\nevent: on_success\nloop_route: {value}\n"
+            ))
+            .is_err(),
+            "accepted {value:?}"
+        );
+    }
+}
+
+#[test]
 fn plugin_manifest_fixture_parses_to_expected_value() {
     let raw = read_fixture(ADMIN_PLUGIN);
     let manifest: PluginManifest = yaml_serde::from_str(&raw).expect("parse manifest");

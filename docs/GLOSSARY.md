@@ -335,6 +335,13 @@ A compiled, immutable snapshot of a **Workflow** at the moment a run is started.
 
 Starting a brand-new run using the persisted **Recipe** and inputs from a previous run.
 
+## Loop Routing Metadata
+
+Compiler-owned recipe graph fields (`loop_routing_version` and edge `loop_route`)
+that explicitly identify a bounded-loop wrapper's entry and normal exit.
+Omission selects legacy routing; marked topology is validated recursively before
+executable graph consumption. Metadata support alone does not enable new routing.
+
 ## Resume
 
 Continuing a failed run from persisted state, keeping the same Run ID and history when recovery is still valid.

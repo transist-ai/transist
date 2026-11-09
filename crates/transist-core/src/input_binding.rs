@@ -245,6 +245,7 @@ mod tests {
                 entry: "finish".to_string(),
                 edges: Vec::new(),
                 max_iterations: None,
+                loop_routing_version: None,
             }),
             capabilities: Default::default(),
             capabilities_persisted: false,
