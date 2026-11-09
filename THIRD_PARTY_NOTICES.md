@@ -5967,7 +5967,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 Used by:
 
 - `tokio-util 0.7.19`
-- `tokio 1.53.1`
+- `tokio 1.54.1`
 
 ```text
 MIT License
