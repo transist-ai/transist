@@ -57,7 +57,7 @@ fn fullscreen_prompt_depth_dec() -> usize {
         next
     })
 }
-use tui_textarea::TextArea;
+use ratatui_textarea::TextArea;
 
 use crate::cli::CliUiMode;
 use crate::display::spinner::LiveProgress;
@@ -76,41 +76,6 @@ fn remap_ctrl_c_to_esc(code: KeyCode, modifiers: KeyModifiers) -> KeyCode {
         KeyCode::Esc
     } else {
         code
-    }
-}
-
-/// Convert crossterm 0.29 events to backend-neutral textarea input. Ratatui
-/// 0.29 and tui-textarea 0.7 still use crossterm 0.28 internally.
-fn textarea_input(event: crossterm::event::KeyEvent) -> tui_textarea::Input {
-    use tui_textarea::{Input, Key};
-
-    if event.kind == KeyEventKind::Release {
-        return Input::default();
-    }
-
-    let key = match event.code {
-        KeyCode::Char(c) => Key::Char(c),
-        KeyCode::Backspace => Key::Backspace,
-        KeyCode::Enter => Key::Enter,
-        KeyCode::Left => Key::Left,
-        KeyCode::Right => Key::Right,
-        KeyCode::Up => Key::Up,
-        KeyCode::Down => Key::Down,
-        KeyCode::Tab => Key::Tab,
-        KeyCode::Delete => Key::Delete,
-        KeyCode::Home => Key::Home,
-        KeyCode::End => Key::End,
-        KeyCode::PageUp => Key::PageUp,
-        KeyCode::PageDown => Key::PageDown,
-        KeyCode::Esc => Key::Esc,
-        KeyCode::F(n) => Key::F(n),
-        _ => Key::Null,
-    };
-    Input {
-        key,
-        ctrl: event.modifiers.contains(KeyModifiers::CONTROL),
-        alt: event.modifiers.contains(KeyModifiers::ALT),
-        shift: event.modifiers.contains(KeyModifiers::SHIFT),
     }
 }
 
@@ -741,7 +706,7 @@ impl FullscreenPrompt {
                             self.draw()?;
                             return Ok(Some(join_text_area_lines(&state.textarea)));
                         }
-                        state.textarea.input(textarea_input(key));
+                        state.textarea.input(key);
                     }
                     self.draw()?;
                 }
@@ -1074,7 +1039,7 @@ impl FullscreenPrompt {
                                 None,
                             ));
                         }
-                        state.textarea.input(textarea_input(key));
+                        state.textarea.input(key);
                     }
                     self.draw()?;
                 }
@@ -2205,7 +2170,7 @@ fn workflow_inputs_event_loop_with_back(
                             }
                             _ => {
                                 if let Some(state) = prompt.workflow_inputs_state.as_mut() {
-                                    let changed = state.editor.input(textarea_input(key));
+                                    let changed = state.editor.input(key);
                                     if changed {
                                         state.status = None;
                                     }
@@ -2510,26 +2475,24 @@ mod prompt_tests {
         use crossterm::event::KeyEvent;
 
         let mut textarea = TextArea::from(["one two"]);
-        textarea.input(textarea_input(KeyEvent::new(
-            KeyCode::Char('f'),
-            KeyModifiers::ALT,
-        )));
+        textarea.input(KeyEvent::new(KeyCode::Char('f'), KeyModifiers::ALT));
         assert_eq!(textarea.cursor(), (0, 4));
-        textarea.input(textarea_input(KeyEvent::new(
-            KeyCode::Char('k'),
-            KeyModifiers::CONTROL,
-        )));
+        textarea.input(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL));
         assert_eq!(textarea.lines(), ["one "]);
-        assert!(textarea.input(textarea_input(KeyEvent::new_with_kind(
+        assert!(textarea.input(KeyEvent::new_with_kind(
             KeyCode::Char('X'),
             KeyModifiers::SHIFT,
             KeyEventKind::Repeat,
-        ))));
+        )));
         assert_eq!(textarea.lines(), ["one X"]);
-        for code in [KeyCode::BackTab, KeyCode::F(12), KeyCode::CapsLock] {
-            assert!(!textarea.input(textarea_input(KeyEvent::new(code, KeyModifiers::NONE))));
+        for code in [KeyCode::F(12), KeyCode::CapsLock] {
+            assert!(!textarea.input(KeyEvent::new(code, KeyModifiers::NONE)));
         }
         assert_eq!(textarea.lines(), ["one X"]);
+        let back_tab =
+            ratatui_textarea::Input::from(KeyEvent::new(KeyCode::BackTab, KeyModifiers::NONE));
+        assert_eq!(back_tab.key, ratatui_textarea::Key::Tab);
+        assert!(back_tab.shift);
     }
 
     #[test]
@@ -2543,32 +2506,20 @@ mod prompt_tests {
             KeyCode::Left,
             KeyCode::Delete,
         ] {
-            textarea.input(textarea_input(KeyEvent::new(code, KeyModifiers::NONE)));
+            textarea.input(KeyEvent::new(code, KeyModifiers::NONE));
         }
         assert_eq!(textarea.lines(), ["é"]);
-        textarea.input(textarea_input(KeyEvent::new(
-            KeyCode::Char('u'),
-            KeyModifiers::CONTROL,
-        )));
+        textarea.input(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL));
         assert_eq!(textarea.lines(), ["é界"]);
-        textarea.input(textarea_input(KeyEvent::new(
-            KeyCode::Home,
-            KeyModifiers::NONE,
-        )));
-        textarea.input(textarea_input(KeyEvent::new(
-            KeyCode::Right,
-            KeyModifiers::SHIFT,
-        )));
-        textarea.input(textarea_input(KeyEvent::new(
-            KeyCode::Char('x'),
-            KeyModifiers::NONE,
-        )));
+        textarea.input(KeyEvent::new(KeyCode::Home, KeyModifiers::NONE));
+        textarea.input(KeyEvent::new(KeyCode::Right, KeyModifiers::SHIFT));
+        textarea.input(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
         assert_eq!(textarea.lines(), ["x界"]);
-        assert!(!textarea.input(textarea_input(KeyEvent::new_with_kind(
+        assert!(!textarea.input(KeyEvent::new_with_kind(
             KeyCode::Char('z'),
             KeyModifiers::NONE,
             KeyEventKind::Release,
-        ))));
+        )));
         assert_eq!(textarea.lines(), ["x界"]);
     }
 

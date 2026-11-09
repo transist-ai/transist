@@ -5,10 +5,36 @@ use crate::display::spinner::LiveProgress;
 use crate::display::summary::{SuggestedAction, SuggestedActionExecution};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
+use ratatui_textarea::TextArea;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use transist::InspectionGateDecision;
-use tui_textarea::TextArea;
+
+#[test]
+fn textarea_accepts_crossterm_events_and_renders_with_ratatui() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+    use ratatui::style::{Color, Style};
+    use ratatui::widgets::{Block, Borders};
+
+    let mut textarea = TextArea::default();
+    textarea.set_block(Block::default().borders(Borders::ALL));
+    textarea.set_style(Style::default().fg(Color::Yellow));
+    assert!(textarea.input(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE)));
+    assert!(!textarea.input(KeyEvent::new_with_kind(
+        KeyCode::Char('x'),
+        KeyModifiers::NONE,
+        KeyEventKind::Release,
+    )));
+    assert_eq!(textarea.lines(), ["x"]);
+
+    let mut terminal = Terminal::new(TestBackend::new(10, 3)).expect("terminal");
+    terminal
+        .draw(|frame| frame.render_widget(&textarea, frame.area()))
+        .expect("draw textarea");
+    let cell = &terminal.backend().buffer()[(1, 1)];
+    assert_eq!(cell.symbol(), "x");
+    assert_eq!(cell.style().fg, Some(Color::Yellow));
+}
 
 #[test]
 fn runs_browser_drills_into_direct_children_and_returns_to_parent_level() {
@@ -551,7 +577,7 @@ fn text_input_modal_renders_placeholder_in_dark_gray_when_textarea_is_empty() {
     );
 
     // Locate any cell carrying the leading 'p' of the placeholder and check
-    // its foreground style. tui-textarea writes the placeholder one character
+    // its foreground style. ratatui-textarea writes the placeholder one character
     // per cell with the configured placeholder style.
     let area = buf.area;
     let mut found_dark_gray_p = false;
@@ -3587,7 +3613,7 @@ fn workflow_inputs_overlay_renders_panes_status_and_origin_tags() {
             origin: WorkflowInputOrigin::None,
         },
     ];
-    let mut editor = tui_textarea::TextArea::from(vec!["\"https://example.com\"".to_string()]);
+    let mut editor = ratatui_textarea::TextArea::from(vec!["\"https://example.com\"".to_string()]);
     editor.set_block(
         ratatui::widgets::Block::default()
             .borders(ratatui::widgets::Borders::ALL)
@@ -3755,8 +3781,8 @@ fn workflow_inputs_partial_yaml_preserves_defaults_and_file_values_on_untouched_
         let required = item.required;
         state.editor = make_workflow_inputs_editor(item.editor_value());
         state.commit_editor();
-        state.editor.move_cursor(tui_textarea::CursorMove::End);
-        state.editor.move_cursor(tui_textarea::CursorMove::Head);
+        state.editor.move_cursor(ratatui_textarea::CursorMove::End);
+        state.editor.move_cursor(ratatui_textarea::CursorMove::Head);
         state.commit_editor();
         assert_eq!(
             (
