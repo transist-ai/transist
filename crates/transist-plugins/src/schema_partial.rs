@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 //! Dependency-aware partial validation. Unknown values are not schema instances.
 
-use super::{PackageSchemaResolver, package_uri};
+use super::{PackageSchemaRetriever, package_uri};
 use anyhow::{Result, bail};
-use jsonschema::{Draft, JSONSchema};
+use jsonschema::{Draft, Validator};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -13,7 +13,7 @@ mod coverage;
 
 #[derive(Default)]
 pub(super) struct PartialCache {
-    validators: BTreeMap<(PathBuf, String, String), JSONSchema>,
+    validators: BTreeMap<(PathBuf, String, String), Validator>,
 }
 
 enum Assessment {
@@ -43,7 +43,7 @@ impl Assessment {
 }
 
 struct Context<'a> {
-    root: &'a JSONSchema,
+    root: &'a Validator,
     directory: &'a Path,
     documents: &'a [(String, Value)],
     unknown: &'a [String],
@@ -51,7 +51,7 @@ struct Context<'a> {
 }
 
 pub(super) fn validate(
-    root: &JSONSchema,
+    root: &Validator,
     directory: &Path,
     documents: &[(String, Value)],
     instance: &Value,
@@ -93,7 +93,7 @@ impl Context<'_> {
                 .any(|unknown| unknown.starts_with(&format!("{path}/")))
     }
 
-    fn validator(&mut self, schema: &Value, document: &str) -> Result<&JSONSchema> {
+    fn validator(&mut self, schema: &Value, document: &str) -> Result<&Validator> {
         if document == self.documents[0].0 && std::ptr::eq(schema, &self.documents[0].1) {
             return Ok(self.root);
         }
@@ -109,13 +109,13 @@ impl Context<'_> {
                 object.remove("$id");
             }
             crate::record_validation_work(crate::ValidationWork::SchemaCompilation);
-            let mut options = JSONSchema::options();
+            let mut options = jsonschema::options();
             options
                 .with_draft(Draft::Draft202012)
-                .with_resolver(PackageSchemaResolver {
+                .with_retriever(PackageSchemaRetriever {
                     plugin_dir: std::fs::canonicalize(self.directory)?,
                 });
-            let compiled = options.compile(&fragment).map_err(|error| {
+            let compiled = options.build(&fragment).map_err(|error| {
                 anyhow::anyhow!(
                     "invalid partial input schema at schema path '{}'",
                     error.schema_path
