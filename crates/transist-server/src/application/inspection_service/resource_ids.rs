@@ -100,7 +100,12 @@ pub(crate) fn encode_workflow_file_id(
     digest.update(field_name.as_bytes());
     digest.update([0]);
     digest.update(relative_path.as_bytes());
-    format!("wf_{:x}", digest.finalize())
+    let hex: String = digest
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    format!("wf_{hex}")
 }
 
 fn encode_resource_id(

@@ -579,7 +579,12 @@ impl RunStorePort for LocalRunStore {
             .join(sha256);
         match read_regular_file_no_follow(&path) {
             Ok(bytes) => {
-                if format!("{:x}", Sha256::digest(&bytes)) != sha256 {
+                if Sha256::digest(&bytes)
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>()
+                    != sha256
+                {
                     bail!("workflow asset blob '{sha256}' does not match its bytes");
                 }
                 Ok(Some(bytes))
@@ -1582,7 +1587,10 @@ fn validate_workflow_asset_bundle(artifacts: &RunBirthArtifacts) -> Result<()> {
                 blob.sha256
             );
         }
-        let actual = format!("{:x}", Sha256::digest(&blob.bytes));
+        let actual: String = Sha256::digest(&blob.bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
         if actual != blob.sha256 {
             bail!(
                 "workflow asset blob '{}' does not match its bytes",

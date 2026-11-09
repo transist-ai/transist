@@ -63,7 +63,10 @@ impl PromptFilePort for LocalPromptFiles {
         Ok(PromptFileReference {
             path: absolute,
             content,
-            sha256: format!("{:x}", Sha256::digest(bytes)),
+            sha256: Sha256::digest(bytes)
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect(),
         })
     }
 

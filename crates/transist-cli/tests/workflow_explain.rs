@@ -559,7 +559,10 @@ fn actual_scalar_bindings_and_prompt_digests_or_binding_errors_preserve_the_read
         );
         assert_eq!(
             view["steps"]["root/steps/call"]["prompt"]["bound_sha256"],
-            format!("{:x}", Sha256::digest(text.as_bytes()))
+            Sha256::digest(text.as_bytes())
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
         );
         assert_eq!(
             view["steps"]["root/steps/call"]["prompt"]["binding_state"],

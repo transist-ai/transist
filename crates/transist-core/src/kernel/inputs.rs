@@ -1344,7 +1344,7 @@ pub(crate) fn recipe_network_origins(
 
 pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
-    format!("{digest:x}")
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 pub(crate) fn sorted_json_object_keys(value: &serde_json::Value) -> Vec<String> {
