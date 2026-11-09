@@ -3639,6 +3639,7 @@ Used by:
 - `atomic-waker 1.1.2`
 - `autocfg 1.5.1`
 - `base64 0.22.1`
+- `base64 0.23.1`
 - `bitflags 2.13.1`
 - `bumpalo 3.20.3`
 - `cast 0.3.0`
@@ -4989,7 +4990,7 @@ Used by:
 - `r-efi 5.3.0`
 - `r-efi 6.0.0`
 - `rand 0.8.7`
-- `rcgen 0.14.9`
+- `rcgen 0.14.10`
 - `rustversion 1.0.23`
 - `ryu 1.0.23`
 - `semver 1.0.28`
@@ -6153,7 +6154,7 @@ SOFTWARE.
 
 Used by:
 
-- `pem 3.0.6`
+- `pem 4.0.0`
 
 ```text
 The MIT License (MIT)
@@ -6452,6 +6453,5 @@ the following restrictions:
 
 3. This notice may not be removed or altered from any source distribution.
 ```
-
 
 
