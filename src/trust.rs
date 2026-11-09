@@ -207,7 +207,10 @@ mod tests {
 
     fn legacy_single_file_digest(path: &Path) -> String {
         let bytes = fs::read(path).expect("read workflow");
-        format!("{:x}", sha2::Sha256::digest(normalize_lf(&bytes)))
+        sha2::Sha256::digest(normalize_lf(&bytes))
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect()
     }
 
     fn write_file(path: &Path, content: &str) {

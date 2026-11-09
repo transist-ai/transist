@@ -782,10 +782,10 @@ fn plan_authorization(
     let mut policy =
         serde_json::to_value(suggestion.context("missing capabilities require validation")?)?;
     let authorization_identity = (workflow, missing);
-    let digest = format!(
-        "{:x}",
-        Sha256::digest(serde_json::to_vec(&authorization_identity)?)
-    );
+    let digest: String = Sha256::digest(serde_json::to_vec(&authorization_identity)?)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
     let grant_set_name = format!("authorization-{}", &digest[..16]);
     let grant_sets = policy
         .get_mut("grant_sets")
@@ -1976,7 +1976,10 @@ pub fn install_workflow_package_snapshot_in_home_with_trust(
 fn recipe_sha256(recipe_path: &Path) -> Result<String> {
     let bytes = transist_storage_local::read_regular_file_no_follow(recipe_path)
         .with_context(|| format!("failed reading compiled recipe: {}", recipe_path.display()))?;
-    Ok(format!("{:x}", Sha256::digest(bytes)))
+    Ok(Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect())
 }
 
 /// Compiles a flow file and optionally records trusted-execution install metadata.
@@ -2290,7 +2293,14 @@ fn load_compiled_recipe_with_digest(
     if recipe.workflow.id != workflow_id || recipe.workflow.version != workflow_version {
         bail!("installed_recipe_mismatch: recipe identity differs from requested workflow");
     }
-    Ok((recipe, path, format!("{:x}", Sha256::digest(raw))))
+    Ok((
+        recipe,
+        path,
+        Sha256::digest(raw)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect(),
+    ))
 }
 
 fn parse_workflow_ref(raw: &str) -> Result<(String, String)> {

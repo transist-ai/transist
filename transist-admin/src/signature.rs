@@ -187,7 +187,10 @@ pub fn decode_sha256_hex(value: &str) -> Result<[u8; 32]> {
 
 /// Computes the lowercase hex SHA-256 digest of `bytes`.
 pub fn sha256_hex(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 /// Formats a subject key string as `kind:id@version@digest`.

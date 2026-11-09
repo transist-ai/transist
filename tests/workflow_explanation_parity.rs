@@ -314,7 +314,10 @@ fn inline_prompt_digests_and_failures_match_actual_runtime_injection() {
                 .unwrap();
                 assert_eq!(
                     view["bound_sha256"],
-                    format!("{:x}", Sha256::digest(prompt.as_bytes())),
+                    Sha256::digest(prompt.as_bytes())
+                        .iter()
+                        .map(|byte| format!("{byte:02x}"))
+                        .collect::<String>(),
                     "{raw}"
                 );
                 assert_eq!(
@@ -351,7 +354,10 @@ fn inline_prompt_digests_and_failures_match_actual_runtime_injection() {
                 .unwrap();
                 assert_eq!(
                     view["bound_sha256"],
-                    format!("{:x}", Sha256::digest(prompt.as_bytes()))
+                    Sha256::digest(prompt.as_bytes())
+                        .iter()
+                        .map(|byte| format!("{byte:02x}"))
+                        .collect::<String>()
                 );
                 assert_eq!(
                     view["binding_state"], "birth_known",

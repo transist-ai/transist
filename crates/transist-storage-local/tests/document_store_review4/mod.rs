@@ -88,9 +88,12 @@ fn review4_real_kill_after_durable_link_recovers_blob_candidate_main_and_cleanup
         }
         let root = tmp.path().join("runs/run_run");
         let target = match case {
-            "blob" => root
-                .join("documents/blobs")
-                .join(format!("{:x}", Sha256::digest(b"a bytes"))),
+            "blob" => root.join("documents/blobs").join(
+                Sha256::digest(b"a bytes")
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>(),
+            ),
             "candidate" => root.join("documents/candidates/run/produce/execution_001.json"),
             _ => root.join("step_executions/produce/execution_001.json"),
         };
@@ -185,9 +188,12 @@ fn review4_real_kill_after_durable_link_recovers_blob_candidate_main_and_cleanup
             "read/recovery must not delete aliases"
         );
         let target = match case {
-            "blob" => root
-                .join("documents/blobs")
-                .join(format!("{:x}", Sha256::digest(b"a bytes"))),
+            "blob" => root.join("documents/blobs").join(
+                Sha256::digest(b"a bytes")
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>(),
+            ),
             "candidate" => root.join("documents/candidates/run/produce/execution_001.json"),
             _ => root.join("step_executions/produce/execution_001.json"),
         };
@@ -320,7 +326,10 @@ fn review4_canonical_manifest_secret_is_rejected_before_any_batch_blob_persisten
         document: "tree".into(),
         path: tree,
     });
-    let secret = format!("{:x}", Sha256::digest([]));
+    let secret: String = Sha256::digest([])
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
     assert!(
         store
             .prepare_document_revisions(
