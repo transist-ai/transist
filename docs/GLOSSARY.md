@@ -340,7 +340,8 @@ Starting a brand-new run using the persisted **Recipe** and inputs from a previo
 Compiler-owned recipe graph fields (`loop_routing_version` and edge `loop_route`)
 that explicitly identify a bounded-loop wrapper's entry and normal exit.
 Omission selects legacy routing; marked topology is validated recursively before
-executable graph consumption. Metadata support alone does not enable new routing.
+executable graph consumption. Version 1 selects cap-inclusive normal exits for
+successful wrappers; newly compiled graphs containing authored loops emit it.
 
 ## Resume
 

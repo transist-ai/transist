@@ -1,0 +1,17 @@
+{
+  "schema": "transist.recipe.v1",
+  "workflow": {"id": "frozen_loop_cap", "version": "v1"},
+  "steps": [
+    {"id": "loop", "execution": {"kind": "control", "primitive": "control.noop"},
+     "with": {"__transist_loop": {"body_steps": ["body"], "max_iters": 2, "until": "false", "max_duration_ms": 60000}}},
+    {"id": "body", "execution": {"kind": "control", "primitive": "control.noop"}},
+    {"id": "mandatory_successor", "execution": {"kind": "control", "primitive": "control.noop"}},
+    {"id": "finish", "execution": {"kind": "control", "primitive": "control.finish"}}
+  ],
+  "graph": {"entry": "loop", "max_iterations": 10000, "edges": [
+    {"from": "loop", "to": "body", "event": "on_success", "guard": "NOT (false)"},
+    {"from": "loop", "to": "mandatory_successor", "event": "on_success", "guard": "false"},
+    {"from": "body", "to": "loop", "event": "on_success", "loop": {}},
+    {"from": "mandatory_successor", "to": "finish", "event": "on_success"}
+  ]}
+}

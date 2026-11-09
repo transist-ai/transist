@@ -29,6 +29,8 @@ use transist_protocol::{
     WorkflowRef,
 };
 
+mod loop_cap_routing;
+
 struct AllowPluginVerification;
 
 struct TestPluginMetadata;

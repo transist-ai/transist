@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 use crate::flow::{Flow, FlowIfBlock, FlowLoopBlock, FlowStep};
 use std::collections::BTreeSet;
-use transist_protocol::{RecipeGraph, RecipeGraphEdge, RecipeLoop};
+use transist_protocol::{
+    RecipeGraph, RecipeGraphEdge, RecipeLoop, RecipeLoopRoute, RecipeLoopRouteRole,
+};
 
 const EVENT_ON_SUCCESS: &str = "on_success";
 
@@ -17,17 +19,22 @@ pub(crate) fn compile_graph(flow: &Flow) -> RecipeGraph {
                     if_block
                         .then_branch
                         .iter()
-                        .map(|member| member.ref_step.clone()),
+                        .map(|member| member.ref_step.trim().to_string()),
                 );
                 members.extend(
                     if_block
                         .else_branch
                         .iter()
-                        .map(|member| member.ref_step.clone()),
+                        .map(|member| member.ref_step.trim().to_string()),
                 );
             }
             if let Some(loop_block) = step.loop_block.as_ref() {
-                members.extend(loop_block.body.iter().map(|member| member.ref_step.clone()));
+                members.extend(
+                    loop_block
+                        .body
+                        .iter()
+                        .map(|member| member.ref_step.trim().to_string()),
+                );
             }
             members
         })
@@ -63,7 +70,11 @@ pub(crate) fn compile_graph(flow: &Flow) -> RecipeGraph {
         entry: flow.steps.first().expect("validated step").id.clone(),
         edges,
         max_iterations: Some(10_000),
-        loop_routing_version: None,
+        loop_routing_version: flow
+            .steps
+            .iter()
+            .any(|step| step.loop_block.is_some())
+            .then_some(1),
     }
 }
 
@@ -77,11 +88,11 @@ fn compile_if_edges(
     let then_first = if_block
         .then_branch
         .first()
-        .map(|entry| entry.ref_step.clone());
+        .map(|entry| entry.ref_step.trim().to_string());
     let else_first = if_block
         .else_branch
         .first()
-        .map(|entry| entry.ref_step.clone());
+        .map(|entry| entry.ref_step.trim().to_string());
     let next_after = flow
         .steps
         .get(step_idx + if_block.then_branch.len() + if_block.else_branch.len() + 1)
@@ -121,7 +132,7 @@ fn compile_if_edges(
         &if_block
             .then_branch
             .iter()
-            .map(|entry| entry.ref_step.clone())
+            .map(|entry| entry.ref_step.trim().to_string())
             .collect::<Vec<_>>(),
         next_after.clone(),
         edges,
@@ -130,7 +141,7 @@ fn compile_if_edges(
         &if_block
             .else_branch
             .iter()
-            .map(|entry| entry.ref_step.clone())
+            .map(|entry| entry.ref_step.trim().to_string())
             .collect::<Vec<_>>(),
         next_after,
         edges,
@@ -147,7 +158,7 @@ fn compile_loop_edges(
     let body_ids = loop_block
         .body
         .iter()
-        .map(|entry| entry.ref_step.clone())
+        .map(|entry| entry.ref_step.trim().to_string())
         .collect::<Vec<_>>();
     let next_after = flow
         .steps
@@ -172,7 +183,10 @@ fn compile_loop_edges(
             event: EVENT_ON_SUCCESS.to_string(),
             guard: Some(loop_guard.0),
             r#loop: None,
-            loop_route: None,
+            loop_route: Some(RecipeLoopRoute {
+                owner_step_id: step.id.clone(),
+                role: RecipeLoopRouteRole::Enter,
+            }),
         });
     }
     if let Some(next) = next_after.clone() {
@@ -182,7 +196,10 @@ fn compile_loop_edges(
             event: EVENT_ON_SUCCESS.to_string(),
             guard: Some(loop_guard.1),
             r#loop: None,
-            loop_route: None,
+            loop_route: Some(RecipeLoopRoute {
+                owner_step_id: step.id.clone(),
+                role: RecipeLoopRouteRole::Exit,
+            }),
         });
     }
 

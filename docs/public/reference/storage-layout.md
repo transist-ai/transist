@@ -194,8 +194,9 @@ prefixes. No schema migration is required.
   normal successor, consistent with wrapper/body/repeat topology. Validation is
   recursive and rejects unsupported versions and explicit null or malformed
   metadata before executable graph consumption. Absent fields are omitted on
-  serialization and preserve legacy bytes and behavior. The compiler does not
-  emit this metadata yet; metadata support alone does not change cap routing.
+  serialization and preserve legacy bytes and behavior. Newly compiled graphs
+  containing authored loops emit version 1, selecting cap-inclusive normal exits
+  for successful wrappers. Loading an unmarked prepared recipe never upgrades it.
   Never strip markers or rewrite prepared snapshots to force compatibility with
   an older runtime; preserve the matching runtime/home pair.
 - `workflow_assets/`: Present when snapshot-backed fresh run birth resolves authored `prompt_file` or shell `source://` assets. `manifest.json` maps logical asset paths to content-addressed blobs under `blobs/`. The directory is written as part of atomic run birth, is private runtime state, and is not included in inspection or snapshot-export payloads. Snapshot-backed prompt and shell dispatch use these captured bytes; legacy v1 runs retain their authored-source resolution behavior. Workflow assets must not contain secrets.
