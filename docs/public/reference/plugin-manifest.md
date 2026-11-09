@@ -294,6 +294,9 @@ schema prevents installation before any action can run.
 - `$ref` may use JSON Pointer fragments and relative package paths only.
   Remote URLs, absolute or `file:` URLs, parent traversal, and symlink escapes
   are rejected without network access.
+- `$dynamicRef` is unsupported and rejected before full or partial validation;
+  use static package-local `$ref` instead. Property names and literal `enum` or
+  `const` values containing `$dynamicRef` remain ordinary data.
 - The adapter validates the materialized input before handshake, process spawn,
   or MCP startup. A successful APP result or mapped MCP `CallToolResult` output
   is validated before result data are converted. MCP `structuredContent` is the

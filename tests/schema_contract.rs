@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: MPL-2.0
 
-use jsonschema::{Draft, JSONSchema, SchemaResolver, SchemaResolverError};
+use jsonschema::{Draft, Retrieve, Uri, Validator};
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use url::Url;
 fn load_json(path: &Path) -> serde_json::Value {
     serde_json::from_str(&fs::read_to_string(path).expect("read schema")).expect("parse schema")
 }
 
-fn compile_schema(path: &Path) -> JSONSchema {
+fn compile_schema(path: &Path) -> Validator {
     compile_repo_schema(path)
 }
 
@@ -19,19 +18,16 @@ fn compile_schema(path: &Path) -> JSONSchema {
 /// disk. This keeps the alias schemas (pure `$ref` to their canonical
 /// versioned files) and shared component schemas (e.g. `error.schema.json`)
 /// compiling offline without duplicating definitions.
-struct RepoSchemaResolver {
+struct RepoSchemaRetriever {
     repo_root: PathBuf,
 }
 
-impl SchemaResolver for RepoSchemaResolver {
-    fn resolve(
-        &self,
-        _root_schema: &Value,
-        url: &Url,
-        _original_reference: &str,
-    ) -> Result<Arc<Value>, SchemaResolverError> {
+impl Retrieve for RepoSchemaRetriever {
+    /// Maps canonical repository schema URIs to local files without network I/O.
+    fn retrieve(&self, uri: &Uri<&str>) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        let url = Url::parse(uri.as_str())?;
         if url.scheme() != "https" || url.host_str() != Some("transist.dev") {
-            return Err(anyhow::anyhow!("unsupported schema URL '{url}'"));
+            return Err(anyhow::anyhow!("unsupported schema URL '{url}'").into());
         }
         let relative = url.path().trim_start_matches('/');
         let file = self.repo_root.join(relative);
@@ -47,7 +43,7 @@ impl SchemaResolver for RepoSchemaResolver {
                 file.display()
             )
         })?;
-        Ok(Arc::new(document))
+        Ok(document)
     }
 }
 
@@ -55,15 +51,15 @@ fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
-fn compile_repo_schema(path: &Path) -> JSONSchema {
+fn compile_repo_schema(path: &Path) -> Validator {
     let document = load_json(path);
-    let mut options = jsonschema::CompilationOptions::default();
+    let mut options = jsonschema::options();
     options
         .with_draft(Draft::Draft202012)
-        .with_resolver(RepoSchemaResolver {
+        .with_retriever(RepoSchemaRetriever {
             repo_root: repo_root(),
         });
-    options.compile(&document).unwrap_or_else(|err| {
+    options.build(&document).unwrap_or_else(|err| {
         panic!(
             "failed compiling schema '{}' at schema path '{}'",
             path.display(),
@@ -92,9 +88,9 @@ fn collect_json_files(dir: &Path, out: &mut Vec<PathBuf>) {
 }
 
 /// Validates `instance` against `schema`, panicking with a readable error list
-/// on failure. `JSONSchema::validate` returns an iterator that does not
+/// on failure. `Validator::validate` returns an iterator that does not
 /// implement `Debug`, so the failures must be collected and formatted manually.
-fn assert_valid(schema: &JSONSchema, instance: &Value, label: &str) {
+fn assert_valid(schema: &Validator, instance: &Value, label: &str) {
     if let Some(errors) = schema.validate(instance).err() {
         let messages: Vec<String> = errors
             .map(|err| format!("at '{}': {}", err.instance_path, err))
@@ -272,9 +268,9 @@ fn document_storage_schemas_validate_real_initial_and_execution_publication_reco
     let validate_definition = |definition: &str, value: &Value| {
         let mut document = load_json(&schema_path);
         document["$ref"] = format!("#/$defs/{definition}").into();
-        let schema = JSONSchema::options()
+        let schema = jsonschema::options()
             .with_draft(Draft::Draft202012)
-            .compile(&document)
+            .build(&document)
             .unwrap();
         assert_valid(&schema, value, definition);
     };
@@ -1655,9 +1651,9 @@ fn managed_document_binding_schema_enforces_recursive_process_only_action_data()
     let mut location_schema =
         load_json(&schema_dir().join("runtime/managed-documents.v1.schema.json"));
     location_schema["$ref"] = "#/$defs/bindingLocation".into();
-    let location_schema = JSONSchema::options()
+    let location_schema = jsonschema::options()
         .with_draft(Draft::Draft202012)
-        .compile(&location_schema)
+        .build(&location_schema)
         .unwrap();
     let mut metadata = serde_json::to_value(metadata).unwrap();
     assert_valid(&location_schema, &metadata, "compiled document location");
