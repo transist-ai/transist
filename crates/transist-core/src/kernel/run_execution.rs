@@ -1792,7 +1792,7 @@ impl RuntimeKernel {
                 if record.status == KernelRunStatus::Canceled && record.run_id == *root_run_id {
                     self.services.control.clear_cancel_request(root_run_id)?;
                 }
-                let graph = build_execution_graph(&recipe);
+                let graph = build_execution_graph(&recipe)?;
                 let mut snapshot = record.snapshot();
                 self.ensure_snapshot_steps(
                     &mut snapshot,
@@ -4230,7 +4230,7 @@ impl RuntimeKernel {
     ) -> Result<RecoveredLoadedRun> {
         self.services.run_store.cleanup_stale_staging(home_dir)?;
         let step_ids: Vec<String> = recipe.steps.iter().map(|step| step.id.clone()).collect();
-        let graph = build_execution_graph(recipe);
+        let graph = build_execution_graph(recipe)?;
         let mut persisted_record = record.clone();
         let mut snapshot = record.snapshot();
         self.ensure_snapshot_steps(&mut snapshot, &step_ids);
@@ -4727,7 +4727,7 @@ impl RuntimeKernel {
                 continue;
             }
             let recipe = self.load_persisted_recipe(&run_id, &record)?;
-            let graph = build_execution_graph(&recipe);
+            let graph = build_execution_graph(&recipe)?;
             let mut snapshot = record.snapshot();
             self.recover_execution_records(&run_id, &recipe, &graph, &mut record, &mut snapshot)?;
             if snapshot

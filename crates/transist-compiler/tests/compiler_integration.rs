@@ -293,6 +293,7 @@ fn recipe_graph_builder_classifies_edges() {
                     event: "on_success".to_string(),
                     guard: Some("inputs.keep_going".to_string()),
                     r#loop: None,
+                    loop_route: None,
                 },
                 RecipeGraphEdge {
                     from: "loop_step".to_string(),
@@ -300,6 +301,7 @@ fn recipe_graph_builder_classifies_edges() {
                     event: "on_success".to_string(),
                     guard: Some("NOT (inputs.keep_going)".to_string()),
                     r#loop: None,
+                    loop_route: None,
                 },
                 RecipeGraphEdge {
                     from: "loop_body".to_string(),
@@ -311,9 +313,11 @@ fn recipe_graph_builder_classifies_edges() {
                         until_expr: None,
                         max_iters: None,
                     }),
+                    loop_route: None,
                 },
             ],
             max_iterations: Some(10_000),
+            loop_routing_version: None,
         }),
         capabilities: Default::default(),
         capabilities_persisted: false,
@@ -2265,8 +2269,12 @@ fn compiler_accepts_loop_until_referencing_var_set_in_body() {
         source_path: Some(tmp.path().join("workflow.yaml")),
     };
 
-    compile_flow_in_home(&home_dir, &flow)
+    let recipe = compile_flow_in_home(&home_dir, &flow)
         .expect("loop until referencing body-set var should compile");
+    let graph = recipe.graph.as_ref().unwrap();
+    assert_eq!(graph.loop_routing_version, None);
+    assert!(graph.edges.iter().all(|edge| edge.loop_route.is_none()));
+    transist_protocol::validate_recipe_loop_routing(&recipe).unwrap();
 }
 
 // ── plugin_version ───────────────────────────────────────────────────────────

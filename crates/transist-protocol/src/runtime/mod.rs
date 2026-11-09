@@ -7,6 +7,8 @@ mod dataflow;
 pub use dataflow::*;
 mod documents;
 pub use documents::*;
+mod loop_routing;
+pub use loop_routing::validate_recipe_loop_routing;
 
 pub use crate::filesystem_policy::{
     FilesystemPolicy, FilesystemPolicySource, WorkspaceAccessMode, WorkspaceAccessPolicy,
@@ -288,6 +290,13 @@ pub enum RecipePromptSource {
 /// Graph edge describing a possible transition between recipe steps.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RecipeGraphEdge {
+    /// Compiler-owned bounded-loop edge identity; absent for legacy routing.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "loop_routing::present_metadata"
+    )]
+    pub loop_route: Option<RecipeLoopRoute>,
     /// Source step id.
     pub from: String,
     /// Destination step id.
@@ -319,6 +328,13 @@ pub struct RecipeLoop {
 /// Compiled transition graph for a recipe.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RecipeGraph {
+    /// Explicit bounded-loop routing revision. Missing selects legacy semantics.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "loop_routing::present_metadata"
+    )]
+    pub loop_routing_version: Option<u32>,
     /// Entry step id.
     pub entry: String,
     /// Directed edges between steps.
@@ -327,6 +343,26 @@ pub struct RecipeGraph {
     /// Optional global graph iteration cap.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_iterations: Option<u32>,
+}
+
+/// Compiler-owned identification of one loop wrapper's entry or normal exit.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RecipeLoopRoute {
+    /// Recipe-local loop wrapper step id.
+    pub owner_step_id: String,
+    /// Transition role relative to the wrapper's declared body topology.
+    pub role: RecipeLoopRouteRole,
+}
+
+/// Role of a compiler-owned bounded-loop transition.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RecipeLoopRouteRole {
+    /// Enter the loop body.
+    Enter,
+    /// Leave the loop through its normal successor.
+    Exit,
 }
 
 /// Fully compiled workflow recipe consumed by the runtime kernel.
@@ -629,6 +665,255 @@ mod tests {
         assert_eq!(record.actor, None);
         assert_eq!(record.actor_source, None);
         assert_eq!(record.reason.as_deref(), Some("looks good"));
+    }
+
+    fn loop_routing_recipe() -> Recipe {
+        let mut owner = control_step("loop");
+        owner.with.insert(
+            "__transist_loop".into(),
+            json!({
+                "body_steps": ["body"], "max_iters": 2, "until": "false",
+                "max_duration_ms": 1000
+            })
+            .into(),
+        );
+        let mut recipe = recipe_with(
+            vec![owner, invoke_step("body"), control_step("next")],
+            vec![],
+        );
+        recipe.graph = Some(RecipeGraph {
+            loop_routing_version: Some(1),
+            entry: "loop".into(),
+            max_iterations: None,
+            edges: vec![
+                RecipeGraphEdge {
+                    from: "loop".into(),
+                    to: "body".into(),
+                    event: "on_success".into(),
+                    guard: Some("NOT (false)".into()),
+                    r#loop: None,
+                    loop_route: Some(RecipeLoopRoute {
+                        owner_step_id: "loop".into(),
+                        role: RecipeLoopRouteRole::Enter,
+                    }),
+                },
+                RecipeGraphEdge {
+                    from: "loop".into(),
+                    to: "next".into(),
+                    event: "on_success".into(),
+                    guard: Some("false".into()),
+                    r#loop: None,
+                    loop_route: Some(RecipeLoopRoute {
+                        owner_step_id: "loop".into(),
+                        role: RecipeLoopRouteRole::Exit,
+                    }),
+                },
+                RecipeGraphEdge {
+                    from: "body".into(),
+                    to: "loop".into(),
+                    event: "on_success".into(),
+                    guard: None,
+                    r#loop: Some(RecipeLoop {
+                        while_expr: None,
+                        until_expr: None,
+                        max_iters: None,
+                    }),
+                    loop_route: None,
+                },
+            ],
+        });
+        recipe
+    }
+
+    #[test]
+    fn loop_routing_metadata_round_trips_and_terminal_loop_needs_no_exit() {
+        let mut recipe = loop_routing_recipe();
+        validate_recipe_loop_routing(&recipe).unwrap();
+        let bytes = serde_json::to_vec(&recipe).unwrap();
+        let restored: Recipe = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(recipe, restored);
+        validate_recipe_loop_routing(&restored).unwrap();
+        recipe.steps.pop();
+        recipe.graph.as_mut().unwrap().edges.remove(1);
+        validate_recipe_loop_routing(&recipe).unwrap();
+    }
+
+    #[test]
+    fn loop_routing_absent_metadata_preserves_legacy_graph_bytes() {
+        let bytes = br#"{"entry":"a","edges":[{"from":"a","to":"b","event":"on_success"}],"max_iterations":7}"#;
+        let graph: RecipeGraph = serde_json::from_slice(bytes).unwrap();
+        assert_eq!(graph.loop_routing_version, None);
+        assert_eq!(graph.edges[0].loop_route, None);
+        assert_eq!(serde_json::to_vec(&graph).unwrap(), bytes);
+    }
+
+    #[test]
+    fn loop_routing_explicit_null_and_malformed_metadata_fail_deserialization() {
+        for value in [json!(null), json!("1"), json!(-1), json!(1.5), json!({})] {
+            let graph = json!({"entry":"a", "loop_routing_version": value});
+            assert!(serde_json::from_value::<RecipeGraph>(graph).is_err());
+        }
+        for value in [
+            json!(null),
+            json!(1),
+            json!({}),
+            json!({"owner_step_id":"loop", "role":"repeat"}),
+            json!({"owner_step_id":"loop", "role":null}),
+            json!({"owner_step_id":"loop"}),
+            json!({"role":"enter"}),
+            json!({"owner_step_id":null, "role":"enter"}),
+            json!({"owner_step_id":"loop", "role":"enter", "extra":true}),
+        ] {
+            let edge = json!({"from":"a", "to":"b", "event":"on_success", "loop_route":value});
+            assert!(serde_json::from_value::<RecipeGraphEdge>(edge).is_err());
+        }
+    }
+
+    #[test]
+    fn loop_routing_rejects_invalid_versions_roles_owners_and_topology() {
+        let original = serde_json::to_value(loop_routing_recipe()).unwrap();
+        for (pointer, value) in [
+            ("/graph/loop_routing_version", json!(0)),
+            ("/graph/loop_routing_version", json!(2)),
+            ("/graph/entry", json!("missing")),
+            ("/graph/edges/0/to", json!("missing")),
+            ("/graph/edges/0/from", json!("missing")),
+            ("/graph/edges/0/loop_route/owner_step_id", json!("missing")),
+            ("/graph/edges/0/loop_route/owner_step_id", json!("body")),
+            ("/graph/edges/0/loop_route/owner_step_id", json!("")),
+            ("/graph/edges/0/loop_route/role", json!("exit")),
+            ("/graph/edges/1/to", json!("body")),
+            ("/graph/edges/1/event", json!("on_failure")),
+            ("/graph/edges/2/to", json!("next")),
+            ("/graph/edges/2/loop", json!(null)),
+            ("/steps/1/id", json!("loop")),
+            ("/steps/0/with/__transist_loop/body_steps", json!([])),
+            ("/steps/0/with/__transist_loop/body_steps", json!(["next"])),
+            ("/steps/0/with/__transist_loop/max_iters", json!(0)),
+            (
+                "/steps/0/execution",
+                json!({"kind":"control", "primitive":"control.finish"}),
+            ),
+            (
+                "/steps/0/execution",
+                json!({"kind":"invoke", "adapter":"process", "plugin":"shell", "action":"echo", "execution_kind":"external"}),
+            ),
+        ] {
+            let mut invalid = original.clone();
+            *invalid.pointer_mut(pointer).unwrap() = value;
+            let recipe: Recipe = serde_json::from_value(invalid).unwrap();
+            assert!(
+                validate_recipe_loop_routing(&recipe).is_err(),
+                "accepted {pointer}"
+            );
+        }
+        for pointer in [
+            "/graph/loop_routing_version",
+            "/graph/edges/0/loop_route",
+            "/graph/edges/1/loop_route",
+            "/steps/0/with/__transist_loop",
+        ] {
+            let mut invalid = original.clone();
+            let (parent, key) = pointer.rsplit_once('/').unwrap();
+            invalid
+                .pointer_mut(parent)
+                .unwrap()
+                .as_object_mut()
+                .unwrap()
+                .remove(key);
+            let recipe: Recipe = serde_json::from_value(invalid).unwrap();
+            assert!(
+                validate_recipe_loop_routing(&recipe).is_err(),
+                "accepted missing {pointer}"
+            );
+        }
+        let mut duplicate = loop_routing_recipe();
+        let graph = duplicate.graph.as_mut().unwrap();
+        graph.edges.push(graph.edges[0].clone());
+        assert!(validate_recipe_loop_routing(&duplicate).is_err());
+    }
+
+    #[test]
+    fn loop_routing_missing_exit_is_rejected_only_for_marked_graphs() {
+        let mut recipe = loop_routing_recipe();
+        recipe.graph.as_mut().unwrap().edges.remove(1);
+        assert!(validate_recipe_loop_routing(&recipe).is_err());
+        recipe.graph.as_mut().unwrap().loop_routing_version = None;
+        for edge in &mut recipe.graph.as_mut().unwrap().edges {
+            edge.loop_route = None;
+        }
+        validate_recipe_loop_routing(&recipe).unwrap();
+    }
+
+    #[test]
+    fn loop_routing_recursively_validates_subflows_and_cleanup_children() {
+        for cleanup in [false, true] {
+            let mut child = loop_routing_recipe();
+            child.graph.as_mut().unwrap().loop_routing_version = Some(9);
+            let mut wrapper = control_step("child");
+            wrapper.execution = StepExecutionDescriptor::Subflow {
+                recipe: Box::new(child),
+            };
+            let parent = if cleanup {
+                recipe_with(
+                    vec![],
+                    vec![RecipeCleanupStep {
+                        when: vec![CleanupTrigger::Failed],
+                        step: wrapper,
+                    }],
+                )
+            } else {
+                recipe_with(vec![wrapper], vec![])
+            };
+            assert!(validate_recipe_loop_routing(&parent).is_err());
+        }
+    }
+
+    #[test]
+    fn loop_routing_requires_complete_metadata_for_every_wrapper() {
+        let mut recipe = loop_routing_recipe();
+        // A second loop is still required to opt in, even if no route names it.
+        let mut second = recipe.steps[0].clone();
+        second.id = "second".into();
+        second.with.insert(
+            "__transist_loop".into(),
+            json!({"body_steps":["second_body"], "max_iters":2}).into(),
+        );
+        recipe.steps.extend([second, invoke_step("second_body")]);
+        // The first successor remains "next"; the new terminal wrapper is incomplete.
+        assert!(validate_recipe_loop_routing(&recipe).is_err());
+        let graph = recipe.graph.as_mut().unwrap();
+        graph.edges.extend([
+            RecipeGraphEdge {
+                from: "second".into(),
+                to: "second_body".into(),
+                event: "on_success".into(),
+                guard: Some("true".into()),
+                r#loop: None,
+                loop_route: Some(RecipeLoopRoute {
+                    owner_step_id: "second".into(),
+                    role: RecipeLoopRouteRole::Enter,
+                }),
+            },
+            RecipeGraphEdge {
+                from: "second_body".into(),
+                to: "second".into(),
+                event: "on_success".into(),
+                guard: None,
+                loop_route: None,
+                r#loop: Some(RecipeLoop {
+                    while_expr: None,
+                    until_expr: None,
+                    max_iters: None,
+                }),
+            },
+        ]);
+        validate_recipe_loop_routing(&recipe).unwrap();
+        // Subflow wrappers use the same recipe-local topology contract.
+        recipe.steps[0].execution = StepExecutionDescriptor::Subflow {
+            recipe: Box::new(recipe_with(vec![control_step("finish")], vec![])),
+        };
+        validate_recipe_loop_routing(&recipe).unwrap();
     }
 
     #[test]

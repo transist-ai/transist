@@ -103,6 +103,7 @@ impl RuntimeKernel {
                 run_id
             )
         })?;
+        transist_protocol::validate_recipe_loop_routing(&parsed).map_err(anyhow::Error::msg)?;
         if parsed.workspace != record.workspace {
             bail!(
                 "run '{}' persisted recipe workspace does not match run state workspace",

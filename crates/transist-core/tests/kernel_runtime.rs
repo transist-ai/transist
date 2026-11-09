@@ -2022,6 +2022,7 @@ fn looping_child_recipe(workflow_id: &str) -> Recipe {
                     event: "on_success".to_string(),
                     guard: Some("executions < 2".to_string()),
                     r#loop: None,
+                    loop_route: None,
                 },
                 RecipeGraphEdge {
                     from: "loop".to_string(),
@@ -2029,6 +2030,7 @@ fn looping_child_recipe(workflow_id: &str) -> Recipe {
                     event: "on_success".to_string(),
                     guard: Some("executions >= 2".to_string()),
                     r#loop: None,
+                    loop_route: None,
                 },
                 RecipeGraphEdge {
                     from: "nested".to_string(),
@@ -2040,9 +2042,11 @@ fn looping_child_recipe(workflow_id: &str) -> Recipe {
                         until_expr: None,
                         max_iters: None,
                     }),
+                    loop_route: None,
                 },
             ],
             max_iterations: None,
+            loop_routing_version: None,
         }),
     )
 }
@@ -2404,6 +2408,7 @@ fn shared_recipe_input_binding_helper_applies_defaults() {
             entry: "finish".to_string(),
             edges: Vec::new(),
             max_iterations: None,
+            loop_routing_version: None,
         }),
     );
 
@@ -2462,6 +2467,7 @@ fn subflow_input_binding_failure_is_caught_by_root_preflight_before_child_run_cr
             entry: "finish".to_string(),
             edges: Vec::new(),
             max_iterations: None,
+            loop_routing_version: None,
         }),
     );
     let parent_recipe = recipe(
@@ -2485,8 +2491,10 @@ fn subflow_input_binding_failure_is_caught_by_root_preflight_before_child_run_cr
                 event: "on_success".to_string(),
                 guard: None,
                 r#loop: None,
+                loop_route: None,
             }],
             max_iterations: None,
+            loop_routing_version: None,
         }),
     );
 
@@ -5159,6 +5167,7 @@ fn guard_blocked_skipped_step_remains_skipped_across_resume() {
                     event: "on_success".to_string(),
                     guard: Some("false".to_string()),
                     r#loop: None,
+                    loop_route: None,
                 },
                 RecipeGraphEdge {
                     from: "a".to_string(),
@@ -5166,9 +5175,11 @@ fn guard_blocked_skipped_step_remains_skipped_across_resume() {
                     event: "on_success".to_string(),
                     guard: Some("true".to_string()),
                     r#loop: None,
+                    loop_route: None,
                 },
             ],
             max_iterations: None,
+            loop_routing_version: None,
         }),
     );
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -5843,6 +5854,97 @@ fn start_recipe_defaults_test_mode_to_false_for_release_workflow() {
 
     let record = run_store.run_json(&run_id);
     assert_eq!(record["test_mode"], serde_json::json!(false));
+}
+
+#[test]
+fn loop_routing_invalid_metadata_rejects_birth_before_probes_or_dispatch() {
+    use transist_protocol::{CleanupTrigger, RecipeCleanupStep};
+    for location in ["root", "subflow", "cleanup"] {
+        let execution = Arc::new(RecordingExecution::default());
+        let preflight = Arc::new(RecordingPreflight::default());
+        let run_store = Arc::new(MemoryRunStore::default());
+        let events = Arc::new(RecordingEvents::default());
+        let kernel = test_kernel_with_preflight(
+            execution.clone(),
+            preflight.clone(),
+            run_store.clone(),
+            events.clone(),
+        );
+        let mut invalid = looping_child_recipe("invalid_loop");
+        // Version 1 requires complete routes; legacy edges cannot be upgraded by loading.
+        invalid.graph.as_mut().unwrap().loop_routing_version = Some(1);
+        let recipe = match location {
+            "root" => invalid,
+            "subflow" => recipe(
+                "parent",
+                vec![invoke_step("first"), subflow_step("child", invalid)],
+                None,
+            ),
+            _ => {
+                let mut parent = recipe("parent", vec![invoke_step("first")], None);
+                parent.cleanup.push(RecipeCleanupStep {
+                    when: vec![CleanupTrigger::Failed],
+                    step: subflow_step("child", invalid),
+                });
+                parent
+            }
+        };
+        let tmp = tempfile::tempdir_in("/tmp").expect("tempdir");
+        let home_dir = test_home_dir(&tmp);
+        let error = kernel
+            .execute_recipe(tmp.path(), &home_dir, &recipe, Some("invalid-loop"))
+            .expect_err("invalid routing must fail before run birth");
+        assert!(
+            error.to_string().contains("invalid loop routing"),
+            "{error:#}"
+        );
+        assert!(execution.invocations().is_empty(), "{location}");
+        assert!(preflight.invocations().is_empty(), "{location}");
+        assert!(run_store.step_executions().is_empty());
+        assert!(!run_store.has_run("invalid-loop"));
+        assert!(events.snapshot().is_empty());
+    }
+}
+
+#[test]
+fn loop_routing_invalid_persisted_metadata_rejects_reentry_before_dispatch() {
+    let execution = Arc::new(RecordingExecution::default());
+    let preflight = Arc::new(RecordingPreflight::default());
+    let run_store = Arc::new(MemoryRunStore::default());
+    let events = Arc::new(RecordingEvents::default());
+    let kernel = test_kernel_with_preflight(
+        execution.clone(),
+        preflight.clone(),
+        run_store.clone(),
+        events,
+    );
+    let tmp = tempfile::tempdir_in("/tmp").expect("tempdir");
+    let home_dir = test_home_dir(&tmp);
+    let mut recipe = looping_child_recipe("persisted_loop");
+    let run_id = kernel
+        .start_recipe(
+            tmp.path(),
+            &home_dir,
+            &recipe,
+            Some("persisted-loop"),
+            BTreeMap::new(),
+        )
+        .unwrap();
+    let probes = preflight.invocations().len();
+    recipe.graph.as_mut().unwrap().loop_routing_version = Some(2);
+    run_store.inject_recipe_snapshot(&run_id, &recipe);
+    let error = kernel
+        .run_started_run(tmp.path(), &home_dir, &run_id)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("unsupported loop_routing_version 2"),
+        "{error:#}"
+    );
+    assert!(execution.invocations().is_empty());
+    assert_eq!(preflight.invocations().len(), probes);
+    assert!(run_store.step_executions().is_empty());
 }
 
 #[test]
@@ -6754,6 +6856,7 @@ fn successful_subflow_is_rerun_when_loop_resets_parent_step() {
                     event: "on_success".to_string(),
                     guard: Some("executions < 3".to_string()),
                     r#loop: None,
+                    loop_route: None,
                 },
                 RecipeGraphEdge {
                     from: "loop".to_string(),
@@ -6761,6 +6864,7 @@ fn successful_subflow_is_rerun_when_loop_resets_parent_step() {
                     event: "on_success".to_string(),
                     guard: Some("executions >= 3".to_string()),
                     r#loop: None,
+                    loop_route: None,
                 },
                 RecipeGraphEdge {
                     from: "review_child".to_string(),
@@ -6772,9 +6876,11 @@ fn successful_subflow_is_rerun_when_loop_resets_parent_step() {
                         until_expr: None,
                         max_iters: None,
                     }),
+                    loop_route: None,
                 },
             ],
             max_iterations: None,
+            loop_routing_version: None,
         }),
     );
 
@@ -6849,6 +6955,7 @@ fn successful_looping_subflow_is_rerun_from_scratch_when_parent_loop_resets_step
                     event: "on_success".to_string(),
                     guard: Some("executions < 3".to_string()),
                     r#loop: None,
+                    loop_route: None,
                 },
                 RecipeGraphEdge {
                     from: "loop".to_string(),
@@ -6856,6 +6963,7 @@ fn successful_looping_subflow_is_rerun_from_scratch_when_parent_loop_resets_step
                     event: "on_success".to_string(),
                     guard: Some("executions >= 3".to_string()),
                     r#loop: None,
+                    loop_route: None,
                 },
                 RecipeGraphEdge {
                     from: "review_child".to_string(),
@@ -6867,9 +6975,11 @@ fn successful_looping_subflow_is_rerun_from_scratch_when_parent_loop_resets_step
                         until_expr: None,
                         max_iters: None,
                     }),
+                    loop_route: None,
                 },
             ],
             max_iterations: None,
+            loop_routing_version: None,
         }),
     );
 
@@ -6944,8 +7054,10 @@ fn rerunning_started_run_resets_successful_nested_subflows_from_scratch() {
                 event: "on_success".to_string(),
                 guard: None,
                 r#loop: None,
+                loop_route: None,
             }],
             max_iterations: None,
+            loop_routing_version: None,
         }),
     );
     let review_cycle_recipe = recipe(
@@ -6962,8 +7074,10 @@ fn rerunning_started_run_resets_successful_nested_subflows_from_scratch() {
                 event: "on_success".to_string(),
                 guard: None,
                 r#loop: None,
+                loop_route: None,
             }],
             max_iterations: None,
+            loop_routing_version: None,
         }),
     );
 
@@ -6991,6 +7105,7 @@ fn rerunning_started_run_resets_successful_nested_subflows_from_scratch() {
                     event: "on_success".to_string(),
                     guard: Some("executions < 3".to_string()),
                     r#loop: None,
+                    loop_route: None,
                 },
                 RecipeGraphEdge {
                     from: "loop".to_string(),
@@ -6998,6 +7113,7 @@ fn rerunning_started_run_resets_successful_nested_subflows_from_scratch() {
                     event: "on_success".to_string(),
                     guard: Some("executions >= 3".to_string()),
                     r#loop: None,
+                    loop_route: None,
                 },
                 RecipeGraphEdge {
                     from: "review_cycle".to_string(),
@@ -7009,9 +7125,11 @@ fn rerunning_started_run_resets_successful_nested_subflows_from_scratch() {
                         until_expr: None,
                         max_iters: None,
                     }),
+                    loop_route: None,
                 },
             ],
             max_iterations: None,
+            loop_routing_version: None,
         }),
     );
 
@@ -7080,8 +7198,10 @@ fn subflow_rerun_mode_fresh_creates_a_new_child_run_per_loop_iteration() {
                 event: "on_success".to_string(),
                 guard: None,
                 r#loop: None,
+                loop_route: None,
             }],
             max_iterations: None,
+            loop_routing_version: None,
         }),
     );
     let review_cycle_recipe = recipe(
@@ -7098,8 +7218,10 @@ fn subflow_rerun_mode_fresh_creates_a_new_child_run_per_loop_iteration() {
                 event: "on_success".to_string(),
                 guard: None,
                 r#loop: None,
+                loop_route: None,
             }],
             max_iterations: None,
+            loop_routing_version: None,
         }),
     );
 
@@ -7134,6 +7256,7 @@ fn subflow_rerun_mode_fresh_creates_a_new_child_run_per_loop_iteration() {
                     event: "on_success".to_string(),
                     guard: Some("executions < 3".to_string()),
                     r#loop: None,
+                    loop_route: None,
                 },
                 RecipeGraphEdge {
                     from: "loop".to_string(),
@@ -7141,6 +7264,7 @@ fn subflow_rerun_mode_fresh_creates_a_new_child_run_per_loop_iteration() {
                     event: "on_success".to_string(),
                     guard: Some("executions >= 3".to_string()),
                     r#loop: None,
+                    loop_route: None,
                 },
                 RecipeGraphEdge {
                     from: "review_cycle".to_string(),
@@ -7152,9 +7276,11 @@ fn subflow_rerun_mode_fresh_creates_a_new_child_run_per_loop_iteration() {
                         until_expr: None,
                         max_iters: None,
                     }),
+                    loop_route: None,
                 },
             ],
             max_iterations: None,
+            loop_routing_version: None,
         }),
     );
 
@@ -7228,6 +7354,7 @@ fn join_step_runs_after_taken_branch_when_other_branch_is_guard_blocked() {
                     event: "on_success".to_string(),
                     guard: Some("true".to_string()),
                     r#loop: None,
+                    loop_route: None,
                 },
                 RecipeGraphEdge {
                     from: "route".to_string(),
@@ -7235,6 +7362,7 @@ fn join_step_runs_after_taken_branch_when_other_branch_is_guard_blocked() {
                     event: "on_success".to_string(),
                     guard: Some("false".to_string()),
                     r#loop: None,
+                    loop_route: None,
                 },
                 RecipeGraphEdge {
                     from: "then_step".to_string(),
@@ -7242,6 +7370,7 @@ fn join_step_runs_after_taken_branch_when_other_branch_is_guard_blocked() {
                     event: "on_success".to_string(),
                     guard: None,
                     r#loop: None,
+                    loop_route: None,
                 },
                 RecipeGraphEdge {
                     from: "else_step".to_string(),
@@ -7249,9 +7378,11 @@ fn join_step_runs_after_taken_branch_when_other_branch_is_guard_blocked() {
                     event: "on_success".to_string(),
                     guard: None,
                     r#loop: None,
+                    loop_route: None,
                 },
             ],
             max_iterations: None,
+            loop_routing_version: None,
         }),
     );
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -7391,8 +7522,10 @@ fn recovering_parent_step_reuses_successful_child_subflow() {
                 event: "on_success".to_string(),
                 guard: None,
                 r#loop: None,
+                loop_route: None,
             }],
             max_iterations: None,
+            loop_routing_version: None,
         }),
     );
     run_store.inject_recipe_snapshot("parent-run", &parent_recipe);
@@ -7459,8 +7592,10 @@ fn subflow_step_output_exposes_child_step_outputs() {
                 event: "on_success".to_string(),
                 guard: None,
                 r#loop: None,
+                loop_route: None,
             }],
             max_iterations: None,
+            loop_routing_version: None,
         }),
     );
 
@@ -7741,8 +7876,10 @@ fn set_block_resolves_prior_step_output_placeholder() {
                 event: "on_success".to_string(),
                 guard: None,
                 r#loop: None,
+                loop_route: None,
             }],
             max_iterations: None,
+            loop_routing_version: None,
         }),
     );
 
@@ -7838,8 +7975,10 @@ fn set_block_last_write_wins_across_linear_steps() {
                 event: "on_success".to_string(),
                 guard: None,
                 r#loop: None,
+                loop_route: None,
             }],
             max_iterations: None,
+            loop_routing_version: None,
         }),
     );
 
@@ -7897,8 +8036,10 @@ fn vars_placeholder_in_with_resolves_with_type_preservation() {
                 event: "on_success".to_string(),
                 guard: None,
                 r#loop: None,
+                loop_route: None,
             }],
             max_iterations: None,
+            loop_routing_version: None,
         }),
     );
 
@@ -7962,8 +8103,10 @@ fn array_placeholder_resolves_numeric_input_as_string() {
                 event: "on_success".to_string(),
                 guard: None,
                 r#loop: None,
+                loop_route: None,
             }],
             max_iterations: None,
+            loop_routing_version: None,
         }),
     );
 
@@ -8126,8 +8269,10 @@ fn workflow_vars_persist_through_resume() {
                 event: "on_success".to_string(),
                 guard: None,
                 r#loop: None,
+                loop_route: None,
             }],
             max_iterations: None,
+            loop_routing_version: None,
         }),
     );
 
@@ -8745,6 +8890,7 @@ fn loop_until_terminates_on_var_value() {
                     event: "on_success".to_string(),
                     guard: None,
                     r#loop: None,
+                    loop_route: None,
                 },
                 RecipeGraphEdge {
                     from: "body".to_string(),
@@ -8756,6 +8902,7 @@ fn loop_until_terminates_on_var_value() {
                         until_expr: Some("vars.flag == \"done\"".to_string()),
                         max_iters: Some(5),
                     }),
+                    loop_route: None,
                 },
                 RecipeGraphEdge {
                     from: "loop_step".to_string(),
@@ -8763,9 +8910,11 @@ fn loop_until_terminates_on_var_value() {
                     event: "on_success".to_string(),
                     guard: None,
                     r#loop: None,
+                    loop_route: None,
                 },
             ],
             max_iterations: None,
+            loop_routing_version: None,
         }),
     );
 
@@ -9738,8 +9887,10 @@ fn recovery_reactivates_loop_target_after_execution_record_fault() {
                     until_expr: None,
                     max_iters: None,
                 }),
+                loop_route: None,
             }],
             max_iterations: None,
+            loop_routing_version: None,
         }),
     );
     let tmp = tempfile::tempdir().expect("tempdir");

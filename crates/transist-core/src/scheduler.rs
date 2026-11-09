@@ -216,8 +216,10 @@ mod tests {
                     event: "on_success".to_string(),
                     guard: Some("true".to_string()),
                     r#loop: None,
+                    loop_route: None,
                 }],
                 max_iterations: None,
+                loop_routing_version: None,
             }),
             capabilities: Default::default(),
             capabilities_persisted: false,
@@ -228,7 +230,7 @@ mod tests {
     #[test]
     fn runnable_frontier_requires_dependencies_to_be_terminal() {
         let recipe = graph_recipe();
-        let graph = build_execution_graph(&recipe);
+        let graph = build_execution_graph(&recipe).unwrap();
         let mut snapshot =
             KernelRunSnapshot::new("run", "wf", "v1", &["a".to_string(), "b".to_string()]);
         if let Some(step) = snapshot.steps.get_mut("a") {
@@ -282,7 +284,7 @@ mod tests {
             capabilities_persisted: false,
             documents: Default::default(),
         };
-        let graph = build_execution_graph(&recipe);
+        let graph = build_execution_graph(&recipe).unwrap();
         let mut snapshot = KernelRunSnapshot::new("run", "wf", "v1", &["a".to_string()]);
         snapshot.steps.insert(
             "a".to_string(),
@@ -341,7 +343,7 @@ mod tests {
             capabilities_persisted: false,
             documents: Default::default(),
         };
-        let graph = build_execution_graph(&recipe);
+        let graph = build_execution_graph(&recipe).unwrap();
         let mut snapshot = KernelRunSnapshot::new(
             "run",
             "wf",
@@ -399,6 +401,7 @@ mod tests {
                         event: "on_success".to_string(),
                         guard: None,
                         r#loop: None,
+                        loop_route: None,
                     },
                     RecipeGraphEdge {
                         from: "generate".to_string(),
@@ -406,6 +409,7 @@ mod tests {
                         event: "on_success".to_string(),
                         guard: None,
                         r#loop: None,
+                        loop_route: None,
                     },
                     RecipeGraphEdge {
                         from: "review".to_string(),
@@ -413,15 +417,17 @@ mod tests {
                         event: "on_success".to_string(),
                         guard: None,
                         r#loop: None,
+                        loop_route: None,
                     },
                 ],
                 max_iterations: None,
+                loop_routing_version: None,
             }),
             capabilities: Default::default(),
             capabilities_persisted: false,
             documents: Default::default(),
         };
-        let graph = build_execution_graph(&recipe);
+        let graph = build_execution_graph(&recipe).unwrap();
         let mut snapshot = KernelRunSnapshot::new(
             "run",
             "wf",
@@ -489,6 +495,7 @@ mod tests {
                         event: "on_success".to_string(),
                         guard: Some("true".to_string()),
                         r#loop: None,
+                        loop_route: None,
                     },
                     RecipeGraphEdge {
                         from: "route".to_string(),
@@ -496,6 +503,7 @@ mod tests {
                         event: "on_success".to_string(),
                         guard: Some("false".to_string()),
                         r#loop: None,
+                        loop_route: None,
                     },
                     RecipeGraphEdge {
                         from: "then_step".to_string(),
@@ -503,6 +511,7 @@ mod tests {
                         event: "on_success".to_string(),
                         guard: None,
                         r#loop: None,
+                        loop_route: None,
                     },
                     RecipeGraphEdge {
                         from: "else_step".to_string(),
@@ -510,15 +519,17 @@ mod tests {
                         event: "on_success".to_string(),
                         guard: None,
                         r#loop: None,
+                        loop_route: None,
                     },
                 ],
                 max_iterations: None,
+                loop_routing_version: None,
             }),
             capabilities: Default::default(),
             capabilities_persisted: false,
             documents: Default::default(),
         };
-        let graph = build_execution_graph(&recipe);
+        let graph = build_execution_graph(&recipe).unwrap();
         let mut snapshot = KernelRunSnapshot::new(
             "run",
             "wf",

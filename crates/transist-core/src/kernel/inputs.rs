@@ -40,6 +40,7 @@ pub fn bind_and_materialize_recipe(
     settings_port: &dyn crate::ports::HomeSettingsPort,
     plugin_metadata: &dyn crate::ports::PluginMetadataPort,
 ) -> Result<BoundWorkflow> {
+    transist_protocol::validate_recipe_loop_routing(recipe).map_err(anyhow::Error::msg)?;
     let inputs = bind_recipe_inputs(recipe, provided_inputs)?;
     let mut recipe = recipe.clone();
     let workspace_dir = resolve_recipe_workspace(home_dir, legacy_repo_root, &mut recipe, &inputs)?;

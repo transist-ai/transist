@@ -208,7 +208,7 @@ impl RuntimeKernel {
     ) -> Result<PersistedRunRecord> {
         let mut effective = record.clone();
         if effective.status == KernelRunStatus::Failed {
-            let graph = build_execution_graph(recipe);
+            let graph = build_execution_graph(recipe)?;
             let mut snapshot = effective.snapshot();
             self.ensure_snapshot_steps(
                 &mut snapshot,
@@ -251,7 +251,7 @@ impl RuntimeKernel {
         apply_recovery: bool,
     ) -> Result<PersistedPreflightRecord> {
         let step_ids: Vec<String> = recipe.steps.iter().map(|step| step.id.clone()).collect();
-        let graph = build_execution_graph(recipe);
+        let graph = build_execution_graph(recipe)?;
         let mut snapshot = record.snapshot();
         self.ensure_snapshot_steps(&mut snapshot, &step_ids);
         if apply_recovery {
@@ -372,7 +372,7 @@ impl RuntimeKernel {
         if has_blocking_workflow_prerequisites(&checks) {
             return Ok(checks);
         }
-        let graph = build_execution_graph(recipe);
+        let graph = build_execution_graph(recipe)?;
         let reachable = crate::execution_graph::reachable_steps_in_scope(
             &graph,
             Some(snapshot),
@@ -995,7 +995,7 @@ impl RuntimeKernel {
                 .iter()
                 .map(|step| step.id.clone())
                 .collect();
-            let child_graph = build_execution_graph(&child_recipe);
+            let child_graph = build_execution_graph(&child_recipe)?;
             let mut child_snapshot = effective_child.snapshot();
             self.ensure_snapshot_steps(&mut child_snapshot, &child_step_ids);
             self.ensure_entry_runnable(&child_graph, &mut child_snapshot);
@@ -1037,7 +1037,7 @@ impl RuntimeKernel {
             .iter()
             .map(|step| step.id.clone())
             .collect();
-        let child_graph = build_execution_graph(&child_recipe);
+        let child_graph = build_execution_graph(&child_recipe)?;
         let mut child_snapshot = KernelRunSnapshot::new(
             child_run_id,
             &child_recipe.workflow.id,

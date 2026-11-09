@@ -628,7 +628,7 @@ pub(super) fn validate_bound_workflow_in_home_inner(
         &mut projected_granted,
         0,
         &mut workflow_stack,
-    );
+    )?;
     let missing_capabilities = if policy_snapshot.enforcement == "enforced" {
         projected_required
             .iter()
