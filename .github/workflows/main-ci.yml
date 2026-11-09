@@ -52,7 +52,7 @@ jobs:
         with:
           toolchain: 1.88.0
       - name: Cargo build cache
-        uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           prefix-key: main-ci-noncoverage-${{ matrix.runner }}-${{ hashFiles('.github/workflows/main-ci.yml', 'scripts/ci/tool-versions.env') }}
           shared-key: ${{ matrix.cache_key }}
@@ -94,7 +94,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Cargo build cache (Alpine)
-        uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           prefix-key: main-ci-noncoverage-ubuntu-24.04-musl-${{ hashFiles('.github/workflows/main-ci.yml', 'scripts/ci/tool-versions.env') }}
           shared-key: main-ci-musl-smoke
@@ -124,7 +124,7 @@ jobs:
           rustup toolchain install 1.88.0 --profile minimal --component llvm-tools-preview --no-self-update
           rustup default 1.88.0
       - name: Cargo build cache (coverage)
-        uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           prefix-key: main-ci-coverage-ubuntu-24.04-bookworm-${{ hashFiles('.github/workflows/main-ci.yml', 'scripts/ci/tool-versions.env') }}
           shared-key: main-ci-coverage
