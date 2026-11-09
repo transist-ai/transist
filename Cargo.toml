@@ -34,7 +34,7 @@ homepage = "https://transist.ai"
 [workspace.dependencies]
 # External dependencies
 anyhow = "1.0"
-askama = "0.14"
+askama = "0.16"
 assert_cmd = "2.0"
 axum = "0.8"
 base64 = "0.23"
