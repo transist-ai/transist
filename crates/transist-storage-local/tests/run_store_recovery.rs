@@ -457,7 +457,10 @@ fn staged_run_creation_persists_and_reconciles_workflow_asset_blobs() {
     let store = LocalRunStore::new(LocalStorageConfig::new(home.path()));
     let birth = birth_data("asset-birth", &[]);
     let bytes = b"#!/bin/sh\nprintf captured\n".to_vec();
-    let sha256 = format!("{:x}", Sha256::digest(&bytes));
+    let sha256: String = Sha256::digest(&bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
     let blobs = vec![WorkflowAssetBlob {
         sha256: sha256.clone(),
         bytes: bytes.clone(),

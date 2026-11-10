@@ -166,7 +166,10 @@ fn insert_captured_workflow_asset(
 ) {
     use sha2::Digest;
 
-    let sha256 = format!("{:x}", sha2::Sha256::digest(&bytes));
+    let sha256: String = sha2::Sha256::digest(&bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
     entries.insert(logical_path, sha256.clone());
     blobs
         .entry(sha256.clone())

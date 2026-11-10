@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 use std::collections::BTreeMap;
+use std::hint::black_box;
 use std::path::PathBuf;
 
-use criterion::{BatchSize, Criterion, black_box, criterion_group, criterion_main};
+use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use tempfile::TempDir;
 use transist::{TransistContext, TransistInspectionContext};
 use transist_core::ports::RunStorePort;

@@ -2089,7 +2089,7 @@ async fn assert_contract_http_response(
             .expect("response schema object")
             .clone(),
     );
-    let validator = jsonschema::JSONSchema::compile(&root)
+    let validator = jsonschema::Validator::new(&root)
         .unwrap_or_else(|error| panic!("compile {method} {path} schema: {error}"));
 
     let response_is_json = resolved_schema["type"].as_str() != Some("string");

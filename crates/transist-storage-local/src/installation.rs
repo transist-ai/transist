@@ -64,7 +64,7 @@ pub fn installation_hostname_hash(home_dir: &Path) -> Result<String> {
     hasher.update(hostname.as_bytes());
     hasher.update(record.workspace_salt.as_bytes());
     let digest = hasher.finalize();
-    let hex = format!("{:x}", digest);
+    let hex: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
     Ok(hex[..16].to_string())
 }
 

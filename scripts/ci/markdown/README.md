@@ -18,10 +18,13 @@ fail explicitly. This small repository runner is not a general CLI2 replacement.
 
 ## Dependency decisions
 
-- `markdownlint`: `0.41.1`, pinned again as `MARKDOWNLINT_VERSION` in
+- `markdownlint`: `0.42.0`, pinned again as `MARKDOWNLINT_VERSION` in
   `scripts/ci/tool-versions.env`.
 - `jsonc-parser`: `3.3.1`.
 - `tinyglobby`: `0.2.17`, using `picomatch` rather than `micromatch`/`braces`.
+- Exact override: `re2js 2.8.7` patches
+  [GHSA-gg6h-894w-4m9c](https://github.com/advisories/GHSA-gg6h-894w-4m9c).
+  Remove the override when markdownlint accepts a patched release.
 - Scoped override: `micromark-extension-math` → `katex 0.18.2`.
   The extension still requests `^0.16.0`, which is affected by
   [GHSA-238p-pmpm-9mq7](https://github.com/advisories/GHSA-238p-pmpm-9mq7).

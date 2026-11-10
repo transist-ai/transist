@@ -13,3 +13,9 @@ accepted = [
 
 # Workspace packages are first-party and are not published to a registry.
 private = { ignore = true }
+
+# Permissive MIT No Attribution for the jsonschema dependency, not a change to
+# the project's MPL-2.0 license. cargo-about 0.9.1 scopes acceptance by crate name;
+# deny.toml enforces the exact borrow-or-share =0.2.4 dependency exception.
+[borrow-or-share]
+accepted = ["MIT-0"]

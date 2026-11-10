@@ -57,7 +57,7 @@ fn fullscreen_prompt_depth_dec() -> usize {
         next
     })
 }
-use tui_textarea::TextArea;
+use ratatui_textarea::TextArea;
 
 use crate::cli::CliUiMode;
 use crate::display::spinner::LiveProgress;
@@ -2469,6 +2469,59 @@ pub(super) fn update_metadata_from_lines(metadata: &mut ScreenMetadata, lines: &
 #[cfg(test)]
 mod prompt_tests {
     use super::*;
+
+    #[test]
+    fn textarea_input_preserves_word_shortcuts_and_repeat_events() {
+        use crossterm::event::KeyEvent;
+
+        let mut textarea = TextArea::from(["one two"]);
+        textarea.input(KeyEvent::new(KeyCode::Char('f'), KeyModifiers::ALT));
+        assert_eq!(textarea.cursor(), (0, 4));
+        textarea.input(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL));
+        assert_eq!(textarea.lines(), ["one "]);
+        assert!(textarea.input(KeyEvent::new_with_kind(
+            KeyCode::Char('X'),
+            KeyModifiers::SHIFT,
+            KeyEventKind::Repeat,
+        )));
+        assert_eq!(textarea.lines(), ["one X"]);
+        for code in [KeyCode::F(12), KeyCode::CapsLock] {
+            assert!(!textarea.input(KeyEvent::new(code, KeyModifiers::NONE)));
+        }
+        assert_eq!(textarea.lines(), ["one X"]);
+        let back_tab =
+            ratatui_textarea::Input::from(KeyEvent::new(KeyCode::BackTab, KeyModifiers::NONE));
+        assert_eq!(back_tab.key, ratatui_textarea::Key::Tab);
+        assert!(back_tab.shift);
+    }
+
+    #[test]
+    fn textarea_input_edits_selects_and_undoes_with_upgraded_crossterm() {
+        use crossterm::event::KeyEvent;
+
+        let mut textarea = TextArea::default();
+        for code in [
+            KeyCode::Char('é'),
+            KeyCode::Char('界'),
+            KeyCode::Left,
+            KeyCode::Delete,
+        ] {
+            textarea.input(KeyEvent::new(code, KeyModifiers::NONE));
+        }
+        assert_eq!(textarea.lines(), ["é"]);
+        textarea.input(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL));
+        assert_eq!(textarea.lines(), ["é界"]);
+        textarea.input(KeyEvent::new(KeyCode::Home, KeyModifiers::NONE));
+        textarea.input(KeyEvent::new(KeyCode::Right, KeyModifiers::SHIFT));
+        textarea.input(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
+        assert_eq!(textarea.lines(), ["x界"]);
+        assert!(!textarea.input(KeyEvent::new_with_kind(
+            KeyCode::Char('z'),
+            KeyModifiers::NONE,
+            KeyEventKind::Release,
+        )));
+        assert_eq!(textarea.lines(), ["x界"]);
+    }
 
     #[test]
     fn insert_pasted_text_normalizes_crlf_and_preserves_blank_lines() {

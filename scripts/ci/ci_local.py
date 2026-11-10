@@ -23,7 +23,7 @@ import time
 from typing import TypeVar
 
 ROOT = Path(__file__).resolve().parents[2]
-YAML_VERSION = "4.3.2"
+YAML_VERSION = "5.5.0"
 T = TypeVar("T")
 SECURITY_OPTIONS = [
     "--cap-add=SYS_ADMIN",

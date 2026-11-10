@@ -5,12 +5,12 @@
   "description": "Pinned Redocly CLI for OpenAPI semantic validation. The lockfile is the supply-chain integrity source.",
   "license": "MIT",
   "dependencies": {
-    "@redocly/cli": "2.51.2",
-    "js-yaml": "4.3.2"
+    "@redocly/cli": "2.76.0",
+    "js-yaml": "5.5.0"
   },
   "overrides": {
     "@opentelemetry/propagator-jaeger": "2.9.0",
     "form-data": "4.0.6",
-    "js-yaml": "4.3.2"
+    "js-yaml": "5.5.0"
   }
 }

@@ -3,9 +3,9 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders};
+use ratatui_textarea::TextArea;
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
-use tui_textarea::TextArea;
 
 use crate::display::spinner::wrap_attached_step_output_line;
 

@@ -448,7 +448,7 @@ pub fn validate_snapshot_contract(snapshot: &InspectionSnapshotEnvelope) -> Resu
         .context("invalid bundled inspection snapshot JSON schema")?;
     let instance = serde_json::to_value(snapshot)
         .context("failed serializing inspection snapshot for schema validation")?;
-    let validator = jsonschema::JSONSchema::compile(&schema)
+    let validator = jsonschema::Validator::new(&schema)
         .map_err(|error| anyhow!("failed compiling inspection snapshot JSON schema: {error}"))?;
     if let Err(errors) = validator.validate(&instance) {
         let messages = errors
@@ -1393,7 +1393,10 @@ fn tree_fingerprint(runs: &[InspectionSnapshotRun]) -> Result<String> {
 fn fingerprint_hex(value: &impl Serialize) -> Result<String> {
     let bytes =
         serde_json::to_vec(value).context("failed serializing snapshot fingerprint input")?;
-    Ok(format!("{:x}", Sha256::digest(bytes)))
+    Ok(Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect())
 }
 
 fn last_fingerprint_step(detail: &InspectionRunDetail) -> Option<&InspectionStep> {
@@ -2175,10 +2178,10 @@ mod tests {
         );
     }
 
-    fn inspection_snapshot_schema_validator() -> jsonschema::JSONSchema {
+    fn inspection_snapshot_schema_validator() -> jsonschema::Validator {
         let schema: serde_json::Value = serde_json::from_str(SNAPSHOT_SCHEMA_JSON)
             .expect("parse inspection snapshot v1 schema");
-        jsonschema::JSONSchema::compile(&schema).expect("compile inspection snapshot v1 schema")
+        jsonschema::Validator::new(&schema).expect("compile inspection snapshot v1 schema")
     }
 
     fn sample_record(

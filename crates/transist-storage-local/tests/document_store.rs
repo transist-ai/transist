@@ -729,14 +729,17 @@ fn document_store_rejects_digest_valid_but_traversing_tree_manifests() {
     let file = manifest.files.remove("file").unwrap();
     manifest.files.insert("../escape".into(), file);
     let bytes = serde_json::to_vec(&manifest).unwrap();
-    revisions[0].blob.sha256 = format!("{:x}", Sha256::digest(&bytes));
+    revisions[0].blob.sha256 = Sha256::digest(&bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
     revisions[0].blob.size_bytes = bytes.len() as u64;
     fs::write(blobs.join(&revisions[0].blob.sha256), bytes).unwrap();
     revisions[0].revision_id.clear();
-    revisions[0].revision_id = format!(
-        "{:x}",
-        Sha256::digest(serde_json::to_vec(&revisions[0]).unwrap())
-    );
+    revisions[0].revision_id = Sha256::digest(serde_json::to_vec(&revisions[0]).unwrap())
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
     fs::write(
         tmp.path()
             .join("runs/run_run/documents/candidates/run/produce/execution_001.json"),

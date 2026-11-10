@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MPL-2.0
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use ed25519_dalek::SigningKey;
-use rand::rngs::OsRng;
+use rand::{TryRng, rngs::SysRng};
 use serde::Serialize;
 use std::path::Path;
 use transist_core::{TRUST_ROOT_SCHEMA_V1, TrustRootRecord};
@@ -39,7 +39,12 @@ pub struct ExportedPublicKeySummary {
 /// Generates a new Ed25519 admin key pair and writes it to `output`.
 pub fn generate_key(name: &str, output: &Path) -> Result<GeneratedKeySummary> {
     let name = validate_name(name)?;
-    let signing_key = SigningKey::generate(&mut OsRng);
+    // Fill the seed locally so key generation does not couple rand_core versions.
+    let mut secret = [0u8; 32];
+    SysRng
+        .try_fill_bytes(&mut secret)
+        .context("failed obtaining OS randomness for admin key")?;
+    let signing_key = SigningKey::from_bytes(&secret);
     let verifying_key = signing_key.verifying_key();
     let key_id = sha256_hex(verifying_key.as_bytes());
     let key_file = AdminKeyRecord {
@@ -89,6 +94,27 @@ pub fn export_public_key(key_path: &Path, output: &Path) -> Result<ExportedPubli
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn generated_keys_are_distinct_and_can_sign() {
+        use ed25519_dalek::{Signer, Verifier};
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let first_path = dir.path().join("first.key");
+        let second_path = dir.path().join("second.key");
+        let first = generate_key("first", &first_path).expect("generate first key");
+        let second = generate_key("second", &second_path).expect("generate second key");
+        assert_ne!(first.key_id, second.key_id);
+
+        let loaded = load_admin_key(&first_path).expect("load generated key");
+        let message = b"admin key generation regression";
+        let signature = loaded.signing_key.sign(message);
+        loaded
+            .signing_key
+            .verifying_key()
+            .verify(message, &signature)
+            .expect("verify generated key signature");
+    }
 
     #[cfg(unix)]
     #[test]
