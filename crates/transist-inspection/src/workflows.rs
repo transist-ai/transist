@@ -210,7 +210,22 @@ fn workflow_steps_summary(
     hierarchy: &WorkflowHierarchy,
 ) -> Vec<WorkflowStepSummary> {
     if let Some(flow) = flow {
-        let graph_edges = flow_graph_edges_by_from(flow);
+        let mut graph_edges = flow_graph_edges_by_from(flow);
+        // Source-backed inspection retains its historical source detail, but a
+        // stored unmarked recipe must not appear upgraded by today's compiler
+        // defaults. Only source-only views assume newly compiled routing.
+        if recipe.is_some_and(|recipe| {
+            recipe
+                .graph
+                .as_ref()
+                .and_then(|graph| graph.loop_routing_version)
+                != Some(1)
+        }) {
+            for edge in graph_edges.values_mut().flatten() {
+                edge.loop_routing_version = None;
+                edge.label = edge.kind.clone();
+            }
+        }
         return flow
             .steps
             .iter()
@@ -678,13 +693,74 @@ fn recipe_else_target_is_fallthrough(
 fn workflow_graph_edge_summary_from(edge: WorkflowEdge) -> WorkflowGraphEdgeSummary {
     let kind = edge.kind.as_str().to_string();
     WorkflowGraphEdgeSummary {
-        label: kind.clone(),
+        label: match (edge.loop_routing_version, edge.kind) {
+            (Some(1), transist_compiler::graph::WorkflowEdgeKind::Exit) => {
+                "exit (predicate or max_iters; not approval)".into()
+            }
+            (Some(1), transist_compiler::graph::WorkflowEdgeKind::Loop) => {
+                "loop (predicate and below max_iters)".into()
+            }
+            _ => kind.clone(),
+        },
         kind,
         target_step_id: edge.target_step_id,
         guard: edge.guard,
         loop_while: edge.loop_while,
         loop_until: edge.loop_until,
         loop_max_iters: edge.loop_max_iters,
+        loop_routing_version: edge.loop_routing_version,
+    }
+}
+
+#[cfg(test)]
+mod loop_cap_routing_tests {
+    use super::*;
+
+    #[test]
+    fn loop_cap_routing_summary_mapping_has_authored_recipe_parity_and_legacy_labels() {
+        let flow: Flow = yaml_serde::from_str("schema: transist.flow.v1\nid: inspect\nversion: v1\nsteps:\n- id: repeat\n  control: control.noop\n  loop:\n    until: 'false'\n    max_iters: 2\n    body: [{ref: body}]\n- id: body\n  control: control.noop\n- id: finish\n  control: control.finish\n").unwrap();
+        let mut recipe = transist_compiler::compile_flow(&flow).unwrap();
+        let authored = flow_graph_edges_by_from(&flow);
+        let compiled = recipe_graph_edges_by_from(&recipe);
+        for (from, edges) in &authored {
+            for (left, right) in edges.iter().zip(&compiled[from]) {
+                assert_eq!(left.kind, right.kind);
+                assert_eq!(left.label, right.label);
+                assert_eq!(left.target_step_id, right.target_step_id);
+                assert_eq!(left.guard, right.guard);
+                assert_eq!(left.loop_max_iters, right.loop_max_iters);
+                assert_eq!(left.loop_routing_version, right.loop_routing_version);
+            }
+        }
+        assert_eq!(compiled["repeat"][1].loop_routing_version, Some(1));
+        assert!(compiled["repeat"][1].label.contains("not approval"));
+        let graph = recipe.graph.as_mut().unwrap();
+        graph.loop_routing_version = None;
+        for edge in &mut graph.edges {
+            edge.loop_route = None;
+        }
+        let legacy = recipe_graph_edges_by_from(&recipe);
+        assert_eq!(legacy["repeat"][1].label, "exit");
+        assert_eq!(legacy["repeat"][1].loop_routing_version, None);
+        assert_eq!(legacy["body"][0].loop_max_iters, None);
+        let hierarchy = workflow_hierarchy(Some(&flow), Some(&recipe));
+        let source_backed = workflow_steps_summary(Some(&flow), Some(&recipe), &hierarchy);
+        for step in &source_backed {
+            for edge in &step.graph_edges {
+                assert_eq!(edge.loop_routing_version, None);
+                assert_eq!(edge.label, edge.kind);
+            }
+        }
+        assert_eq!(
+            source_backed
+                .iter()
+                .find(|step| step.step_id == "body")
+                .unwrap()
+                .graph_edges[0]
+                .loop_max_iters,
+            Some(2),
+            "legacy source-backed inspection retains its prior detail"
+        );
     }
 }
 

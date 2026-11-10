@@ -1593,6 +1593,77 @@ async fn inspect_artifact_detail_links_to_existing_content_endpoint() {
 }
 
 #[tokio::test]
+async fn loop_cap_routing_workflow_graph_http_and_html_preserve_marked_and_legacy_meaning() {
+    for (source_present, marked) in [(true, true), (false, true), (false, false), (true, false)] {
+        let fixture = Fixture::empty();
+        let path = fixture.repo_root.join("loop.yaml");
+        fs::write(&path, "schema: transist.flow.v1\nid: loop_inspect\nversion: v1\nsteps:\n- id: repeat\n  control: control.noop\n  loop:\n    until: 'false'\n    max_iters: 2\n    body: [{ref: body}]\n- id: body\n  control: control.noop\n- id: finish\n  control: control.finish\n").unwrap();
+        let context = transist::TransistContext::with_home(&fixture.repo_root, &fixture.home_dir);
+        let compiled = context.compile_flow_file(&path).unwrap();
+        if !marked {
+            let mut recipe: transist_protocol::Recipe =
+                yaml_serde::from_str(&fs::read_to_string(&compiled).unwrap()).unwrap();
+            let graph = recipe.graph.as_mut().unwrap();
+            graph.loop_routing_version = None;
+            for edge in &mut graph.edges {
+                edge.loop_route = None;
+            }
+            // Synthetic legacy registry input in this fresh test home only.
+            fs::write(&compiled, yaml_serde::to_string(&recipe).unwrap()).unwrap();
+        }
+        if !source_present {
+            fs::remove_file(&path).unwrap();
+        }
+        let before = snapshot_tree(&fixture.home_dir);
+        let url = "/api/v1/workflows/loop_inspect@v1";
+        assert_contract_response(
+            &fixture,
+            &load_openapi_contract(),
+            "GET",
+            url,
+            StatusCode::OK,
+        )
+        .await;
+        let detail = read_json(fixture.request("GET", url, Body::empty()).await).await;
+        let owner = detail["step_graph_summary"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| s["step_id"] == "repeat")
+            .unwrap();
+        let edges = owner["graph_edges"].as_array().unwrap();
+        let exit = edges.iter().find(|edge| edge["kind"] == "exit").unwrap();
+        assert_eq!(exit["guard"], "false");
+        if marked {
+            assert_eq!(exit["loop_routing_version"], 1);
+            assert!(
+                exit["label"]
+                    .as_str()
+                    .unwrap()
+                    .contains("max_iters; not approval")
+            );
+        } else {
+            assert_eq!(
+                serde_json::to_string(exit).unwrap(),
+                r#"{"guard":"false","kind":"exit","label":"exit","loop_max_iters":2,"loop_until":"false","target_step_id":"finish"}"#
+            );
+        }
+        let html = read_text(
+            fixture
+                .request("GET", "/inspect/workflows/loop_inspect@v1", Body::empty())
+                .await,
+        )
+        .await;
+        assert_eq!(html.contains("max_iters; not approval"), marked);
+        assert_eq!(
+            snapshot_tree(&fixture.home_dir),
+            before,
+            "inspection must not rewrite recipes or state"
+        );
+    }
+}
+
+#[tokio::test]
 async fn inspect_workflows_list_and_detail_render() {
     let fixture = Fixture::new();
     let body = read_text(

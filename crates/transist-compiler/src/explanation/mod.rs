@@ -314,6 +314,16 @@ impl Builder<'_> {
             skills: authored.skills.clone().unwrap_or_default(),
             authority_requests: authority(recipe, Some(compiled), inputs)?,
         };
+        if recipe
+            .graph
+            .as_ref()
+            .and_then(|graph| graph.loop_routing_version)
+            == Some(1)
+        {
+            if let Some(limits) = result.loop_limits.as_mut().and_then(Value::as_object_mut) {
+                limits.insert("exit_on_max_iters".into(), json!(true));
+            }
+        }
         match &compiled.execution {
             StepExecutionDescriptor::Invoke {
                 adapter,
@@ -513,6 +523,16 @@ pub fn render_explanation_text(explanation: &WorkflowExplanation) -> Result<Stri
         "Workflow: {}@{}\n{}\n",
         explanation.workflow.id, explanation.workflow.version, explanation.notice
     );
+    for (scope, details) in &explanation.scopes {
+        if details
+            .graph
+            .as_ref()
+            .and_then(|graph| graph.loop_routing_version)
+            == Some(1)
+        {
+            text.push_str(&format!("\nLoop routing ({scope}, version 1): successful wrappers stop entering the body at the activation-local max_iters cap and take the normal successor when present, even if the predicate still requests continuation. Below the cap, guards are evaluated freshly and unknown/invalid predicates authorize neither branch. Cap exhaustion is not approval.\n"));
+        }
+    }
     // Structured sections preserve exact bindings and limits instead of lossy
     // natural-language summaries that might imply more than the compiler knows.
     let value = serde_json::to_value(explanation)?;

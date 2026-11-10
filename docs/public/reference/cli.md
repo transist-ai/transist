@@ -82,6 +82,10 @@ transist workflows explain --path workflow.yaml --inputs-file inputs.json \
   filenames/bindings, profile/context-expanded inputs, variable writes and direct
   output dependencies, named module exports, document read/write/update access,
   review gate step names, branches, bounded loops, cleanup and requested authority.
+- Marked loop explanations include `loop_limits.exit_on_max_iters: true` and
+  explicit graph routing roles/version. The text explains predicate-or-cap normal
+  exit for successful wrappers using activation-local counts. Reaching the cap
+  does not approve a gate or authorize downstream work.
 - Missing required inputs retain their names/types and `state: missing`, without
   fabricated values. Deferred module values are `symbolic`. Supplied values and
   defaults materialize only birth-known bindings; action results remain unknown.

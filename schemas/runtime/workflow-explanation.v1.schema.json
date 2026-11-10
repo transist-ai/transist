@@ -142,7 +142,8 @@
           "type": ["object", "null"], "additionalProperties": false, "required": ["body", "max_iters"],
           "properties": {
             "body": {"$ref": "#/$defs/stepRefs"}, "max_iters": {"type": "integer", "minimum": 1},
-            "while": {"type": "string"}, "until": {"type": "string"}, "max_duration": {"type": "string"}
+             "while": {"type": "string"}, "until": {"type": "string"}, "max_duration": {"type": "string"},
+             "exit_on_max_iters": {"const": true, "description": "Version-1 routing includes normal exit at the successful wrapper's activation-local cap. Cap exhaustion is not approval. Omitted for legacy explanations."}
           }
         },
         "cleanup_when": {"type": "array", "items": {"enum": ["success", "canceled", "failed"]}},

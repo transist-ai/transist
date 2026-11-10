@@ -1195,6 +1195,10 @@ components:
         loop_while: { type: string, nullable: true }
         loop_until: { type: string, nullable: true }
         loop_max_iters: { type: integer, minimum: 0, nullable: true }
+        loop_routing_version:
+          type: integer
+          enum: [1]
+          description: Present only on explicitly marked loop entry/exit edges. Version 1 includes normal exit at a successful wrapper's activation-local cap. Cap exhaustion is not approval. Omitted for legacy edges.
     WorkflowStep:
       type: object
       additionalProperties: false

@@ -66,12 +66,29 @@ pub(crate) fn evaluate_loop_route_guard_expression(
     workflow_inputs: &BTreeMap<String, KernelValue>,
     workflow_vars: &BTreeMap<String, KernelValue>,
 ) -> GateState {
-    let mut ctx = EvaluationContext::new(
+    evaluate_loop_route_guard_expression_in_scope(
+        guard,
         Some(dependency_state),
         Some(snapshot),
         Some(workflow_inputs),
         Some(workflow_vars),
-    );
+        &Default::default(),
+    )
+}
+
+/// Evaluates a marked guard prospectively, preserving symbolic and missing
+/// references as unknown. This produces no execution permission by itself.
+pub(crate) fn evaluate_loop_route_guard_expression_in_scope(
+    guard: Option<&str>,
+    dependency_state: Option<&KernelStepState>,
+    snapshot: Option<&KernelRunSnapshot>,
+    workflow_inputs: Option<&BTreeMap<String, KernelValue>>,
+    workflow_vars: Option<&BTreeMap<String, KernelValue>>,
+    deferred_inputs: &std::collections::BTreeSet<String>,
+) -> GateState {
+    let mut ctx =
+        EvaluationContext::new(dependency_state, snapshot, workflow_inputs, workflow_vars);
+    ctx.deferred_inputs = Some(deferred_inputs);
     ctx.strict_operands = true;
     evaluate_guard_in_context(guard, &ctx)
 }

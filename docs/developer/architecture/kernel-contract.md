@@ -185,6 +185,10 @@ This contract protects the local runtime behavior that must not drift silently w
   authorize neither branch. Failed/canceled owners never gain successful exits.
   The existing counting convention remains: a constant-continuing loop with cap
   N executes its wrapper N times and body N−1 times. A normal exit is not approval.
+  Prospective validation retains every marked normal exit, even when the current
+  predicate is false, so downstream authority, schemas and prerequisites are
+  checked before birth. Unknown prospective values remain potential paths, never
+  execution permissions. Ordinary and unmarked guards keep legacy pruning.
 - **Typed Execution Phases**: Loaded-run execution uses consuming internal handoffs (`RecoveredLoadedRun`, `ActivatedLoadedRun`, `PreflightedLoadedRun`, and `ScheduledLoadedRun`) with explicit canceled and preflight-finished outcomes. These are implementation boundaries only: they add no persisted fields or events and preserve persisted bytes, event ordering, dispatch order, and every durability boundary.
 - **Kernel-Owned Protected Mutation**: Recipe snapshot synchronization and persisted trusted-execution refresh are kernel operations. The root application supplies the exact compiled recipe source bytes and composes the trust-decision resolver; the kernel validates the input, acquires the root-tree mutation lease, persists the protected run-state changes, and releases the lease.
 - **Kernel-Owned Gate Mutation**: Manual-gate decisions are validated by a kernel use case and persisted through the run-store port. Local storage owns gate-directory creation, active-record replacement, and immutable history-file durability; application code does not write protected gate or control-request state directly.

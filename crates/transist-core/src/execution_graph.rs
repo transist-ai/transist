@@ -140,6 +140,8 @@ pub fn outgoing_edges<'a>(graph: &'a ExecutionGraph, step_id: &str) -> Vec<&'a G
 /// edges whose guards definitively evaluate to false against the supplied
 /// workflow inputs and snapshot. Edges whose guards cannot be evaluated yet are
 /// considered potentially reachable so their targets are still preflighted.
+/// Marked normal exits are always potential paths because cap exhaustion can
+/// satisfy them independently of their current predicate.
 pub fn reachable_steps(
     graph: &ExecutionGraph,
     snapshot: Option<&crate::types::KernelRunSnapshot>,
@@ -151,13 +153,17 @@ pub fn reachable_steps(
 /// Returns potential reachability while treating declared symbolic inputs as unknown.
 /// Guards depending on `deferred_inputs` retain both branches; concrete guards keep
 /// their existing pruning behavior. This is inspection/preflight, not scheduling.
+/// Marked bounded-loop exits also remain potential paths regardless of predicate.
 pub(crate) fn reachable_steps_in_scope(
     graph: &ExecutionGraph,
     snapshot: Option<&crate::types::KernelRunSnapshot>,
     workflow_inputs: Option<&BTreeMap<String, transist_protocol::KernelValue>>,
     deferred_inputs: &BTreeSet<String>,
 ) -> BTreeSet<String> {
-    use crate::gate_state::{GateState, evaluate_guard_expression_in_scope};
+    use crate::gate_state::{
+        GateState, evaluate_guard_expression_in_scope,
+        evaluate_loop_route_guard_expression_in_scope,
+    };
     let mut reached = BTreeSet::new();
     if graph.entry.is_empty() {
         return reached;
@@ -171,6 +177,18 @@ pub(crate) fn reachable_steps_in_scope(
             continue;
         };
         for edge in &node.outgoing {
+            let marked_route = (graph.loop_routing_version == Some(1))
+                .then_some(edge.loop_route.as_ref())
+                .flatten();
+            // This is prospective validation, not authorization: a successful
+            // bounded wrapper can eventually exit at its cap even if its
+            // predicate is currently false (or its current activation failed).
+            if marked_route
+                .is_some_and(|route| route.role == transist_protocol::RecipeLoopRouteRole::Exit)
+            {
+                stack.push(edge.to.clone());
+                continue;
+            }
             let dependency_state = snapshot.and_then(|snap| snap.steps.get(&current));
             let gate = if snapshot.is_none()
                 && edge
@@ -179,6 +197,15 @@ pub(crate) fn reachable_steps_in_scope(
                     .is_some_and(guard_depends_on_runtime_state)
             {
                 GateState::NotEvaluated
+            } else if marked_route.is_some() {
+                evaluate_loop_route_guard_expression_in_scope(
+                    edge.guard.as_deref(),
+                    dependency_state,
+                    snapshot,
+                    workflow_inputs,
+                    None,
+                    deferred_inputs,
+                )
             } else {
                 evaluate_guard_expression_in_scope(
                     edge.guard.as_deref(),
@@ -235,6 +262,164 @@ pub fn reachable_recipe_step_ids_in_scope(
 mod tests {
     use super::*;
     use transist_protocol::{RecipeGraph, RecipeStep, StepExecutionDescriptor, WorkflowRef};
+
+    fn prospective_loop_recipe(until: bool, predicate: &str, cap: u32, marked: bool) -> Recipe {
+        let mut recipe: Recipe =
+            serde_json::from_str(include_str!("../tests/loop_cap_routing/legacy.recipe.json"))
+                .unwrap();
+        recipe.steps[0].with.insert("__transist_loop".into(), serde_json::json!({
+            "body_steps":["body"], "max_iters":cap, (if until {"until"} else {"while"}):predicate
+        }).into());
+        let graph = recipe.graph.as_mut().unwrap();
+        graph.edges[0].guard = Some(if until {
+            format!("NOT ({predicate})")
+        } else {
+            predicate.into()
+        });
+        graph.edges[1].guard = Some(if until {
+            predicate.into()
+        } else {
+            format!("NOT ({predicate})")
+        });
+        if marked {
+            graph.loop_routing_version = Some(1);
+            for (edge, role) in graph.edges.iter_mut().take(2).zip([
+                transist_protocol::RecipeLoopRouteRole::Enter,
+                transist_protocol::RecipeLoopRouteRole::Exit,
+            ]) {
+                edge.loop_route = Some(transist_protocol::RecipeLoopRoute {
+                    owner_step_id: "loop".into(),
+                    role,
+                });
+            }
+        }
+        recipe
+    }
+
+    #[test]
+    fn loop_cap_routing_prospective_exit_survives_predicates_and_legacy_stays_unchanged() {
+        for cap in [1, 2] {
+            for (until, predicate, body) in [
+                (true, "false", true),
+                (false, "true", true),
+                (true, "true", false),
+                (false, "false", false),
+            ] {
+                for marked in [false, true] {
+                    let recipe = prospective_loop_recipe(until, predicate, cap, marked);
+                    let reached = reachable_recipe_step_ids(&recipe, None, None).unwrap();
+                    assert_eq!(reached.contains("body"), body);
+                    assert_eq!(reached.contains("mandatory_successor"), marked || !body);
+                    assert_eq!(reached.contains("finish"), marked || !body);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn loop_cap_routing_prospective_unknowns_are_potential_paths_not_permissions() {
+        for until in [false, true] {
+            for predicate in [
+                "inputs.missing == true",
+                "steps.body.out.missing == true",
+                "vars.missing",
+                "(",
+            ] {
+                let recipe = prospective_loop_recipe(until, predicate, 2, true);
+                let graph = build_execution_graph(&recipe).unwrap();
+                let mut snapshot = crate::types::KernelRunSnapshot::new(
+                    "run",
+                    "frozen_loop_cap",
+                    "v1",
+                    &recipe
+                        .steps
+                        .iter()
+                        .map(|s| s.id.clone())
+                        .collect::<Vec<_>>(),
+                );
+                let owner = snapshot.steps.get_mut("loop").unwrap();
+                owner.status = crate::types::KernelStepStatus::Succeeded;
+                owner.executions = 1;
+                for state in [None, Some(&snapshot)] {
+                    let reached = reachable_steps(&graph, state, None);
+                    assert!(reached.contains("body"), "{predicate}");
+                    assert!(reached.contains("mandatory_successor"), "{predicate}");
+                }
+                for target in ["body", "mandatory_successor"] {
+                    assert!(
+                        !crate::scheduler::incoming_edge_reachability(
+                            &graph,
+                            &snapshot,
+                            &BTreeMap::new(),
+                            &BTreeMap::new(),
+                            target
+                        )
+                        .has_satisfied_edge
+                    );
+                }
+                // Prospective traversal remains conservative even during a
+                // failed/canceled activation; it never changes execution gates.
+                for status in [
+                    crate::types::KernelStepStatus::Failed,
+                    crate::types::KernelStepStatus::Canceled,
+                ] {
+                    snapshot.steps.get_mut("loop").unwrap().status = status;
+                    assert!(
+                        reachable_steps(&graph, Some(&snapshot), None)
+                            .contains("mandatory_successor")
+                    );
+                    assert!(
+                        !crate::scheduler::incoming_edge_reachability(
+                            &graph,
+                            &snapshot,
+                            &BTreeMap::new(),
+                            &BTreeMap::new(),
+                            "mandatory_successor"
+                        )
+                        .has_satisfied_edge
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn loop_cap_routing_prospective_deferred_inputs_and_ordinary_false_edges_keep_scope() {
+        let mut recipe = prospective_loop_recipe(true, "inputs.future == true", 2, true);
+        recipe.graph.as_mut().unwrap().edges[3].guard = Some("false".into());
+        let inputs =
+            BTreeMap::from([("future".into(), transist_protocol::KernelValue::Bool(true))]);
+        let concrete = reachable_recipe_step_ids(&recipe, None, Some(&inputs)).unwrap();
+        assert!(!concrete.contains("body"));
+        let deferred = reachable_recipe_step_ids_in_scope(
+            &recipe,
+            None,
+            Some(&inputs),
+            &BTreeSet::from(["future".into()]),
+        )
+        .unwrap();
+        assert!(deferred.contains("body"));
+        assert!(deferred.contains("mandatory_successor"));
+        assert!(
+            !deferred.contains("finish"),
+            "ordinary false guards must still prune"
+        );
+        for (predicate, body) in [
+            ("true || inputs.future", false),
+            ("false && inputs.future", true),
+        ] {
+            let recipe = prospective_loop_recipe(true, predicate, 2, true);
+            let reached = reachable_recipe_step_ids_in_scope(
+                &recipe,
+                None,
+                None,
+                &BTreeSet::from(["future".into()]),
+            )
+            .unwrap();
+            assert_eq!(reached.contains("body"), body);
+            assert!(reached.contains("finish"));
+        }
+    }
 
     #[test]
     fn loop_routing_graph_rejects_invalid_metadata_and_preserves_legacy_loading() {

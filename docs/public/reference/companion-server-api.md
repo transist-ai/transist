@@ -259,6 +259,16 @@ Used for inspecting the authored workflow definitions.
 - `GET /api/v1/workflows/{workflow_ref}/source`: Returns the raw UTF-8 YAML source of the workflow.
 - `GET /api/v1/workflows/{workflow_ref}/compiled-recipe`: Returns the UTF-8 compiled, internal representation of the workflow used by the runtime.
 
+Workflow step graph edges optionally expose `loop_routing_version: 1` on explicit
+bounded-loop entries/exits. Their `guard` remains the authored predicate branch;
+it is not the whole exit rule. Version 1 also permits normal exit when a successful
+wrapper reaches its activation-local `max_iters` cap, and blocks further entry.
+Graph labels and HTML inspection identify that cap-inclusive rule. Cap exhaustion
+is not approval. Views backed by an unmarked stored recipe omit the field and
+retain legacy labels and serialization even when source is available; inspection
+does not upgrade persisted recipes. Source-only authored views describe current
+compiler routing.
+
 If either text representation contains invalid UTF-8, the API returns `422 invalid_text_encoding` in the standard problem envelope and does not return source bytes.
 
 Workflow-file metadata remains available when the server is embedded without a configured workspace root. Content reads are then denied, and metadata omits the `links.content` URL. A workflow-file ID is emitted only when Transist can derive an intrinsic host-independent locator; unsafe or ambiguous persisted paths remain visible as metadata but are not retrievable.

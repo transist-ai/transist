@@ -643,6 +643,7 @@ pub(crate) fn map_workflow_detail(
                         loop_while: edge.loop_while,
                         loop_until: edge.loop_until,
                         loop_max_iters: edge.loop_max_iters,
+                        loop_routing_version: edge.loop_routing_version,
                     })
                     .collect(),
             })
