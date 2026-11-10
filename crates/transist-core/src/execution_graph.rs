@@ -14,6 +14,8 @@ pub struct GraphEdge {
 
 #[derive(Debug, Clone)]
 pub struct StepNode {
+    /// Declared body identities whose initial/reset/suspended business output is null.
+    pub loop_body_steps: BTreeSet<String>,
     /// Validated wrapper cap, used only for explicitly versioned loop routes.
     pub loop_max_iters: Option<u32>,
     pub dependencies: BTreeSet<String>,
@@ -56,6 +58,21 @@ pub fn build_execution_graph(recipe: &Recipe) -> anyhow::Result<ExecutionGraph> 
         nodes.insert(
             step.id.clone(),
             StepNode {
+                loop_body_steps: match step.with.get("__transist_loop") {
+                    Some(transist_protocol::KernelValue::Object(meta)) => {
+                        match meta.get("body_steps") {
+                            Some(transist_protocol::KernelValue::Array(body)) => body
+                                .iter()
+                                .filter_map(|value| match value {
+                                    transist_protocol::KernelValue::String(id) => Some(id.clone()),
+                                    _ => None,
+                                })
+                                .collect(),
+                            _ => BTreeSet::new(),
+                        }
+                    }
+                    _ => BTreeSet::new(),
+                },
                 loop_max_iters: match step.with.get("__transist_loop") {
                     Some(transist_protocol::KernelValue::Object(meta)) => {
                         meta.get("max_iters").and_then(|value| match value {
@@ -205,6 +222,7 @@ pub(crate) fn reachable_steps_in_scope(
                     workflow_inputs,
                     None,
                     deferred_inputs,
+                    None,
                 )
             } else {
                 evaluate_guard_expression_in_scope(
@@ -321,7 +339,7 @@ mod tests {
         for until in [false, true] {
             for predicate in [
                 "inputs.missing == true",
-                "steps.body.out.missing == true",
+                "steps.undeclared.out.missing == true",
                 "vars.missing",
                 "(",
             ] {
@@ -462,6 +480,7 @@ mod tests {
             nodes.insert(
                 id.into(),
                 StepNode {
+                    loop_body_steps: BTreeSet::new(),
                     loop_max_iters: None,
                     dependencies: BTreeSet::new(),
                     outgoing: Vec::new(),

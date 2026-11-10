@@ -183,12 +183,24 @@ This contract protects the local runtime behavior that must not drift silently w
   normal exit is satisfied, regardless of the predicate. Below the cap, guards
   read current variables/results; unresolved references or malformed predicates
   authorize neither branch. Failed/canceled owners never gain successful exits.
+  In marked loop guards only, the declared body's initial/reset/suspended business
+  output is known null while that body is pending, runnable, blocked or retry-waiting.
+  This uses validated body identities and never a historical successful output or
+  blocked-result diagnostic. In-flight outputs, undeclared references and missing
+  fields on completed results remain unknown. Prospective evaluation does not
+  replace unknown future body output with null.
   The existing counting convention remains: a constant-continuing loop with cap
   N executes its wrapper N times and body N−1 times. A normal exit is not approval.
   Prospective validation retains every marked normal exit, even when the current
   predicate is false, so downstream authority, schemas and prerequisites are
   checked before birth. Unknown prospective values remain potential paths, never
   execution permissions. Ordinary and unmarked guards keep legacy pruning.
+  Resume reconciles committed successors without redispatch; reused children
+  retain activation-local budgets with lifetime-monotonic history. Fresh children
+  retain separate identities. Replay preserves the pinned version or its absence,
+  not current compiler defaults. Corrected routing requires a newly compiled recipe
+  and a new run; preserve matching runtime/home pairs for legacy recovery. See the
+  [loop-routing change record](loop-routing-change-record.md).
 - **Typed Execution Phases**: Loaded-run execution uses consuming internal handoffs (`RecoveredLoadedRun`, `ActivatedLoadedRun`, `PreflightedLoadedRun`, and `ScheduledLoadedRun`) with explicit canceled and preflight-finished outcomes. These are implementation boundaries only: they add no persisted fields or events and preserve persisted bytes, event ordering, dispatch order, and every durability boundary.
 - **Kernel-Owned Protected Mutation**: Recipe snapshot synchronization and persisted trusted-execution refresh are kernel operations. The root application supplies the exact compiled recipe source bytes and composes the trust-decision resolver; the kernel validates the input, acquires the root-tree mutation lease, persists the protected run-state changes, and releases the lease.
 - **Kernel-Owned Gate Mutation**: Manual-gate decisions are validated by a kernel use case and persisted through the run-store port. Local storage owns gate-directory creation, active-record replacement, and immutable history-file durability; application code does not write protected gate or control-request state directly.

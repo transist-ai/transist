@@ -135,7 +135,7 @@ fn loop_cap_routing_evaluates_current_step_outputs_freshly_below_cap() {
     let recipe = loop_recipe(true, "steps.body.out.ready == true", 5);
     let graph = build_execution_graph(&recipe).unwrap();
     let mut snapshot = snapshot(&recipe, 2, 0);
-    for ready in [false, true, false] {
+    for ready in [false, true, false, true] {
         let body = snapshot.steps.get_mut("body").unwrap();
         body.status = KernelStepStatus::Succeeded;
         body.executions = 1;
@@ -152,19 +152,62 @@ fn loop_cap_routing_evaluates_current_step_outputs_freshly_below_cap() {
         );
         assert_routes(&graph, &snapshot, &BTreeMap::new(), !ready, ready);
     }
-    // Resetting the producer invalidates the current output; no earlier result
-    // may silently select an edge after that reset.
+    // Resetting the declared body makes its current output known null. It must
+    // never reuse the earlier true result to authorize a successful exit.
     let body = snapshot.steps.get_mut("body").unwrap();
     body.status = KernelStepStatus::Pending;
     body.last_result = None;
+    assert_routes(&graph, &snapshot, &BTreeMap::new(), true, false);
+}
+
+#[test]
+fn loop_cap_routing_empty_body_projection_is_distinct_from_unknown_output() {
+    let recipe = loop_recipe(true, "steps.body.out.decision == 'approved'", 3);
+    let graph = build_execution_graph(&recipe).unwrap();
+    let mut snapshot = snapshot(&recipe, 1, 0);
+    assert_routes(&graph, &snapshot, &BTreeMap::new(), true, false);
+    for status in [
+        KernelStepStatus::Blocked,
+        KernelStepStatus::RetryWait,
+        KernelStepStatus::Runnable,
+    ] {
+        snapshot.steps.get_mut("body").unwrap().status = status;
+        assert_routes(&graph, &snapshot, &BTreeMap::new(), true, false);
+    }
+    snapshot.steps.get_mut("body").unwrap().status = KernelStepStatus::Running;
     assert_routes(&graph, &snapshot, &BTreeMap::new(), false, false);
+    let body = snapshot.steps.get_mut("body").unwrap();
+    body.status = KernelStepStatus::Succeeded;
+    body.executions = 1;
+    body.last_result = Some(serde_json::from_value(serde_json::json!({
+        "type":transist_protocol::TEP_INVOKE_RESULT_TYPE_V1,
+        "protocol_version":transist_protocol::TEP_PROTOCOL_VERSION_V1,
+        "invoke_id":"invoke", "run_id":"run", "step_id":"body", "execution":1,
+        "status":"success", "output":{}, "timing":{"started_at":"0", "finished_at":"0", "duration_ms":0}
+    })).unwrap());
+    // A missing field on an actual completed result is unknown, not an empty
+    // reset projection, and must authorize neither branch below the cap.
+    assert_routes(&graph, &snapshot, &BTreeMap::new(), false, false);
+    snapshot
+        .steps
+        .get_mut("body")
+        .unwrap()
+        .last_result
+        .as_mut()
+        .unwrap()
+        .output = serde_json::json!({"decision":"approved"});
+    assert_routes(&graph, &snapshot, &BTreeMap::new(), false, true);
+    let body = snapshot.steps.get_mut("body").unwrap();
+    body.status = KernelStepStatus::Pending;
+    body.last_result = None;
+    assert_routes(&graph, &snapshot, &BTreeMap::new(), true, false);
 }
 
 #[test]
 fn loop_cap_routing_unknown_and_malformed_predicates_authorize_neither_branch_below_cap() {
     for predicate in [
         "inputs.missing",
-        "steps.body.out.missing == true",
+        "steps.undeclared.out.missing == true",
         "vars.missing == true",
         "(",
         "true &&",

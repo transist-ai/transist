@@ -13,6 +13,9 @@ use transist::{
 const GATE: &str = "  - id: review\n    control: control.gate.manual\n    with: {gate_id: operator-review, review_documents: [file]}\n";
 const CONSUME: &str = "  - id: consume\n    uses: process:fixture.documents/call\n    with: {ops: [{path: {$document: file, access: read, reviewed_by: review}, op: read, content: initial}]}\n";
 
+#[path = "document_gate_loop_cap_routing/mod.rs"]
+mod loop_cap_routing;
+
 struct Fixture {
     _temp: tempfile::TempDir,
     root: PathBuf,

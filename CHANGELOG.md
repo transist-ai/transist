@@ -1,5 +1,20 @@
 # Changelog
 
+## [Unreleased]
+
+- Newly compiled bounded loops take their normal successor at the activation-local
+  `max_iters` cap instead of silently skipping it. Approval guards still run and
+  must succeed before parent publication; exhaustion never implies approval.
+- Recipes explicitly pin loop-routing version 1. Prepared unmarked recipes,
+  including their resume and replay paths, retain legacy routing. Adoption requires
+  newly compiled recipes and new runs; preserve matching runtime/home pairs and
+  never strip routing metadata or downgrade marked homes.
+- Marked loop guards use null for a declared body's initial, reset or suspended
+  business output, allowing iteration startup/re-entry without reusing old results
+  or approvals. Truly unknown references and malformed predicates remain fail-closed.
+- Prospective validation, explanations and inspection include cap-inclusive exits
+  and check downstream authority, schemas and prerequisites before run birth.
+
 ## [0.1.0] — Initial Public Beta
 
 Transist is a governed local execution runtime for explicit AI and automation

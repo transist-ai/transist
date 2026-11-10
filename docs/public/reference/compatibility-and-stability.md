@@ -114,6 +114,28 @@ a home into an incompatible reader or copy source/replay document namespaces.
 Rollback and replay do not undo external side effects. Runtime version labels do
 not prove compatibility with another persisted format.
 
+### Bounded-loop routing adoption
+
+Newly compiled recipes containing authored loops pin `graph.loop_routing_version: 1`
+and explicit entry/exit roles. Successful wrappers take normal exit at their
+activation-local iteration cap; this does not approve a gate or bypass a mandatory
+approval action. Existing prepared unmarked recipes retain legacy predicate-only
+routing. Resume and replay load their pinned snapshots and never recompile,
+upgrade or rewrite them; replay of an unmarked recipe is still unmarked.
+
+To adopt the correction, compile reviewed definitions with the matching candidate
+runtime and start a new run. Respect immutable installed identities; use fresh
+reviewed captures and a fresh home when same-version content conflicts. Keep
+previous runtime/home pairs available for legacy recovery. Do not downgrade a
+home containing marked recipes or remove markers to force an older reader to
+accept it. Runtime `0.1.0` labels alone do not establish compatibility with
+published binaries; validation evidence applies to the exact candidate bytes.
+
+Before adoption, rollback can revert the implementation while retaining the old
+home. After marked runs exist, keep those runs with their matching runtime/home
+pair; rollback selects a separately preserved pair and never edits run snapshots
+or undoes external side effects.
+
 Only revision 1 of the asset-lock and capability-authority contracts is
 supported. Higher values, including 2, are rejected before execution or durable
 mutation, even in test mode. Zero remains a legacy/synthetic initialization

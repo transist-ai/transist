@@ -308,6 +308,23 @@ fn resolve_reference(raw: &str, ctx: &EvaluationContext<'_>) -> Option<Value> {
     if let Some(path) = raw.strip_prefix("steps.") {
         let (step_id, rest) = split_first_segment(path)?;
         let step = ctx.snapshot.and_then(|value| value.steps.get(step_id))?;
+        if ctx
+            .empty_loop_body_outputs
+            .is_some_and(|body| body.contains(step_id))
+            && matches!(
+                step.status,
+                KernelStepStatus::Pending
+                    | KernelStepStatus::Runnable
+                    | KernelStepStatus::Blocked
+                    | KernelStepStatus::RetryWait
+            )
+            && rest.is_some_and(|path| path == "out" || path.starts_with("out."))
+        {
+            // An initial/reset/waiting body's business output is known null,
+            // never a historical success or a blocked-result diagnostic. This
+            // lets an already-entered iteration resume without granting exit.
+            return Some(Value::Null);
+        }
         return resolve_step_reference(step, rest);
     }
 

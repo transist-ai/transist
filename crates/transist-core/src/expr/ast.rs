@@ -19,6 +19,9 @@ pub(crate) struct EvaluationContext<'a> {
     pub(crate) deferred_inputs: Option<&'a std::collections::BTreeSet<String>>,
     /// Marked loop guards reject unresolved references and incomplete operands.
     pub(crate) strict_operands: bool,
+    /// Declared loop body outputs known absent during initialization/reset/suspension.
+    /// Prospective evaluation leaves this unset because future outputs are unknown.
+    pub(crate) empty_loop_body_outputs: Option<&'a std::collections::BTreeSet<String>>,
 }
 
 impl<'a> EvaluationContext<'a> {
@@ -35,6 +38,7 @@ impl<'a> EvaluationContext<'a> {
             workflow_vars,
             deferred_inputs: None,
             strict_operands: false,
+            empty_loop_body_outputs: None,
         }
     }
 }
