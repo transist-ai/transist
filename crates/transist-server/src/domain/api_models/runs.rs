@@ -1074,6 +1074,10 @@ pub struct WorkflowGraphEdge {
     /// Maximum loop iteration count, when configured.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub loop_max_iters: Option<u32>,
+    /// Explicit loop entry/exit routing revision. Version 1 includes normal exit
+    /// at the successful wrapper's activation-local cap; never implies approval.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub loop_routing_version: Option<u32>,
 }
 
 #[derive(Debug, Serialize)]

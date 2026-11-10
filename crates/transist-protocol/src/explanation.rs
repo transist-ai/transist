@@ -133,7 +133,8 @@ pub struct ExplanationStep {
     pub gate_decision: Option<ExplanationGateDecision>,
     /// Authored then/else membership and guard, if any.
     pub branch: Option<Value>,
-    /// Authored body, predicates, max_iters and duration limit, if any.
+    /// Authored body, predicates and limits, plus compiler-derived
+    /// `exit_on_max_iters: true` for version-1 loop routing. Not an approval.
     pub loop_limits: Option<Value>,
     /// Separate cleanup triggers. Empty for main steps.
     pub cleanup_when: Vec<String>,

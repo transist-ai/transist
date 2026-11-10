@@ -111,6 +111,39 @@ fn compiled_explanation_has_exact_dataflow_documents_control_and_lexical_assets(
 }
 
 #[test]
+fn loop_cap_routing_explanation_describes_cap_exit_without_implying_approval() {
+    let explanation = explain(&fixture());
+    let serialized = value(&explanation);
+    assert_eq!(
+        serialized["steps"]["root/steps/repeat"]["loop_limits"]["exit_on_max_iters"],
+        true
+    );
+    assert_eq!(
+        serialized["scopes"]["root"]["graph"]["loop_routing_version"],
+        1
+    );
+    let text = transist_compiler::explanation::render_explanation_text(&explanation).unwrap();
+    assert!(text.contains("activation-local max_iters cap"));
+    assert!(text.contains("Cap exhaustion is not approval"));
+    assert!(text.contains("unknown/invalid predicates authorize neither branch"));
+    assert_eq!(
+        serialized["steps"]["root/steps/review"]["gate"]["decision_state"],
+        "not_created"
+    );
+    let legacy: WorkflowExplanation =
+        serde_json::from_str(include_str!("fixtures/explanation/explanation.golden.json")).unwrap();
+    assert!(
+        !transist_compiler::explanation::render_explanation_text(&legacy)
+            .unwrap()
+            .contains("Loop routing (")
+    );
+    assert_eq!(
+        serde_json::to_string_pretty(&value(&legacy)).unwrap() + "\n",
+        include_str!("fixtures/explanation/explanation.golden.json")
+    );
+}
+
+#[test]
 fn unresolved_required_inputs_are_typed_missing_not_fabricated() {
     let explanation = value(&explain_workflow(&fixture(), None, &BTreeMap::new()).unwrap());
     for name in ["repo", "host", "token_ref", "ticket", "payload"] {

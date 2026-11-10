@@ -55,4 +55,7 @@ pub struct WorkflowEdge {
     pub loop_until: Option<String>,
     /// Optional loop max-iteration metadata.
     pub loop_max_iters: Option<u32>,
+    /// Routing revision for explicitly marked loop entry/exit edges. Version 1
+    /// includes cap exhaustion in normal exit; omission retains legacy behavior.
+    pub loop_routing_version: Option<u32>,
 }

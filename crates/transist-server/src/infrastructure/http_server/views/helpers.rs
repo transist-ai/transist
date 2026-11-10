@@ -2399,7 +2399,7 @@ pub(crate) async fn workflow_detail(
             edges: s
                 .graph_edges
                 .into_iter()
-                .map(|e| format!("{}→{}", e.kind, e.target_step_id))
+                .map(|e| format!("{}→{}", e.label, e.target_step_id))
                 .collect(),
             depth: 0,
         })

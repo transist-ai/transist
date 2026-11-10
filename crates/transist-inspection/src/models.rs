@@ -1267,6 +1267,9 @@ pub struct WorkflowGraphEdgeSummary {
     pub loop_until: Option<String>,
     /// Optional loop iteration cap attached to the edge.
     pub loop_max_iters: Option<u32>,
+    /// Explicit entry/exit routing revision; version 1 includes cap exhaustion
+    /// in normal exit. Omitted by serialized consumers for legacy edges.
+    pub loop_routing_version: Option<u32>,
 }
 
 /// Compact workflow row used by workflow-list views.

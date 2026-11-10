@@ -134,6 +134,14 @@ fn workflow_explanation_schema_matches_compiled_and_compared_public_views() {
         compile_repo_schema(&schema_dir().join("runtime/workflow-explanation.v1.schema.json"));
     let mut value = serde_json::to_value(view).unwrap();
     assert_valid(&schema, &value, "compiled explanation");
+    assert_eq!(
+        value["steps"]["root/steps/repeat"]["loop_limits"]["exit_on_max_iters"],
+        true
+    );
+    let mut invalid_routing = value.clone();
+    invalid_routing["steps"]["root/steps/repeat"]["loop_limits"]["exit_on_max_iters"] =
+        false.into();
+    assert!(!schema.is_valid(&invalid_routing));
     value["steps"]["root/steps/review"]["gate"]["decision_state"] = "approved".into();
     assert!(
         !schema.is_valid(&value),

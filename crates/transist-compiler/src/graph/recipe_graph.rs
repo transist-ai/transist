@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 use super::{WorkflowEdge, WorkflowEdgeKind};
-use transist_protocol::{KernelValue, Recipe, RecipeStep};
+use transist_protocol::{KernelValue, Recipe, RecipeLoopRouteRole, RecipeStep};
 
 /// Derives inspection-ready workflow graph edges from a compiled recipe graph.
 #[must_use]
@@ -19,22 +19,40 @@ pub fn edges_from(recipe: &Recipe) -> Vec<WorkflowEdge> {
         .edges
         .iter()
         .map(|edge| {
+            let marked_route = (graph.loop_routing_version == Some(1))
+                .then_some(edge.loop_route.as_ref())
+                .flatten();
+            // Marked repeat edges carry the target wrapper's inspection limits;
+            // retain the historical source-only metadata for legacy graphs.
+            let owner = if graph.loop_routing_version == Some(1) && edge.r#loop.is_some() {
+                &edge.to
+            } else {
+                &edge.from
+            };
             let meta = loop_meta
-                .get(&edge.from)
+                .get(owner)
                 .cloned()
                 .unwrap_or((None, None, None, None));
             WorkflowEdge {
                 from_step_id: edge.from.clone(),
                 target_step_id: edge.to.clone(),
-                kind: classify_recipe_edge_kind(
-                    edge.guard.as_deref(),
-                    edge.r#loop.is_some(),
-                    &meta,
-                ),
+                kind: marked_route
+                    .map(|route| match route.role {
+                        RecipeLoopRouteRole::Enter => WorkflowEdgeKind::Loop,
+                        RecipeLoopRouteRole::Exit => WorkflowEdgeKind::Exit,
+                    })
+                    .unwrap_or_else(|| {
+                        classify_recipe_edge_kind(
+                            edge.guard.as_deref(),
+                            edge.r#loop.is_some(),
+                            &meta,
+                        )
+                    }),
                 guard: edge.guard.clone(),
                 loop_while: meta.0,
                 loop_until: meta.1,
                 loop_max_iters: meta.2,
+                loop_routing_version: marked_route.map(|_| 1),
             }
         })
         .collect()

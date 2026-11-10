@@ -32,6 +32,7 @@ pub fn edges_from(flow: &Flow) -> Vec<WorkflowEdge> {
                 loop_while: None,
                 loop_until: None,
                 loop_max_iters: None,
+                loop_routing_version: None,
             });
         }
     }
@@ -49,17 +50,22 @@ fn flow_block_member_ids(flow: &Flow) -> BTreeSet<String> {
                     if_block
                         .then_branch
                         .iter()
-                        .map(|entry| entry.ref_step.clone()),
+                        .map(|entry| entry.ref_step.trim().to_string()),
                 );
                 members.extend(
                     if_block
                         .else_branch
                         .iter()
-                        .map(|entry| entry.ref_step.clone()),
+                        .map(|entry| entry.ref_step.trim().to_string()),
                 );
             }
             if let Some(loop_block) = step.loop_block.as_ref() {
-                members.extend(loop_block.body.iter().map(|entry| entry.ref_step.clone()));
+                members.extend(
+                    loop_block
+                        .body
+                        .iter()
+                        .map(|entry| entry.ref_step.trim().to_string()),
+                );
             }
             members
         })
@@ -89,12 +95,12 @@ fn append_if_edges(
     let then_ids = if_block
         .then_branch
         .iter()
-        .map(|entry| entry.ref_step.clone())
+        .map(|entry| entry.ref_step.trim().to_string())
         .collect::<Vec<_>>();
     let else_ids = if_block
         .else_branch
         .iter()
-        .map(|entry| entry.ref_step.clone())
+        .map(|entry| entry.ref_step.trim().to_string())
         .collect::<Vec<_>>();
     let next_after = next_top_level_step_id(flow, step_idx, block_members);
     let guard = if_block.guard.trim().to_string();
@@ -108,6 +114,7 @@ fn append_if_edges(
             loop_while: None,
             loop_until: None,
             loop_max_iters: None,
+            loop_routing_version: None,
         });
     }
     if let Some(first) = else_ids.first() {
@@ -119,6 +126,7 @@ fn append_if_edges(
             loop_while: None,
             loop_until: None,
             loop_max_iters: None,
+            loop_routing_version: None,
         });
     } else if let Some(next) = next_after.clone() {
         edges.push(WorkflowEdge {
@@ -129,6 +137,7 @@ fn append_if_edges(
             loop_while: None,
             loop_until: None,
             loop_max_iters: None,
+            loop_routing_version: None,
         });
     }
 
@@ -147,7 +156,7 @@ fn append_loop_edges(
     let body_ids = loop_block
         .body
         .iter()
-        .map(|entry| entry.ref_step.clone())
+        .map(|entry| entry.ref_step.trim().to_string())
         .collect::<Vec<_>>();
     let next_after = next_top_level_step_id(flow, step_idx, block_members);
     let loop_while = loop_block
@@ -175,6 +184,7 @@ fn append_loop_edges(
             loop_while: loop_while.clone(),
             loop_until: loop_until.clone(),
             loop_max_iters: Some(loop_block.max_iters),
+            loop_routing_version: Some(1),
         });
     }
     if let Some(next) = next_after.clone() {
@@ -186,6 +196,7 @@ fn append_loop_edges(
             loop_while: loop_while.clone(),
             loop_until: loop_until.clone(),
             loop_max_iters: Some(loop_block.max_iters),
+            loop_routing_version: Some(1),
         });
     }
 
@@ -199,6 +210,7 @@ fn append_loop_edges(
             loop_while,
             loop_until,
             loop_max_iters: Some(loop_block.max_iters),
+            loop_routing_version: None,
         });
     }
 }
@@ -213,6 +225,7 @@ fn append_linear_edges(ids: &[String], next_after: Option<String>, edges: &mut V
             loop_while: None,
             loop_until: None,
             loop_max_iters: None,
+            loop_routing_version: None,
         });
     }
     if let (Some(last), Some(next)) = (ids.last(), next_after) {
@@ -224,6 +237,7 @@ fn append_linear_edges(ids: &[String], next_after: Option<String>, edges: &mut V
             loop_while: None,
             loop_until: None,
             loop_max_iters: None,
+            loop_routing_version: None,
         });
     }
 }
