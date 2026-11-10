@@ -101,6 +101,7 @@ pub(crate) fn incoming_edge_reachability(
                 dep_node
                     .loop_max_iters
                     .filter(|_| graph.loop_routing_version == Some(1)),
+                &dep_node.loop_body_steps,
                 dep_state,
                 snapshot,
                 workflow_inputs,
@@ -129,6 +130,7 @@ enum EdgeReachability {
 fn edge_reachability(
     edge: &GraphEdge,
     loop_max_iters: Option<u32>,
+    loop_body_steps: &std::collections::BTreeSet<String>,
     dep_state: &KernelStepState,
     snapshot: &KernelRunSnapshot,
     workflow_inputs: &BTreeMap<String, KernelValue>,
@@ -158,6 +160,7 @@ fn edge_reachability(
                         snapshot,
                         workflow_inputs,
                         workflow_vars,
+                        loop_body_steps,
                     )
                 } else {
                     evaluate_guard_expression(

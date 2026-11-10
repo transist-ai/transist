@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 use super::*;
 
+mod recovery;
+
 #[test]
 fn loop_cap_routing_frozen_unmarked_recipe_preserves_historical_skipped_successor() {
     let recipe: Recipe = serde_json::from_str(include_str!("legacy.recipe.json")).unwrap();

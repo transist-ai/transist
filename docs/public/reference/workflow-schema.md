@@ -956,6 +956,34 @@ You can add logic to your workflow using `if` and `loop` blocks, but only on ste
     max_iters: 5
 ```
 
+Declare exactly one `until` or `while` predicate and a positive `max_iters`.
+Newly compiled recipes explicitly pin routing version 1: a successful wrapper
+stops entering the body at its activation-local cap and takes the normal successor,
+even if `until` is still false or `while` is still true. Early predicate exits are
+preserved. Counting is unchanged: constant continuation with cap N executes the
+wrapper N times and the body N−1 times; cap 1 executes no body iteration.
+Retry and blocked re-entry attempts still append their own lifetime execution
+records; they do not create an extra body iteration.
+
+Guards read current variables/results below the cap. For a declared body that is
+initial, reset or suspended, its business output is null for the loop guard; old
+results and approvals are never reused. Truly unknown references, in-flight output,
+missing fields on completed results and malformed predicates authorize neither
+branch. Prospective checks keep potential paths and still check downstream
+authority, schemas and prerequisites.
+
+Reaching the cap is **not approval**. Keep mandatory post-loop approval guards;
+their failure fails the module and prevents parent publication. Exact document
+review still binds current revision IDs/digests, including on the last supported
+body iteration. `max_duration` metadata is preserved; this cap-routing correction
+does not introduce duration-limit enforcement.
+
+Adoption requires newly compiled recipes and new runs. Prepared unmarked recipes
+retain legacy routing on resume and replay; replay does not adopt current compiler
+defaults. Never patch or strip a prepared recipe to change routing. Preserve the
+previous runtime/home pair for legacy recovery, and do not downgrade a home that
+contains marked recipes. See [Compatibility and Stability](compatibility-and-stability.md).
+
 ---
 
 ## Cleanup Phase

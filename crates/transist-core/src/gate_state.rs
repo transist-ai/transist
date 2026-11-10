@@ -59,12 +59,15 @@ pub(crate) fn evaluate_guard_expression_in_scope(
 
 /// Evaluates a marked loop edge's guard against current state, keeping missing
 /// references unknown rather than using the legacy unquoted-literal fallback.
+/// Declared body outputs with an initial/reset/suspended projection are known null;
+/// this never substitutes a historical result or approval.
 pub(crate) fn evaluate_loop_route_guard_expression(
     guard: Option<&str>,
     dependency_state: &KernelStepState,
     snapshot: &KernelRunSnapshot,
     workflow_inputs: &BTreeMap<String, KernelValue>,
     workflow_vars: &BTreeMap<String, KernelValue>,
+    loop_body_steps: &std::collections::BTreeSet<String>,
 ) -> GateState {
     evaluate_loop_route_guard_expression_in_scope(
         guard,
@@ -73,6 +76,7 @@ pub(crate) fn evaluate_loop_route_guard_expression(
         Some(workflow_inputs),
         Some(workflow_vars),
         &Default::default(),
+        Some(loop_body_steps),
     )
 }
 
@@ -85,11 +89,13 @@ pub(crate) fn evaluate_loop_route_guard_expression_in_scope(
     workflow_inputs: Option<&BTreeMap<String, KernelValue>>,
     workflow_vars: Option<&BTreeMap<String, KernelValue>>,
     deferred_inputs: &std::collections::BTreeSet<String>,
+    empty_loop_body_outputs: Option<&std::collections::BTreeSet<String>>,
 ) -> GateState {
     let mut ctx =
         EvaluationContext::new(dependency_state, snapshot, workflow_inputs, workflow_vars);
     ctx.deferred_inputs = Some(deferred_inputs);
     ctx.strict_operands = true;
+    ctx.empty_loop_body_outputs = empty_loop_body_outputs;
     evaluate_guard_in_context(guard, &ctx)
 }
 
