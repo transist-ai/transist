@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.1] — Bounded Loop Routing Fix
+
 - Newly compiled bounded loops take their normal successor at the activation-local
   `max_iters` cap instead of silently skipping it. Approval guards still run and
   must succeed before parent publication; exhaustion never implies approval.
@@ -14,6 +16,11 @@
   or approvals. Truly unknown references and malformed predicates remain fail-closed.
 - Prospective validation, explanations and inspection include cap-inclusive exits
   and check downstream authority, schemas and prerequisites before run birth.
+- Updated workspace dependencies and refreshed third-party notices.
+
+Runtime, admin, and server use `0.1.1`. Bundled workflows, modules, plugins, and
+exact catalog pins remain `0.1.0`; schema and protocol identifiers remain `v1`.
+See the [release notes](docs/public/releases/0.1.1.md) for adoption and recovery.
 
 ## [0.1.0] — Initial Public Beta
 

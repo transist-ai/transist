@@ -37,14 +37,19 @@ class PublicIdentityTests(unittest.TestCase):
         inventory.start()
         self.addCleanup(inventory.stop)
         self.profile = json.loads((ROOT / PROFILE).read_text())
+        self.runtime_version = self.profile["runtime_version"]
         self.write(PROFILE, json.dumps(self.profile))
         self.write(
             "Cargo.toml",
-            '[workspace.package]\nversion = "0.1.0"\n'
+            f'[workspace.package]\nversion = "{self.runtime_version}"\n'
             '[package]\nname = "transist"\nversion.workspace = true\n',
         )
-        self.write("Cargo.lock", '[[package]]\nname = "transist"\nversion = "0.1.0"\n')
-        self.write("docs/public/releases/0.1.0.md", "# Initial public beta\n")
+        self.write(
+            "Cargo.lock",
+            f'[[package]]\nname = "transist"\nversion = "{self.runtime_version}"\n',
+        )
+        for version in self.profile["approved_release_notes"]:
+            self.write(f"docs/public/releases/{version}.md", "# Public release\n")
         for name in (
             "schemas/runtime/run-state.v1.schema.json",
             "crates/transist-core/src/types.rs",
@@ -207,14 +212,19 @@ class PublicIdentityTests(unittest.TestCase):
 
     def test_approved_patch_notes(self) -> None:
         """Patch notes require explicit approval, not merely a version-shaped name."""
-        self.write("docs/public/releases/0.1.1.md", "# Public patch\n")
+        major, minor, patch_version = map(int, self.runtime_version.split("."))
+        next_version = f"{major}.{minor}.{patch_version + 1}"
+        self.write(f"docs/public/releases/{next_version}.md", "# Public patch\n")
         self.assertTrue(any("unapproved" in f for f in check_tree(self.root)))
-        self.profile["approved_release_notes"].append("0.1.1")
-        self.profile["runtime_version"] = "0.1.1"
-        self.write("docs/public/releases/0.1.0.md", "# Transist 0.1.0\n")
+        self.profile["approved_release_notes"].append(next_version)
+        self.profile["runtime_version"] = next_version
+        self.write("docs/public/releases/0.1.0.md", "# Transist " + "0.1.0\n")
         self.write(PROFILE, json.dumps(self.profile))
         for path in ("Cargo.toml", "Cargo.lock"):
-            self.write(path, (self.root / path).read_text().replace("0.1.0", "0.1.1"))
+            self.write(
+                path,
+                (self.root / path).read_text().replace(self.runtime_version, next_version),
+            )
         self.assertEqual(check_tree(self.root), [])
         self.write("docs/public/releases/unreviewed.md", "Unexpected notes")
         self.assertTrue(any("unapproved" in f for f in check_tree(self.root)))
@@ -253,7 +263,7 @@ class PublicIdentityTests(unittest.TestCase):
         )
         self.write(
             "README.md",
-            "transist-v0.1.0-x86_64-unknown-linux-gnu.tar.gz\n"
+            f"transist-v{self.runtime_version}-x86_64-unknown-linux-gnu.tar.gz\n"
             "Key ID `9B91C4C6F8E61392`\nPython 3.14.0\n",
         )
         with (self.root / "Cargo.lock").open("a") as stream:

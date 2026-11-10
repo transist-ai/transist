@@ -8,7 +8,7 @@ validator="$repo_root/scripts/ci/validate_release_archive_members.py"
 tmp_root="$(mktemp -d)"
 trap 'rm -rf "$tmp_root"' EXIT
 
-tag="v0.1.0"
+tag="v$(python3 -c 'import sys, tomllib; print(tomllib.load(open(sys.argv[1], "rb"))["workspace"]["package"]["version"])' "$repo_root/Cargo.toml")"
 targets=(
   x86_64-unknown-linux-gnu
   x86_64-unknown-linux-musl

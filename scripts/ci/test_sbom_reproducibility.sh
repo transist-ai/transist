@@ -30,6 +30,7 @@ script="scripts/ci/normalize_and_validate_sbom.py"
 command -v python3 >/dev/null 2>&1 || { echo "FAIL: python3 is required" >&2; exit 1; }
 
 failures=0
+runtime_version="$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
@@ -49,7 +50,7 @@ make_raw() {
   "metadata": {
     "timestamp": "$stamp",
     "tools": [{"name": "cargo-cyclonedx", "version": "0.5.9"}],
-    "component": {"type": "application", "name": "transist", "version": "0.1.0"}
+    "component": {"type": "application", "name": "transist", "version": "$runtime_version"}
   },
   "components": [
     {"type": "library", "name": "zeta", "version": "2.0.0", "bom-ref": "pkg:cargo/zeta@2.0.0", "purl": "pkg:cargo/zeta@2.0.0"},
