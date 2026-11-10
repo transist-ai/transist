@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MPL-2.0
-"""Reject references to separate catalogs in source, docs, skills and CI inputs.
+"""Reject dependencies on separate catalogs in source, docs, skills and CI inputs.
 
 The plugin workspace crate is local and intentionally retains its package name.
 This is a catalog-boundary check, not a ban on normal dependency/tool downloads.
+Two exact informational links are allowed in the root README only.
 """
 
 from __future__ import annotations
@@ -16,6 +17,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_CATALOG = "transist-" + "workflows"
 PLUGIN_CATALOG = "transist-" + "plugins"
+README_LINKS = frozenset(
+    (
+        f"- **Workflow examples:** Browse [{WORKFLOW_CATALOG}]"
+        f"(https://github.com/transist-ai/{WORKFLOW_CATALOG}) "
+        "(repository access required).",
+        f"- **Plugin examples:** Browse [{PLUGIN_CATALOG}]"
+        f"(https://github.com/transist-ai/{PLUGIN_CATALOG}) for integration examples.",
+    )
+)
 PATTERNS = (
     re.compile(rf"\b{WORKFLOW_CATALOG}\b", re.IGNORECASE),
     # Qualified repository URLs/paths, but not crates/<plugin-crate>/src, etc.
@@ -42,7 +52,8 @@ def check_text(path: str, text: str) -> list[str]:
     return [
         f"{path}:{number}: external catalog reference; use bundled resources"
         for number, line in enumerate(text.splitlines(), 1)
-        if any(pattern.search(line) for pattern in PATTERNS)
+        if not (path == "README.md" and line in README_LINKS)
+        and any(pattern.search(line) for pattern in PATTERNS)
     ]
 
 
