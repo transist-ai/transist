@@ -11,6 +11,7 @@ from pathlib import Path
 
 from check_repository_self_contained import (
     PLUGIN_CATALOG,
+    README_LINKS,
     ROOT,
     WORKFLOW_CATALOG,
     check_repository,
@@ -58,6 +59,14 @@ class RepositorySelfContainedTests(unittest.TestCase):
         ):
             with self.subTest(text=text):
                 self.assertEqual(check_text("fixture.txt", text), [])
+
+    def test_only_exact_root_readme_example_links_are_allowed(self) -> None:
+        for line in README_LINKS:
+            with self.subTest(line=line):
+                self.assertEqual(check_text("README.md", line), [])
+                self.assertTrue(check_text("docs/README.md", line))
+                self.assertTrue(check_text("README.md", line + " && checkout"))
+                self.assertTrue(check_text("README.md", line.replace("https://", "http://")))
 
     def test_repository_override_is_rejected(self) -> None:
         for kind in ("WORKFLOWS", "PLUGINS"):
