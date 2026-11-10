@@ -285,8 +285,8 @@ execution still enforce current authority and live checks before run birth.
 
 - **To evaluate Transist:** Start with the [Quickstart](docs/public/guides/getting-started/quickstart.md), then explore the [Getting Started Demos](workflows/demos/getting_started/README.md).
 - **To automate your first workflow:** Follow the [Quickstart](docs/public/guides/getting-started/quickstart.md), then read [Build Your First Real Workflow](docs/public/guides/authoring/advanced-workflow-authoring.md) and the [Workflow Patterns Cookbook](docs/public/guides/authoring/workflow-patterns-cookbook.md).
-- **Workflow examples:** Browse [transist-workflows](https://github.com/transist-ai/transist-workflows) (repository access required).
-- **Plugin examples:** Browse [transist-plugins](https://github.com/transist-ai/transist-plugins) for integration examples.
+- **Workflow examples:** Browse the separate [transist-workflows](https://github.com/transist-ai/transist-workflows) catalog (repository access required).
+- **Plugin examples:** Browse the separate [transist-plugins](https://github.com/transist-ai/transist-plugins) catalog for integrations through the formal `adapter + plugin + action` interface.
 - **To understand the runtime model:** Read [Artifacts, Evidence, and Events](docs/public/handbook/03-inspection-and-recovery/02-artifacts-evidence-and-events.md).
 - **To compare Transist with agent automation:** Read [Transist vs Agent Automation](docs/public/transist-governed-execution-positioning.md).
 - **To operate or administer Transist:** See the [Handbook](docs/public/handbook/README.md), [CLI Reference](docs/public/reference/cli.md), [Storage Layout](docs/public/reference/storage-layout.md), [Companion Server API](docs/public/reference/companion-server-api.md), and [Metrics Reference](docs/public/reference/metrics.md).
