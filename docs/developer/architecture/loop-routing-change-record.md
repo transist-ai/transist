@@ -84,9 +84,62 @@ pair for rollback. Rollback never reverses external effects.
   `reject`, `early-failure`, and `iteration-limit`; the final case must fail at its
   approval guard, not later from missing publication inputs.
 
-Step 4 macOS commands, counts, failures and retained evidence are recorded outside
-the source tree. Native Linux Step 4 downstream validation remains a separate
-requirement after source settles. Step 5 requires the complete final gates on both
-native ARM64 platforms. Scoped macOS evidence alone is not Step 4 completion or
-release readiness, and the candidate version label does not prove compatibility
-with published `0.1.0` binaries.
+## Candidate review handoff
+
+Implementation commits, in order:
+
+| Step | Commit | Change |
+| --- | --- | --- |
+| 1 | `16340cc` | Opt-in metadata and recursive validation |
+| 2 | `f299dbc` | Compiler emission and activation-local scheduler routing |
+| 3 | `43831e5` | Prospective checks, graph explanations and inspection/API mapping |
+| 4 | `a63f074` | Recovery/document-approval proof and adoption documentation |
+
+Native macOS ARM64 and native Linux ARM64 validated the same implementation at
+`a63f07486d518fe88643b924047c80fe196eb625` (tree
+`b94c95bcb5de1d87d10179b19cb43db448c2629e`). All 972 source files matched byte
+hashes and modes. Canonical source-manifest SHA-256:
+`8d2b9a797aa019db10dbd1b3f6d331a371782955bb19faaf27eef75fdea06aaa`.
+The review-handoff commit updates this record only; it does not change executable
+source. Full validation is repeated after this final documentation update.
+
+| Completed validation | macOS ARM64 | Linux ARM64 |
+| --- | --- | --- |
+| Full `bash scripts/ci/check_pr_ready.sh`, no flags | PASS; 2,195 Rust tests | PASS; 2,200 Rust tests |
+| `bash scripts/ci/check_schema_api_contracts.sh` | PASS; 46 Rust tests | PASS; 46 Rust tests |
+| `bash scripts/ci/validate_docs_and_skills.sh` | PASS | PASS |
+| `bash scripts/ci/run_security_regression_suite.sh` | PASS; 215 Rust executions | PASS; 215 Rust executions |
+| Unchanged downstream runner, release CLI, no case filter | PASS; all five scenarios | PASS; all five scenarios |
+
+Both full gates include all eleven required E2E suites, all twelve shipped
+workflows, release builds, archive reproducibility and quickstart smoke. No E2E
+warnings, skips or leaked processes were accepted. The Rust-count difference is
+native `target_os` coverage (17 Linux-only and 12 macOS-only tests), not skipped
+tests. Default-feature exclusions remain the gate's documented feature contract.
+On both platforms, iteration-limit fails the intended approval guard exactly once
+and leaves parent publication at zero executions.
+
+Exact commands, exit codes, toolchains, binary hashes, failed attempts and fixtures
+are retained outside the source tree in the local review evidence:
+
+- `/tmp/loop-cap-step1-results.md`, `/tmp/loop-cap-step2-results.md`,
+  `/tmp/loop-cap-step3-results.md`, `/tmp/loop-cap-step4-results.md`.
+- `/tmp/loop-cap-linux-20261110-step4/STEP4-RESULTS.md`.
+- `/tmp/loop-cap-step5-macos-results.md` and
+  `/tmp/loop-cap-linux-step5-20261110-a63f074/STEP5-RESULTS.md`.
+- `/tmp/loop-cap-source-comparison-20261110/COMPARISON.md` contains the common
+  manifest format, byte/mode comparison and native cfg/count explanation.
+- Post-handoff-documentation reruns are retained under
+  `/tmp/loop-cap-step5-final-macos/` and `/tmp/loop-cap-step5-final-linux/`.
+
+Environment-only failures were retained and corrected before full reruns, without
+changing source, gates, assertions or sandbox policy. The Linux VM's initial
+synthetic Git configuration accidentally replaced its global null device; successful
+validation uses a correct device in a private mount namespace and an owned writable
+Git configuration. The retained VM must use that documented re-entry environment;
+its global null device remains affected outside the namespace.
+
+This is candidate implementation/review evidence, not release readiness or a claim
+of compatibility with published `0.1.0` binaries. No versions or dependency pins
+changed. No push, tag, publication or operational signing is part of this work.
+Adoption and rollback follow the preserved runtime/home-pair rules above.
