@@ -121,7 +121,7 @@ expected values are omitted or differ.
 ## Verify The Checksum
 
 ```bash
-tag=v0.1.0 # select the release tag being verified
+tag=v0.1.1 # select the release tag being verified
 shasum -a 256 -c "transist-${tag}-x86_64-unknown-linux-gnu.tar.gz.sha256"
 ```
 

@@ -2,10 +2,11 @@
 
 ## Public Baseline
 
-Transist `0.1.0` is a public beta for governed local workflow execution, with
+Transist `0.1.1` is a public beta for governed local workflow execution, with
 versioned workflow/plugin contracts, durable run history, explicit recovery,
 human review, and local inspection. See the
-[release notes](docs/public/releases/0.1.0.md) for current capabilities.
+[release notes](docs/public/releases/0.1.1.md) for the current patch and
+[initial release](docs/public/releases/0.1.0.md) for baseline capabilities.
 
 ## Priorities
 

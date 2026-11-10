@@ -28,7 +28,7 @@ If working from a source checkout instead of an installed CLI, substitute `cargo
 - In this repository's `workflows/` and `examples/`, maintained root flows and modules
   keep release `version: 0.1.0` and all plugin pins stay exactly `0.1.0`.
   `transist.module.v1` remains the schema identifier, not the release version.
-  Runtime/admin crates use `0.1.0`; arbitrary/negative test fixtures
+  Runtime/admin crates use `0.1.1`; arbitrary/negative test fixtures
   are exempt from the maintained catalog policy.
 - The current authoring/persistence contract requires a fresh runtime home,
   with no legacy reader, version alias or in-place migration. See

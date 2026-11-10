@@ -150,7 +150,7 @@ supports recovery, not guaranteed cleanup completion.
 
 Maintained flows, modules, plugin releases and exact pins in these catalogs stay
 `0.1.0`. Schema IDs stay `transist.flow.v1`, `transist.module.v1`,
-`transist.plugin.v1`; runtime/admin crates use `0.1.0`. This is not a global release
+`transist.plugin.v1`; runtime/admin crates use `0.1.1`. This is not a global release
 policy. Signatures bind bytes: changed same-version content needs a new reviewed
 bundle/signature and a **fresh home**, never overwrite installed payloads, remove
 pinned dependencies or delete old runs. Preserve the preceding home/bundle for

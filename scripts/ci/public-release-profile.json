@@ -1,5 +1,5 @@
 {
-  "runtime_version": "0.1.0",
+  "runtime_version": "0.1.1",
   "catalog_version": "0.1.0",
   "contract_version": 1,
   "numeric_runtime_contracts": {
@@ -21,5 +21,5 @@
       }
     }
   },
-  "approved_release_notes": ["0.1.0"]
+  "approved_release_notes": ["0.1.0", "0.1.1"]
 }
