@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Report process stdout closure before the APP handshake response as a transport
+  failure rather than a timeout, in both live preflight and invocation diagnostics.
+  Handshake deadline expiry remains a timeout; stdout read errors are transport failures.
 - Correct external-transfer evidence SHA-256 references to match the exact JSON
   bytes persisted by the artifact store. Historical records are not rewritten.
 - Capture actual adapter invocation start and finish timestamps independently of

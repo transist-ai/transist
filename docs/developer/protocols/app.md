@@ -59,6 +59,15 @@ strict action schema. See the [public manifest contract](../../public/reference/
 
 Messages are exchanged as **newline-delimited JSON (NDJSON)** over `stdin` and `stdout`. The plugin's `stdout` is strictly reserved for these APP frames; any other output should be written to `stderr`.
 
+Handshake receives distinguish deadline expiry (`timeout_error`, exit code
+`124`) from stdout closure or read failure (`transport_error`, exit code `2`).
+Malformed handshake frames remain `protocol_error`. Live preflight retains
+`adapter_handshake` and never includes plugin stderr; a post-cleanup exit status
+does not establish the original cause. See
+[Process Handshake Failures](../../public/reference/app.md#process-handshake-failures)
+for the operator-facing diagnostics. This distinction applies before invocation;
+invoke-result receive and cleanup semantics are unchanged.
+
 ### `http` Adapter
 
 Messages are sent via standard REST endpoints:

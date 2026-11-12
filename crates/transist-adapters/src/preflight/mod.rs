@@ -1408,6 +1408,9 @@ fn scope_prerequisite_checks(
 }
 
 #[cfg(test)]
+mod handshake_diagnostics;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::collections::BTreeMap;
@@ -1765,7 +1768,7 @@ mod tests {
         );
     }
 
-    fn target() -> ValidatedPreflightTarget {
+    pub(super) fn target() -> ValidatedPreflightTarget {
         ValidatedPreflightTarget {
             request: ExecutionRequest {
                 message_type: "tep.invoke.request.v1".to_string(),
