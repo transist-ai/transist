@@ -38,6 +38,16 @@ the matching schema.
   instances use `validation_error` and are not copied into durable result data.
 - The runtime also writes additive `transist_runtime_invoke_evidence.json` beside each invoke's evidence files. That runtime-owned record may include `producing_workflow { id, version, digest }` and `producing_plugin { id, version, digest }` summaries derived from the persisted run and invoke request metadata.
 
+### Invocation Timing
+
+Process, HTTP, and MCP results capture `timing.started_at` at adapter entry and
+`timing.finished_at` when constructing the terminal result, as Unix-millisecond
+strings. `timing.duration_ms` measures elapsed time using a monotonic clock,
+including on failure and cancellation; it is not computed by subtracting wall
+timestamps. Wall-clock adjustments are preserved, so finish can precede start;
+sub-millisecond operations can have equal timestamps. Historical results are not
+rewritten to adopt corrected timestamp capture.
+
 ### Action Input Projection
 
 The original TEP invoke request remains authoritative for secret references,

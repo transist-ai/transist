@@ -401,6 +401,10 @@ This contract protects the local runtime behavior that must not drift silently w
 - **Execution Scoping**: All logs, files, and evidence produced by a plugin are stored in a directory scoped to that specific execution. We never overwrite earlier results, even during a retry or a reused subflow rerun.
 - **Private File Promotion**: Adapters receive mode-0700 per-invocation artifact and evidence staging directories outside the final run tree. The kernel rejects missing, non-regular, symlinked, escaped, or secret-bearing paths; text files are redacted, binary files containing a known secret are rejected, accepted bytes are re-hashed, and only then are files atomically promoted. A retry may reconcile an existing regular artifact/evidence file only when its bytes are identical; differing content, symlinks, and directories remain errors, while immutable execution records remain duplicate-rejecting.
 - **Permanent Audit Trail**: Artifacts and evidence remain available for inspection even if the run ultimately fails, and no rerun, retry, resume, replay, cleanup, or cancellation path removes them.
+- **Evidence Byte Identity**: Runtime-owned evidence references hash the exact
+  bytes persisted by the artifact store. Serialization-order corrections apply
+  only to newly generated evidence; historical references remain immutable. See
+  the [evidence and timing change record](evidence-and-timing-change-record.md).
 - **Read-Through Inspection Cache**: Inspection surfaces may use a process-local, in-memory read-through cache for performance, but persisted on-disk state remains authoritative and cache entries are always derived from file fingerprints. Small run-summary projections use content fingerprints over the same captured bytes parsed on a miss, so independent readers detect same-length atomic replacements even within one filesystem timestamp tick. Summary rebuilds bypass cached state/recipe/blob inputs, including caches warmed by other readers, before publishing their derived projection. Unchanged summary reads reuse parsed records; artifact/evidence payloads are not content-hashed for summary lookups.
 
 ---

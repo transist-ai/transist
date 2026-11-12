@@ -13,8 +13,8 @@ impl ExecutionPort for ProcessAdapter {
     }
 
     fn execute_step(&self, invocation: &ExecutionInvocation) -> Result<ExecutionResult> {
+        let timer = InvocationTimer::new();
         let request = &invocation.request;
-        let start = Instant::now();
         let timeout = request.timeout_ms.unwrap_or(30_000);
         let inactivity_timeout = Duration::from_millis(timeout);
         let handshake_deadline = Instant::now() + inactivity_timeout;
@@ -29,7 +29,7 @@ impl ExecutionPort for ProcessAdapter {
                 &error.to_string(),
                 String::new(),
                 Some(2),
-                0,
+                timer.snapshot(),
             ));
         }
         let PluginEntrypoint::Process {
@@ -53,13 +53,25 @@ impl ExecutionPort for ProcessAdapter {
             let filesystem_policy = match filesystem_policy_from_request(request) {
                 Ok(policy) => policy.unwrap_or_default(),
                 Err(msg) => {
-                    return Ok(sandbox_failure_result(request, "none", &msg, &[]));
+                    return Ok(sandbox_failure_result(
+                        request,
+                        "none",
+                        &msg,
+                        &[],
+                        timer.snapshot(),
+                    ));
                 }
             };
             let network_policy = match network_policy_from_request(request) {
                 Ok(policy) => policy.unwrap_or_default(),
                 Err(msg) => {
-                    return Ok(sandbox_failure_result(request, "none", &msg, &[]));
+                    return Ok(sandbox_failure_result(
+                        request,
+                        "none",
+                        &msg,
+                        &[],
+                        timer.snapshot(),
+                    ));
                 }
             };
             let plan =
@@ -71,6 +83,7 @@ impl ExecutionPort for ProcessAdapter {
                             strict_local_sandbox_backend_label(),
                             &msg,
                             &sandbox_ignore_paths,
+                            timer.snapshot(),
                         ));
                     }
                 };
@@ -82,6 +95,7 @@ impl ExecutionPort for ProcessAdapter {
                         strict_local_sandbox_backend_label(),
                         &msg,
                         &sandbox_ignore_paths,
+                        timer.snapshot(),
                     ));
                 }
             }
@@ -126,6 +140,7 @@ impl ExecutionPort for ProcessAdapter {
                         strict_local_sandbox_backend_label(),
                         &format!("sandbox wrapper failed to spawn: {error}"),
                         &sandbox_ignore_paths,
+                        timer.snapshot(),
                     ));
                 }
                 bail!(
@@ -202,6 +217,7 @@ impl ExecutionPort for ProcessAdapter {
                     backend,
                     &detail,
                     &sandbox_ignore_paths,
+                    timer.snapshot(),
                 ));
             }
             Ok(process_failure_or_cancelled(
@@ -211,7 +227,7 @@ impl ExecutionPort for ProcessAdapter {
                 message,
                 append_stderr_diagnostic(stderr_text, diagnostic),
                 exit_code,
-                start.elapsed().as_millis() as u64,
+                timer.snapshot(),
                 external_cancel,
             ))
         };
@@ -346,6 +362,7 @@ impl ExecutionPort for ProcessAdapter {
                 }
             }
             cleanup_temp_files(&mut process_secrets.temp_files);
+            let timing = timer.snapshot();
             let outcome = crate::process_lifecycle::lifecycle_failure(
                 invocation,
                 app_result,
@@ -354,7 +371,7 @@ impl ExecutionPort for ProcessAdapter {
                 cleanup_confirmed,
                 exit_observation.is_err(),
                 self.termination_grace,
-                start.elapsed().as_millis() as u64,
+                timing.clone(),
             );
             // Keep the registered cancellation target through evidence creation.
             // Cancellation may arrive while schema/hint/file work is in progress.
@@ -365,10 +382,11 @@ impl ExecutionPort for ProcessAdapter {
                 clear_active_invocation(self.active_record_store.as_ref(), request);
             }
             if active.cancelled.load(Ordering::SeqCst) || external_cancel {
+                // Cancellation is a new terminal outcome after evidence creation.
                 let mut result = cancelled_result(
                     request,
                     "process plugin invocation cancelled",
-                    start.elapsed().as_millis() as u64,
+                    timer.snapshot(),
                 );
                 // A canceled execution can retain runtime diagnostics, but never
                 // promote the plugin's returned output or its staged hints.
@@ -390,6 +408,7 @@ impl ExecutionPort for ProcessAdapter {
         let stderr_handle = stderr_handle.expect("stderr handle consumed only on failure paths");
         let stderr_text = redact_text(&join_stderr(stderr_handle), &invocation.secret_values);
         cleanup_temp_files(&mut process_secrets.temp_files);
+        let timing = timer.snapshot();
         let outcome = if let Some(error) = validation.failure {
             Ok(failure_result(
                 request,
@@ -397,7 +416,7 @@ impl ExecutionPort for ProcessAdapter {
                 &redact_text(&error.message, &invocation.secret_values),
                 stderr_text,
                 Some(2),
-                start.elapsed().as_millis() as u64,
+                timing.clone(),
             ))
         } else {
             app_result_to_execution_result(
@@ -407,17 +426,18 @@ impl ExecutionPort for ProcessAdapter {
                 &invocation.secret_values,
                 app_result,
                 stderr_text,
-                start.elapsed().as_millis() as u64,
+                timing.clone(),
             )
         };
         let external_cancel = external_cancel_observed(self.active_record_store.as_ref(), request);
         self.active.remove(&request.invoke_id);
         clear_active_invocation(self.active_record_store.as_ref(), request);
         if active.cancelled.load(Ordering::SeqCst) || external_cancel {
+            // Cancellation wins after conversion; retain the start, sample its finish now.
             return Ok(cancelled_result(
                 request,
                 "process plugin invocation cancelled",
-                start.elapsed().as_millis() as u64,
+                timer.snapshot(),
             ));
         }
         outcome

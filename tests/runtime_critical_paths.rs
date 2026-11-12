@@ -108,6 +108,7 @@ impl Drop for ActiveRunCleanup {
     }
 }
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use transist::{
     BlobFamily, BlobListScope, GateDecisionInput, KernelValue, TransistInspectionContext,
 };
@@ -1245,6 +1246,53 @@ steps:
             .join(evidence_path)
             .is_file()
     );
+
+    let run_id = "trusted-external-transfer-run";
+    let state = read_state(repo.path(), run_id);
+    let execution = read_execution(repo.path(), run_id, "emit", 1);
+    let evidence = state["steps"]["emit"]["last_result"]["evidence"]
+        .as_array()
+        .expect("persisted evidence refs");
+    assert!(evidence.iter().any(|reference| {
+        reference["path"]
+            .as_str()
+            .expect("evidence path")
+            .ends_with("/transist_runtime_invoke_evidence.json")
+    }));
+    assert_eq!(execution["result"]["evidence"], serde_json::json!(evidence));
+    for (index, reference) in evidence.iter().enumerate() {
+        let path = Path::new(reference["path"].as_str().expect("evidence path"));
+        let bytes = fs::read(path).expect("read actual persisted evidence bytes");
+        let digest = hex::encode(Sha256::digest(&bytes));
+        assert_eq!(reference["sha256"], digest, "{}", path.display());
+        assert_eq!(reference["bytes"], bytes.len() as u64);
+
+        let file_name = path
+            .file_name()
+            .expect("evidence file name")
+            .to_str()
+            .unwrap();
+        let descriptor_path = path.with_file_name(format!("{index:03}_{file_name}.json"));
+        let descriptor: Value =
+            serde_json::from_slice(&fs::read(descriptor_path).expect("read evidence descriptor"))
+                .expect("parse evidence descriptor");
+        assert_eq!(descriptor["sha256"], digest);
+        assert_eq!(descriptor["bytes"], bytes.len() as u64);
+        assert_eq!(descriptor["source_path"], reference["path"]);
+
+        if file_name.starts_with("transist_external_transfer_") {
+            let transfer: transist_protocol::ExternalTransferRecord =
+                serde_json::from_slice(&bytes).expect("typed external transfer evidence");
+            assert_eq!(transfer.run_id, run_id);
+            assert_eq!(transfer.step_id, "emit");
+            assert_eq!(transfer.execution, 1);
+            assert_eq!(transfer.provider.as_deref(), Some("openai"));
+            assert_eq!(
+                transfer.content_hash.as_deref(),
+                transfers[0]["content_hash"].as_str()
+            );
+        }
+    }
 }
 
 #[test]

@@ -19,11 +19,12 @@ WORKFLOW_CATALOG = "transist-" + "workflows"
 PLUGIN_CATALOG = "transist-" + "plugins"
 README_LINKS = frozenset(
     (
-        f"- **Workflow examples:** Browse [{WORKFLOW_CATALOG}]"
+        f"- **Workflow examples:** Browse the separate [{WORKFLOW_CATALOG}]"
         f"(https://github.com/transist-ai/{WORKFLOW_CATALOG}) "
-        "(repository access required).",
-        f"- **Plugin examples:** Browse [{PLUGIN_CATALOG}]"
-        f"(https://github.com/transist-ai/{PLUGIN_CATALOG}) for integration examples.",
+        "catalog (repository access required).",
+        f"- **Plugin examples:** Browse the separate [{PLUGIN_CATALOG}]"
+        f"(https://github.com/transist-ai/{PLUGIN_CATALOG}) catalog for integrations "
+        "through the formal `adapter + plugin + action` interface.",
     )
 )
 PATTERNS = (

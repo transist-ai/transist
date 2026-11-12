@@ -60,7 +60,7 @@ pub(crate) fn lifecycle_failure(
     cleanup_confirmed: bool,
     exit_observation_failed: bool,
     grace: Duration,
-    duration_ms: u64,
+    timing: protocol::InvokeTiming,
 ) -> Result<ExecutionResult> {
     let request = &invocation.request;
     let secrets = &invocation.secret_values;
@@ -90,7 +90,7 @@ pub(crate) fn lifecycle_failure(
     } else {
         (CanonicalErrorCode::ProtocolError, message)
     };
-    let mut result = failure_result(request, code, &message, String::new(), Some(2), duration_ms);
+    let mut result = failure_result(request, code, &message, String::new(), Some(2), timing);
     // Failed APP output may legitimately be empty and not satisfy the success
     // schema. Preserve its safe error summary, never that invalid output/hints.
     if validation.output_valid && !internal_failure && validation.failure.is_none() {
@@ -168,7 +168,7 @@ mod tests {
         /// Creates a terminal success carrying secret-bearing output and hints.
         /// No plugin is installed or spawned; only local test files are written.
         fn new() -> Self {
-            let root = tempfile::tempdir_in("/tmp").expect("tempdir");
+            let root = tempfile::tempdir().expect("tempdir");
             let plugin_dir = root.path().join("plugin");
             fixture::write_plugin(&plugin_dir);
             let manifest = transist_plugins::load_manifest_file(&plugin_dir.join("plugin.yaml"))
@@ -224,7 +224,12 @@ mod tests {
             } else {
                 Ok(json!({"leader_alive": true, "live_pids": [42], "live_pgids": [42]}))
             };
-            lifecycle_failure(
+            let timing = protocol::InvokeTiming {
+                started_at: "1000".into(),
+                finished_at: "900".into(),
+                duration_ms: 100,
+            };
+            let result = lifecycle_failure(
                 &self.invocation,
                 self.terminal.clone(),
                 validation,
@@ -232,9 +237,13 @@ mod tests {
                 cleanup,
                 exit_failed,
                 Duration::from_millis(250),
-                100,
+                timing.clone(),
             )
-            .expect("lifecycle failure")
+            .expect("lifecycle failure");
+            assert_eq!(result.timing.started_at, timing.started_at);
+            assert_eq!(result.timing.finished_at, timing.finished_at);
+            assert_eq!(result.timing.duration_ms, timing.duration_ms);
+            result
         }
     }
 
@@ -367,7 +376,7 @@ mod tests {
             true,
             false,
             Duration::from_millis(42),
-            100,
+            InvocationTimer::new().snapshot(),
         )
         .expect("lifecycle result");
         assert_eq!(

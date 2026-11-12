@@ -4,7 +4,6 @@
 use anyhow::Result;
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 use transist_core::ports::{
     ActiveRecordPort, ExecutionCancelRequest, ExecutionCancelResult, ExecutionInvocation,
     ExecutionPort, PreflightInvocation, PreflightPort,
@@ -15,6 +14,7 @@ use transist_protocol::{
 };
 
 use crate::preflight::preflight_probe_concurrency_from_env;
+use crate::timing::InvocationTimer;
 use crate::{HttpAdapter, McpAdapter, ProcessAdapter, preflight_check};
 
 #[derive(Default)]
@@ -102,6 +102,7 @@ impl ExecutionPort for AdapterRouter {
     }
 
     fn execute_step(&self, invocation: &ExecutionInvocation) -> Result<ExecutionResult> {
+        let timer = InvocationTimer::new();
         let request = &invocation.request;
         let Some(adapter) = self.adapters.get(&request.adapter_kind) else {
             return Ok(router_failure_result(
@@ -112,6 +113,7 @@ impl ExecutionPort for AdapterRouter {
                     request.adapter_kind,
                     registered_kinds_label(&self.registered_kinds())
                 ),
+                timer.snapshot(),
             ));
         };
         adapter.execute_step(invocation)
@@ -193,6 +195,7 @@ fn router_failure_result(
     request: &transist_protocol::ExecutionRequest,
     code: CanonicalErrorCode,
     message: &str,
+    timing: InvokeTiming,
 ) -> ExecutionResult {
     ExecutionResult {
         message_type: TEP_INVOKE_RESULT_TYPE_V1.to_string(),
@@ -205,11 +208,7 @@ fn router_failure_result(
         exit_code: Some(2),
         stdout: String::new(),
         stderr: String::new(),
-        timing: InvokeTiming {
-            started_at: unix_ms().to_string(),
-            finished_at: unix_ms().to_string(),
-            duration_ms: 0,
-        },
+        timing,
         artifacts: Vec::new(),
         evidence: Vec::new(),
         metrics: BTreeMap::new(),
@@ -218,13 +217,6 @@ fn router_failure_result(
         usage: None,
         error: Some(ProtocolError::new(code, message)),
     }
-}
-
-fn unix_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64
 }
 
 #[cfg(test)]

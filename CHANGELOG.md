@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Correct external-transfer evidence SHA-256 references to match the exact JSON
+  bytes persisted by the artifact store. Historical records are not rewritten.
+- Capture actual adapter invocation start and finish timestamps independently of
+  monotonic elapsed duration, including failure and cancellation results. Existing
+  invocation records retain their original timestamps.
+
 ## [0.1.1] — Bounded Loop Routing Fix
 
 - Newly compiled bounded loops take their normal successor at the activation-local

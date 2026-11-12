@@ -13,6 +13,11 @@
 #![allow(unsafe_code)]
 #![cfg(unix)]
 
+#[path = "../../../tests/support/process_lifecycle.rs"]
+mod fixture;
+#[path = "support/timing.rs"]
+mod timing;
+
 use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -366,4 +371,74 @@ fn cancellation_is_scoped_to_the_requested_step() {
     let _ = step_a.wait();
     let _ = step_b.kill();
     let _ = step_b.wait();
+}
+
+#[test]
+fn adapter_result_timing_survives_on_disk_cancellation() {
+    use std::{collections::BTreeMap, sync::Arc};
+    use transist_adapters::ProcessAdapter;
+    use transist_core::ports::{ExecutionInvocation, ExecutionPort, RemoteSecretPolicy};
+
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let plugin = tmp.path().join("plugin");
+    fixture::write_plugin(&plugin);
+    transist_plugins::install_plugin_file(tmp.path(), &plugin.join("plugin.yaml"))
+        .expect("install");
+    let run_root = tmp.path().join(".transist/runs/run_cancel_timing");
+    std::fs::create_dir_all(run_root.join("artifacts")).expect("artifacts");
+    std::fs::create_dir_all(run_root.join("evidence")).expect("evidence");
+    let invocation = ExecutionInvocation {
+        request: serde_json::from_value(serde_json::json!({
+            "type": "tep.invoke.request.v1", "protocol_version": "tep.v1",
+            "invoke_id": "cancel-timing", "run_id": "cancel-timing-run", "workflow_id": "cancel-timing",
+            "step": {"id": "invoke", "execution": 1}, "adapter_kind": "process",
+            "action": "invoke", "input": {"mode": "pre_terminal"}, "requested_capabilities": [],
+            "timeout_ms": 30000,
+            "paths": {
+                "run_root": run_root, "workspace_dir": tmp.path(),
+                "artifacts_dir": run_root.join("artifacts"), "evidence_dir": run_root.join("evidence")
+            },
+            "policy": {"workspace_declared": true}, "metadata": {"plugin_id": "fixture.lifecycle"}
+        }))
+        .expect("request"),
+        secret_values: BTreeMap::new(),
+        remote_secret_policy: RemoteSecretPolicy::default(),
+    };
+    let before = timing::wall_ms();
+    let handle = std::thread::spawn(move || {
+        ProcessAdapter::new(Arc::new(LocalActiveRecordStore))
+            .execute_step(&invocation)
+            .expect("execute")
+    });
+    assert!(wait_until_exists(
+        &tmp.path().join("lifecycle-leader.pid"),
+        Duration::from_secs(30)
+    ));
+    let outcomes = cancel_active_invocations_on_disk(
+        &LocalActiveRecordStore,
+        &run_root,
+        "invoke",
+        Duration::from_millis(DEFAULT_TERMINATION_GRACE_MS),
+    )
+    .expect("cancel");
+    let result = handle.join().expect("join");
+    let after = timing::wall_ms();
+    assert_eq!(outcomes.len(), 1);
+    assert!(matches!(
+        outcomes[0].outcome,
+        CancelOutcome::Terminated | CancelOutcome::Killed
+    ));
+    assert_eq!(result.status, "cancelled");
+    assert_eq!(
+        result.error.as_ref().expect("error").code,
+        transist_protocol::CanonicalErrorCode::Cancelled
+    );
+    timing::assert_timing(&result.timing, before, after, true);
+    assert!(
+        !active_invocations_dir(&run_root)
+            .join("cancel-timing.json")
+            .exists()
+    );
+    assert!(result.artifacts.is_empty());
+    assert!(result.evidence.is_empty());
 }

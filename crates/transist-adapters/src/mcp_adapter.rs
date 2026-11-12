@@ -13,8 +13,8 @@ impl ExecutionPort for McpAdapter {
     }
 
     fn execute_step(&self, invocation: &ExecutionInvocation) -> Result<ExecutionResult> {
+        let timer = InvocationTimer::new();
         let request = &invocation.request;
-        let start = Instant::now();
         if !invocation.secret_values.is_empty()
             && !invocation
                 .remote_secret_policy
@@ -26,7 +26,7 @@ impl ExecutionPort for McpAdapter {
                 "remote secret delivery is denied by policy for adapter 'mcp'",
                 String::new(),
                 Some(2),
-                0,
+                timer.snapshot(),
             ));
         }
         let (manifest, plugin_dir, action) = load_plugin(invocation, AdapterKind::Mcp)?;
@@ -40,7 +40,7 @@ impl ExecutionPort for McpAdapter {
                 &error.to_string(),
                 String::new(),
                 Some(2),
-                0,
+                timer.snapshot(),
             ));
         }
         let tool_name = mcp_tool_name(&action)?;
@@ -65,13 +65,25 @@ impl ExecutionPort for McpAdapter {
             let filesystem_policy = match filesystem_policy_from_request(request) {
                 Ok(policy) => policy.unwrap_or_default(),
                 Err(msg) => {
-                    return Ok(sandbox_failure_result(request, "none", &msg, &[]));
+                    return Ok(sandbox_failure_result(
+                        request,
+                        "none",
+                        &msg,
+                        &[],
+                        timer.snapshot(),
+                    ));
                 }
             };
             let network_policy = match network_policy_from_request(request) {
                 Ok(policy) => policy.unwrap_or_default(),
                 Err(msg) => {
-                    return Ok(sandbox_failure_result(request, "none", &msg, &[]));
+                    return Ok(sandbox_failure_result(
+                        request,
+                        "none",
+                        &msg,
+                        &[],
+                        timer.snapshot(),
+                    ));
                 }
             };
             let plan =
@@ -83,6 +95,7 @@ impl ExecutionPort for McpAdapter {
                             strict_local_sandbox_backend_label(),
                             &msg,
                             &sandbox_ignore_paths,
+                            timer.snapshot(),
                         ));
                     }
                 };
@@ -94,6 +107,7 @@ impl ExecutionPort for McpAdapter {
                         strict_local_sandbox_backend_label(),
                         &msg,
                         &sandbox_ignore_paths,
+                        timer.snapshot(),
                     ));
                 }
             }
@@ -136,6 +150,7 @@ impl ExecutionPort for McpAdapter {
                         strict_local_sandbox_backend_label(),
                         &format!("sandbox wrapper failed to spawn: {error}"),
                         &sandbox_ignore_paths,
+                        timer.snapshot(),
                     ));
                 }
                 bail!(
@@ -204,6 +219,7 @@ impl ExecutionPort for McpAdapter {
                         backend,
                         &format!("sandbox wrapper failed: {err}"),
                         &sandbox_ignore_paths,
+                        timer.snapshot(),
                     ));
                 }
                 return Ok(mcp_failure_or_cancelled(
@@ -213,7 +229,7 @@ impl ExecutionPort for McpAdapter {
                     &err.to_string(),
                     stderr_text,
                     Some(124),
-                    start.elapsed().as_millis() as u64,
+                    timer.snapshot(),
                     external_cancel,
                 ));
             }
@@ -233,7 +249,7 @@ impl ExecutionPort for McpAdapter {
                 &format!("MCP tool '{}' is not available", tool_name),
                 redact_text(&join_stderr(stderr_handle), &invocation.secret_values),
                 Some(2),
-                start.elapsed().as_millis() as u64,
+                timer.snapshot(),
                 external_cancel,
             ));
         }
@@ -276,7 +292,7 @@ impl ExecutionPort for McpAdapter {
                     &err.to_string(),
                     stderr_text,
                     Some(124),
-                    start.elapsed().as_millis() as u64,
+                    timer.snapshot(),
                     external_cancel,
                 ));
             }
@@ -298,7 +314,7 @@ impl ExecutionPort for McpAdapter {
                     &format!("failed waiting for MCP exit: {error}"),
                     redact_text(&join_stderr(stderr_handle), &invocation.secret_values),
                     Some(2),
-                    start.elapsed().as_millis() as u64,
+                    timer.snapshot(),
                     external_cancel,
                 ));
             }
@@ -318,7 +334,7 @@ impl ExecutionPort for McpAdapter {
                 "MCP invocation timed out",
                 stderr_text,
                 Some(124),
-                start.elapsed().as_millis() as u64,
+                timer.snapshot(),
                 external_cancel,
             ));
         }
@@ -326,9 +342,10 @@ impl ExecutionPort for McpAdapter {
             return Ok(cancelled_result(
                 request,
                 "mcp invocation cancelled",
-                start.elapsed().as_millis() as u64,
+                timer.snapshot(),
             ));
         }
+        let timing = timer.snapshot();
         match mcp_tool_result_to_execution_result(
             request,
             &plugin_dir,
@@ -336,7 +353,7 @@ impl ExecutionPort for McpAdapter {
             &invocation.secret_values,
             call,
             stderr_text.clone(),
-            start.elapsed().as_millis() as u64,
+            timing.clone(),
         ) {
             Ok(result) => Ok(result),
             Err(error) => Ok(failure_result(
@@ -345,7 +362,7 @@ impl ExecutionPort for McpAdapter {
                 &error.to_string(),
                 stderr_text,
                 Some(2),
-                start.elapsed().as_millis() as u64,
+                timing,
             )),
         }
     }
@@ -384,13 +401,13 @@ fn mcp_failure_or_cancelled(
     message: &str,
     stderr: String,
     exit_code: Option<i32>,
-    duration_ms: u64,
+    timing: protocol::InvokeTiming,
     external_cancel: bool,
 ) -> ExecutionResult {
     if active.cancelled.load(Ordering::SeqCst) || external_cancel {
-        cancelled_result(request, "mcp invocation cancelled", duration_ms)
+        cancelled_result(request, "mcp invocation cancelled", timing)
     } else {
-        failure_result(request, code, message, stderr, exit_code, duration_ms)
+        failure_result(request, code, message, stderr, exit_code, timing)
     }
 }
 
