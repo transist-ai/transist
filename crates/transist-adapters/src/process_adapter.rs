@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 //! Process-adapter execution and preflight behavior.
 
+use crate::process_runtime::HandshakeReceiveError;
 use crate::*;
 
 impl ExecutionPort for ProcessAdapter {
@@ -248,13 +249,8 @@ impl ExecutionPort for ProcessAdapter {
         let handshake_line = match recv_line(&lines, handshake_deadline, "handshake response") {
             Ok(line) => line,
             Err(err) => {
-                return fail(
-                    &mut stderr_handle,
-                    CanonicalErrorCode::TimeoutError,
-                    &err.to_string(),
-                    None,
-                    Some(124),
-                );
+                let (code, exit_code) = handshake_receive_failure(&err);
+                return fail(&mut stderr_handle, code, &err.to_string(), None, exit_code);
             }
         };
         let handshake_response: AppHandshakeResponse = match parse_json_line(&handshake_line) {
@@ -459,6 +455,16 @@ impl ExecutionPort for ProcessAdapter {
     }
 }
 
+/// Map typed handshake failures to existing invocation codes without changing cleanup.
+fn handshake_receive_failure(error: &HandshakeReceiveError) -> (CanonicalErrorCode, Option<i32>) {
+    match error {
+        HandshakeReceiveError::Timeout { .. } => (CanonicalErrorCode::TimeoutError, Some(124)),
+        HandshakeReceiveError::Disconnected { .. } | HandshakeReceiveError::ReadError(_) => {
+            (CanonicalErrorCode::TransportError, Some(2))
+        }
+    }
+}
+
 fn append_stderr_diagnostic(stderr: String, diagnostic: Option<String>) -> String {
     match diagnostic {
         None => stderr,
@@ -532,5 +538,40 @@ impl PreflightPort for ProcessAdapter {
             AdapterKind::Process,
         )?);
         Ok(checks)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn handshake_receive_timeout_mapping() {
+        assert_eq!(
+            handshake_receive_failure(&HandshakeReceiveError::Timeout {
+                what: "handshake response".to_string(),
+            }),
+            (CanonicalErrorCode::TimeoutError, Some(124))
+        );
+    }
+
+    #[test]
+    fn handshake_receive_disconnected_mapping() {
+        assert_eq!(
+            handshake_receive_failure(&HandshakeReceiveError::Disconnected {
+                what: "handshake response".to_string(),
+            }),
+            (CanonicalErrorCode::TransportError, Some(2))
+        );
+    }
+
+    #[test]
+    fn handshake_receive_read_error_mapping() {
+        assert_eq!(
+            handshake_receive_failure(&HandshakeReceiveError::ReadError(anyhow!(
+                "synthetic error"
+            ))),
+            (CanonicalErrorCode::TransportError, Some(2))
+        );
     }
 }
