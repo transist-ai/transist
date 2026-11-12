@@ -124,6 +124,30 @@ fn process_state(pid: &str) -> String {
 
 /// Runs both public boundaries with separate disposable processes and homes.
 fn assert_case(mode: &str, expected_error: Option<CanonicalErrorCode>, exit_code: Option<i32>) {
+    // Existing sandbox unit tests mutate HOME. As with the native HOME alias
+    // tests, isolate real process probes from that process-global test state.
+    const CHILD: &str = "TRANSIST_HANDSHAKE_DIAGNOSTIC_CHILD";
+    if std::env::var_os(CHILD).is_none() {
+        let home = tempfile::tempdir_in(std::env::temp_dir()).expect("isolated operator home");
+        let output = Command::new(std::env::current_exe().expect("test binary"))
+            .args([
+                "--exact",
+                std::thread::current().name().expect("named test thread"),
+                "--nocapture",
+            ])
+            .env(CHILD, "1")
+            .env("HOME", home.path())
+            .output()
+            .expect("isolated handshake test");
+        assert!(
+            output.status.success(),
+            "isolated {mode}: {}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
+        return;
+    }
     let adapter = ProcessAdapter::new(Arc::new(LocalActiveRecordStore));
     let preflight = Fixture::new(mode);
     let checks = adapter
@@ -133,9 +157,6 @@ fn assert_case(mode: &str, expected_error: Option<CanonicalErrorCode>, exit_code
             remote_secret_policy: Default::default(),
         }])
         .expect("preflight report");
-    let frames = preflight.finished_messages();
-    assert_eq!(frames.len(), 1, "preflight must never invoke: {frames:?}");
-    assert_eq!(frames[0]["type"], "app.handshake.request.v1");
     let handshakes: Vec<_> = checks
         .iter()
         .filter(|c| c.kind == "adapter_handshake")
@@ -162,6 +183,9 @@ fn assert_case(mode: &str, expected_error: Option<CanonicalErrorCode>, exit_code
     );
     assert!(checks.iter().all(|c| !c.message.contains(STDERR_SENTINEL)));
     assert_message(mode, &check.message);
+    let frames = preflight.finished_messages();
+    assert_eq!(frames.len(), 1, "preflight must never invoke: {frames:?}");
+    assert_eq!(frames[0]["type"], "app.handshake.request.v1");
     if mode == "exit7" {
         assert!(
             check
