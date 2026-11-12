@@ -7,12 +7,12 @@ use std::path::Path;
 use std::sync::atomic::Ordering;
 use transist_protocol::{
     self as protocol, APP_PROTOCOL_VERSION_V1, AppInvokeResult, CanonicalErrorCode,
-    ExecutionRequest, ExecutionResult, ProtocolError, TEP_INVOKE_RESULT_TYPE_V1,
+    ExecutionRequest, ExecutionResult, InvokeTiming, ProtocolError, TEP_INVOKE_RESULT_TYPE_V1,
     TEP_PROTOCOL_VERSION_V1,
 };
 
 use super::ProcessInvocationState;
-use crate::{canonicalize_hints, redact_json, redact_text, timing_now};
+use crate::{canonicalize_hints, redact_json, redact_text};
 
 const SANDBOX_FAILURE_OUTPUT_KEY: &str = "__sandbox_failed__";
 
@@ -40,7 +40,7 @@ pub(crate) fn app_result_to_execution_result(
     secret_values: &BTreeMap<String, String>,
     app_result: AppInvokeResult,
     stderr_text: String,
-    duration_ms: u64,
+    timing: InvokeTiming,
 ) -> Result<ExecutionResult> {
     if app_result.message_type != protocol::APP_INVOKE_RESULT_TYPE_V1 {
         return Ok(failure_result(
@@ -49,7 +49,7 @@ pub(crate) fn app_result_to_execution_result(
             &format!("invalid APP result type '{}'", app_result.message_type),
             stderr_text,
             Some(2),
-            duration_ms,
+            timing,
         ));
     }
     if app_result.protocol_version != APP_PROTOCOL_VERSION_V1 {
@@ -59,7 +59,7 @@ pub(crate) fn app_result_to_execution_result(
             &format!("unsupported APP protocol '{}'", app_result.protocol_version),
             stderr_text,
             Some(2),
-            duration_ms,
+            timing,
         ));
     }
     if app_result.invoke_id != request.invoke_id {
@@ -69,7 +69,7 @@ pub(crate) fn app_result_to_execution_result(
             "APP invoke_id mismatch",
             stderr_text,
             Some(2),
-            duration_ms,
+            timing,
         ));
     }
     if app_result.status == "success"
@@ -82,7 +82,7 @@ pub(crate) fn app_result_to_execution_result(
             &error.to_string(),
             redact_text(&stderr_text, secret_values),
             Some(2),
-            duration_ms,
+            timing,
         ));
     }
     let (artifacts, evidence) = canonicalize_hints(
@@ -122,7 +122,7 @@ pub(crate) fn app_result_to_execution_result(
             .map(|value| value as i32),
         stdout,
         stderr,
-        timing: timing_now(duration_ms),
+        timing,
         artifacts,
         evidence,
         metrics: app_result.metrics,
@@ -145,7 +145,7 @@ pub(crate) fn mcp_tool_result_to_execution_result(
     secret_values: &BTreeMap<String, String>,
     result: serde_json::Value,
     stderr_text: String,
-    duration_ms: u64,
+    timing: InvokeTiming,
 ) -> Result<ExecutionResult> {
     let result = result
         .as_object()
@@ -171,7 +171,7 @@ pub(crate) fn mcp_tool_result_to_execution_result(
             "MCP tool returned isError: true",
             stderr_text,
             Some(1),
-            duration_ms,
+            timing,
         ));
     }
     let output = result
@@ -185,7 +185,7 @@ pub(crate) fn mcp_tool_result_to_execution_result(
             &format!("MCP tool result does not match action output schema: {error}"),
             redact_text(&stderr_text, secret_values),
             Some(2),
-            duration_ms,
+            timing,
         ));
     }
     let stdout = content
@@ -211,7 +211,7 @@ pub(crate) fn mcp_tool_result_to_execution_result(
         exit_code: Some(0),
         stdout: redact_text(&stdout, secret_values),
         stderr: redact_text(&stderr_text, secret_values),
-        timing: timing_now(duration_ms),
+        timing,
         artifacts: Vec::new(),
         evidence: Vec::new(),
         metrics: BTreeMap::new(),
@@ -228,7 +228,7 @@ pub(crate) fn failure_result(
     message: &str,
     stderr: String,
     exit_code: Option<i32>,
-    duration_ms: u64,
+    timing: InvokeTiming,
 ) -> ExecutionResult {
     ExecutionResult {
         message_type: TEP_INVOKE_RESULT_TYPE_V1.to_string(),
@@ -241,7 +241,7 @@ pub(crate) fn failure_result(
         exit_code,
         stdout: String::new(),
         stderr,
-        timing: timing_now(duration_ms),
+        timing,
         artifacts: Vec::new(),
         evidence: Vec::new(),
         metrics: BTreeMap::new(),
@@ -259,6 +259,7 @@ pub(crate) fn sandbox_failure_result(
     backend: &str,
     reason: &str,
     ignore_paths: &[String],
+    timing: InvokeTiming,
 ) -> ExecutionResult {
     let filesystem = request
         .policy
@@ -276,7 +277,7 @@ pub(crate) fn sandbox_failure_result(
         exit_code: Some(2),
         stdout: String::new(),
         stderr: String::new(),
-        timing: timing_now(0),
+        timing,
         artifacts: Vec::new(),
         evidence: Vec::new(),
         metrics: BTreeMap::new(),
@@ -314,7 +315,7 @@ fn sanitize_execution_output(mut output: serde_json::Value) -> serde_json::Value
 pub(crate) fn cancelled_result(
     request: &ExecutionRequest,
     message: &str,
-    duration_ms: u64,
+    timing: InvokeTiming,
 ) -> ExecutionResult {
     ExecutionResult {
         message_type: TEP_INVOKE_RESULT_TYPE_V1.to_string(),
@@ -327,7 +328,7 @@ pub(crate) fn cancelled_result(
         exit_code: None,
         stdout: String::new(),
         stderr: String::new(),
-        timing: timing_now(duration_ms),
+        timing,
         artifacts: Vec::new(),
         evidence: Vec::new(),
         metrics: BTreeMap::new(),
@@ -346,12 +347,12 @@ pub(crate) fn process_failure_or_cancelled(
     message: &str,
     stderr: String,
     exit_code: Option<i32>,
-    duration_ms: u64,
+    timing: InvokeTiming,
     external_cancel: bool,
 ) -> ExecutionResult {
     if active.cancelled.load(Ordering::SeqCst) || external_cancel {
-        cancelled_result(request, "process invocation cancelled", duration_ms)
+        cancelled_result(request, "process invocation cancelled", timing)
     } else {
-        failure_result(request, code, message, stderr, exit_code, duration_ms)
+        failure_result(request, code, message, stderr, exit_code, timing)
     }
 }

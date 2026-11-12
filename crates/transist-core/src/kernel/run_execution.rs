@@ -5295,8 +5295,12 @@ impl RuntimeKernel {
                 mode: mode.to_string(),
             },
         };
+        // Hash the JSON value serialization used by ArtifactPort, not the struct's
+        // field order, so the reference describes the exact persisted bytes.
+        let payload =
+            serde_json::to_value(&transfer).context("build external transfer evidence")?;
         let body =
-            serde_json::to_vec_pretty(&transfer).context("serialize external transfer evidence")?;
+            serde_json::to_vec_pretty(&payload).context("serialize external transfer evidence")?;
         let path = self
             .services
             .artifacts
@@ -5308,8 +5312,7 @@ impl RuntimeKernel {
                     "evidence/transist_external_transfer_{}.json",
                     result.execution
                 ),
-                payload: serde_json::from_slice(&body)
-                    .context("deserialize external transfer evidence")?,
+                payload: payload.into(),
             })?;
         result.evidence.push(FileRef {
             path: path.display().to_string(),

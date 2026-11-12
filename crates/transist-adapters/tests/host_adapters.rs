@@ -2,6 +2,10 @@
 // SAFETY: Test: uses libc env mutation for sandbox test isolation.
 #![allow(unsafe_code)]
 
+#[path = "support/timing.rs"]
+mod timing;
+use timing::{assert_timing, wall_ms};
+
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::{Read, Write};
@@ -239,12 +243,15 @@ fn input_projection_static_validation_is_strict_and_never_probes_any_adapter() {
                         secret_values: BTreeMap::new(),
                         remote_secret_policy: RemoteSecretPolicy::default(),
                     };
+                    let before = wall_ms();
                     let result = match adapter {
                         AdapterKind::Process => process_adapter().execute_step(&execution),
                         AdapterKind::Http => http_adapter().execute_step(&execution),
                         AdapterKind::Mcp => mcp_adapter().execute_step(&execution),
                     }
                     .expect("invalid input result");
+                    let after = wall_ms();
+                    assert_timing(&result.timing, before, after, false);
                     assert_eq!(
                         result.error.expect("error").code,
                         CanonicalErrorCode::ValidationError
@@ -606,12 +613,15 @@ fn process_adapter_smoke_test() {
         repo.path(),
         AdapterKind::Process,
         "shell",
-        "echo",
-        serde_json::json!({"args": ["hello", "plugin"]}),
+        "exec",
+        serde_json::json!({"command": "sh", "args": ["-c", "sleep 0.05; printf 'hello plugin'"]}),
     );
+    let before = wall_ms();
     let result = process_adapter().execute_step(&invocation).expect("result");
+    let after = wall_ms();
     assert_eq!(result.status, "success");
     assert_eq!(result.output["stdout"], "hello plugin");
+    assert_timing(&result.timing, before, after, true);
 }
 
 #[test]
@@ -1296,6 +1306,7 @@ fn http_adapter_smoke_test() {
                     .map(|(_, body)| body)
                     .unwrap_or("{}");
                 let invoke: serde_json::Value = serde_json::from_str(body).expect("invoke");
+                thread::sleep(Duration::from_millis(50));
                 write_http_json(
                     &mut socket,
                     serde_json::json!({
@@ -1324,9 +1335,12 @@ fn http_adapter_smoke_test() {
         "echo",
         serde_json::json!({"message": "hello"}),
     );
+    let before = wall_ms();
     let result = http_adapter().execute_step(&invocation).expect("result");
+    let after = wall_ms();
     handle.join().expect("join");
     assert_eq!(result.status, "success");
+    assert_timing(&result.timing, before, after, true);
 }
 
 #[test]
@@ -1461,6 +1475,15 @@ fn mcp_adapter_smoke_test() {
     fs::create_dir_all(repo.path().join(".transist")).expect("repo");
     let plugin_src = repo.path().join("mcp-plugin");
     write_mcp_plugin(&plugin_src);
+    let script = fs::read_to_string(plugin_src.join("server.py")).expect("server");
+    fs::write(
+        plugin_src.join("server.py"),
+        script.replace(
+            "    elif method == \"tools/call\":",
+            "    elif method == \"tools/call\":\n        import time\n        time.sleep(0.05)",
+        ),
+    )
+    .expect("delayed server");
     install_plugin_file(repo.path(), &plugin_src.join("plugin.yaml")).expect("install mcp");
     let invocation = request(
         repo.path(),
@@ -1469,8 +1492,11 @@ fn mcp_adapter_smoke_test() {
         "echo",
         serde_json::json!({"message": "hello"}),
     );
+    let before = wall_ms();
     let result = mcp_adapter().execute_step(&invocation).expect("result");
+    let after = wall_ms();
     assert_eq!(result.status, "success");
+    assert_timing(&result.timing, before, after, true);
 }
 
 #[test]
@@ -1535,6 +1561,12 @@ fn mcp_adapter_maps_tool_errors_and_content_only_results() {
             Some(CanonicalErrorCode::ProtocolError),
             true,
         ),
+        (
+            "invalid-content",
+            r#"{"result":{"content":1}}"#,
+            Some(CanonicalErrorCode::ProtocolError),
+            false,
+        ),
     ];
     for (suffix, response, expected_error, mismatch_response_id) in cases {
         let repo = tempfile::tempdir().expect("tempdir");
@@ -1547,6 +1579,7 @@ fn mcp_adapter_maps_tool_errors_and_content_only_results() {
             mismatch_response_id,
         );
         install_plugin_file(repo.path(), &plugin_src.join("plugin.yaml")).expect("install mcp");
+        let before = wall_ms();
         let result = mcp_adapter()
             .execute_step(&request(
                 repo.path(),
@@ -1556,6 +1589,8 @@ fn mcp_adapter_maps_tool_errors_and_content_only_results() {
                 serde_json::json!({"message": "hello"}),
             ))
             .expect("result");
+        let after = wall_ms();
+        assert_timing(&result.timing, before, after, false);
         if let Some(expected_error) = expected_error {
             assert_eq!(result.status, "failed");
             assert_eq!(result.error.expect("error").code, expected_error);

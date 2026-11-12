@@ -13,8 +13,8 @@ impl ExecutionPort for HttpAdapter {
     }
 
     fn execute_step(&self, invocation: &ExecutionInvocation) -> Result<ExecutionResult> {
+        let timer = InvocationTimer::new();
         let request = &invocation.request;
-        let start = Instant::now();
         let (manifest, plugin_dir, action) = load_plugin(invocation, AdapterKind::Http)?;
         if !invocation.secret_values.is_empty()
             && !invocation
@@ -27,7 +27,7 @@ impl ExecutionPort for HttpAdapter {
                 "remote secret delivery is denied by policy for adapter 'http'",
                 String::new(),
                 Some(2),
-                0,
+                timer.snapshot(),
             ));
         }
         let PluginEntrypoint::Http { base_url, ca_cert } = &manifest.entrypoint else {
@@ -46,7 +46,7 @@ impl ExecutionPort for HttpAdapter {
                 &error.to_string(),
                 String::new(),
                 Some(2),
-                0,
+                timer.snapshot(),
             ));
         }
         let ca_cert = ca_cert.as_ref().map(|path| plugin_dir.join(path));
@@ -59,7 +59,7 @@ impl ExecutionPort for HttpAdapter {
                     &error,
                     String::new(),
                     Some(2),
-                    0,
+                    timer.snapshot(),
                 ));
             }
         };
@@ -83,7 +83,7 @@ impl ExecutionPort for HttpAdapter {
                 &err_str,
                 String::new(),
                 Some(2),
-                start.elapsed().as_millis() as u64,
+                timer.snapshot(),
             ));
         }
         let invoke = AppInvokeRequest {
@@ -147,7 +147,7 @@ impl ExecutionPort for HttpAdapter {
                     &format!("http invoke transport failed: {err}"),
                     String::new(),
                     Some(2),
-                    start.elapsed().as_millis() as u64,
+                    timer.snapshot(),
                 ));
             }
         };
@@ -175,14 +175,14 @@ impl ExecutionPort for HttpAdapter {
                 &message,
                 stderr_text,
                 Some(2),
-                start.elapsed().as_millis() as u64,
+                timer.snapshot(),
             ));
         }
         if active.cancelled.load(Ordering::SeqCst) {
             return Ok(cancelled_result(
                 request,
                 "http plugin invocation cancelled",
-                start.elapsed().as_millis() as u64,
+                timer.snapshot(),
             ));
         }
         let app_result: AppInvokeResult = match serde_json::from_value(response) {
@@ -194,7 +194,7 @@ impl ExecutionPort for HttpAdapter {
                     &format!("invalid HTTP invoke response: {err}"),
                     stderr_text,
                     Some(2),
-                    start.elapsed().as_millis() as u64,
+                    timer.snapshot(),
                 ));
             }
         };
@@ -205,7 +205,7 @@ impl ExecutionPort for HttpAdapter {
             &invocation.secret_values,
             app_result,
             stderr_text,
-            start.elapsed().as_millis() as u64,
+            timer.snapshot(),
         )
     }
 

@@ -1,4 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
+#[path = "support/timing.rs"]
+mod timing;
+use timing::{assert_timing, wall_ms};
+
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::{self, BufRead, BufReader, Read, Write};
@@ -87,6 +91,85 @@ fn bind_loopback(test_name: &str) -> TcpListener {
 }
 
 #[test]
+fn router_rejection_has_invocation_timing() {
+    let repo = tempfile::tempdir().expect("tempdir");
+    let invocation = base_invocation(
+        repo.path(),
+        "unregistered",
+        AdapterKind::Http,
+        "unused",
+        "unused",
+        serde_json::json!({}),
+    );
+    let before = wall_ms();
+    let result = transist_adapters::AdapterRouter::empty()
+        .execute_step(&invocation)
+        .expect("router rejection");
+    let after = wall_ms();
+    assert_timing(&result.timing, before, after, false);
+    assert_eq!(result.status, "failed");
+    assert_eq!(
+        result.error.expect("error").code,
+        CanonicalErrorCode::ValidationError
+    );
+}
+
+#[test]
+fn sandbox_policy_rejection_has_invocation_timing() {
+    for adapter in [AdapterKind::Process, AdapterKind::Mcp] {
+        let repo = tempfile::tempdir().expect("tempdir");
+        let plugin = repo.path().join("plugin");
+        let id = if adapter == AdapterKind::Process {
+            write_process_wait_plugin(
+                &plugin,
+                &repo.path().join("ready"),
+                &repo.path().join("term"),
+                false,
+            );
+            "process.wait"
+        } else {
+            write_wait_mcp_plugin(
+                &plugin,
+                &repo.path().join("ready"),
+                &repo.path().join("term"),
+                &repo.path().join("cancelled"),
+            );
+            "mcp.wait"
+        };
+        install_plugin_file(repo.path(), &plugin.join("plugin.yaml")).expect("install");
+        let mut invocation = base_invocation(
+            repo.path(),
+            "sandbox-rejection",
+            adapter,
+            id,
+            if adapter == AdapterKind::Process {
+                "wait"
+            } else {
+                "echo"
+            },
+            serde_json::json!({}),
+        );
+        invocation.request.policy = serde_json::json!({"network": {"mode": "invalid"}});
+        let before = wall_ms();
+        let result = if adapter == AdapterKind::Process {
+            process_adapter().execute_step(&invocation)
+        } else {
+            mcp_adapter().execute_step(&invocation)
+        }
+        .expect("sandbox rejection");
+        let after = wall_ms();
+        assert_timing(&result.timing, before, after, false);
+        assert_eq!(result.status, "failed");
+        assert_eq!(
+            result.error.expect("error").code,
+            CanonicalErrorCode::PolicyDenied
+        );
+        assert!(result.output.get("__sandbox_failed__").is_some());
+        assert!(!repo.path().join("ready").exists());
+    }
+}
+
+#[test]
 fn process_cancel_returns_cancelled() {
     for network_mode in ["any", "none", "loopback"] {
         assert_cooperative_process_cancel(network_mode);
@@ -112,6 +195,7 @@ fn assert_cooperative_process_cancel(network_mode: &str) {
     );
     invocation.request.policy = serde_json::json!({"network": {"mode": network_mode}});
     let adapter_run = adapter.clone();
+    let before = wall_ms();
     let handle = thread::spawn(move || adapter_run.execute_step(&invocation).expect("execute"));
     wait_for_path(&ready);
     assert_eq!(
@@ -125,6 +209,8 @@ fn assert_cooperative_process_cancel(network_mode: &str) {
         .expect("cancel");
     assert!(cancel.accepted);
     let result = handle.join().expect("join");
+    let after = wall_ms();
+    assert_timing(&result.timing, before, after, true);
     assert_eq!(result.status, "cancelled");
     assert_eq!(
         result.error.expect("error").code,
@@ -166,6 +252,7 @@ fn assert_forced_process_cancel(network_mode: &str) {
     );
     invocation.request.policy = serde_json::json!({"network": {"mode": network_mode}});
     let adapter_run = adapter.clone();
+    let before = wall_ms();
     let handle = thread::spawn(move || adapter_run.execute_step(&invocation).expect("execute"));
     wait_for_path(&ready);
     assert_eq!(
@@ -180,6 +267,8 @@ fn assert_forced_process_cancel(network_mode: &str) {
         .expect("cancel");
     assert!(cancel.accepted);
     let result = handle.join().expect("join");
+    let after = wall_ms();
+    assert_timing(&result.timing, before, after, true);
     let elapsed = start.elapsed();
     eprintln!(
         "{network_mode}: SIGTERM-ignoring plugin cancelled after {elapsed:?}; configured grace: {DEFAULT_TERMINATION_GRACE_MS} ms"
@@ -411,7 +500,10 @@ fn http_adapter_denies_remote_secret_delivery_by_policy() {
     invocation
         .secret_values
         .insert("AUTH_TOKEN".to_string(), "secret-header".to_string());
+    let before = wall_ms();
     let result = http_adapter().execute_step(&invocation).expect("result");
+    let after = wall_ms();
+    assert_timing(&result.timing, before, after, false);
     assert_eq!(result.status, "failed");
     assert_eq!(
         result.error.expect("error").code,
@@ -559,6 +651,7 @@ fn http_cancel_calls_remote_endpoint_and_returns_cancelled() {
         serde_json::json!({"message": "hello"}),
     );
     let adapter_run = adapter.clone();
+    let before = wall_ms();
     let execute = thread::spawn(move || adapter_run.execute_step(&invocation).expect("execute"));
     wait_for_flag(&invoke_seen);
     let cancel = adapter
@@ -568,6 +661,8 @@ fn http_cancel_calls_remote_endpoint_and_returns_cancelled() {
         .expect("cancel");
     assert!(cancel.accepted);
     let result = execute.join().expect("join");
+    let after = wall_ms();
+    assert_timing(&result.timing, before, after, true);
     handle.join().expect("join");
     assert_eq!(result.status, "cancelled");
     assert!(cancel_called.load(Ordering::SeqCst));
@@ -924,6 +1019,7 @@ fn mcp_cancel_returns_cancelled() {
         serde_json::json!({"message": "hello"}),
     );
     let adapter_run = adapter.clone();
+    let before = wall_ms();
     let execute = thread::spawn(move || adapter_run.execute_step(&invocation).expect("execute"));
     wait_for_path(&ready);
     let cancel = adapter
@@ -933,6 +1029,8 @@ fn mcp_cancel_returns_cancelled() {
         .expect("cancel");
     assert!(cancel.accepted);
     let result = execute.join().expect("join");
+    let after = wall_ms();
+    assert_timing(&result.timing, before, after, true);
     assert_eq!(result.status, "cancelled");
     assert_eq!(
         result.error.expect("error").code,
@@ -969,7 +1067,10 @@ fn mcp_timeout_notifies_server_and_terminates_it() {
     // Leave startup headroom, but still force the waiting tool request to time
     // out and prove the exact active request receives cancellation and exits.
     invocation.request.timeout_ms = Some(10_000);
+    let before = wall_ms();
     let result = mcp_adapter().execute_step(&invocation).expect("execute");
+    let after = wall_ms();
+    assert_timing(&result.timing, before, after, true);
 
     assert_eq!(result.status, "failed");
     assert_eq!(
@@ -1006,7 +1107,10 @@ fn mcp_secret_delivery_is_policy_gated() {
     denied
         .secret_values
         .insert("MCP_TOKEN".to_string(), "mcp-secret".to_string());
+    let before = wall_ms();
     let denied_result = mcp_adapter().execute_step(&denied).expect("result");
+    let after = wall_ms();
+    assert_timing(&denied_result.timing, before, after, false);
     assert_eq!(denied_result.status, "failed");
     assert_eq!(
         denied_result.error.expect("error").code,
