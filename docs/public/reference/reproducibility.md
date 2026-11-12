@@ -73,11 +73,14 @@ public. The release workflow never creates, moves, or deletes a tag.
 
 ## Rebuild from source
 
+The following `v0.1.2` examples apply when that tag and its artifacts are
+available; substitute the published release tag you are verifying.
+
 ```bash
 # Clone the tagged release
 git clone https://github.com/transist-ai/transist.git
 cd transist
-git checkout v0.1.1   # use the v-prefixed tag you are verifying
+git checkout v0.1.2   # use the v-prefixed tag you are verifying
 
 # Confirm the checked-in toolchain pin
 rustc --version
@@ -102,13 +105,13 @@ published archive:
 
 ```bash
 # Extract the published archive
-tar -xzf transist-v0.1.1-x86_64-unknown-linux-gnu.tar.gz
+tar -xzf transist-v0.1.2-x86_64-unknown-linux-gnu.tar.gz
 
 # SHA-256 of the locally built binary
 sha256sum target/release/transist
 
 # SHA-256 of the binary from the published archive
-sha256sum transist-v0.1.1-x86_64-unknown-linux-gnu/bin/transist
+sha256sum transist-v0.1.2-x86_64-unknown-linux-gnu/bin/transist
 
 # Compare the two digests
 ```
@@ -129,17 +132,17 @@ bash scripts/ci/record_build_provenance.sh \
 bash scripts/ci/record_packaging_provenance.sh dist/packaging-provenance.json
 
 # Package the archive
-bash scripts/ci/package_release_archive.sh v0.1.1 \
+bash scripts/ci/package_release_archive.sh v0.1.2 \
   target/release/transist target/release/transist-server target/release/transist-admin \
   x86_64-unknown-linux-gnu dist/packaging-provenance.json \
   target/release/transist-sandbox-launcher
 
 # Compare the locally packaged archive digest with the published checksum
-sha256sum dist/transist-v0.1.1-x86_64-unknown-linux-gnu.tar.gz
+sha256sum dist/transist-v0.1.2-x86_64-unknown-linux-gnu.tar.gz
 
 # The published checksum file is:
-#   transist-v0.1.1-x86_64-unknown-linux-gnu.tar.gz.sha256
-# from: https://github.com/transist-ai/transist/releases/tag/v0.1.1
+#   transist-v0.1.2-x86_64-unknown-linux-gnu.tar.gz.sha256
+# from: https://github.com/transist-ai/transist/releases/tag/v0.1.2
 ```
 
 Repeat the packaging command with the same raw binaries and provenance inputs;
@@ -168,7 +171,7 @@ GitHub Actions build attestations (SLSA provenance) are attached to each release
 once the repository is public. Verify with:
 
 ```bash
-gh attestation verify transist-v0.1.1-x86_64-unknown-linux-gnu.tar.gz \
+gh attestation verify transist-v0.1.2-x86_64-unknown-linux-gnu.tar.gz \
   --repo transist-ai/transist
 ```
 

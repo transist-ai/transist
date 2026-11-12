@@ -49,7 +49,7 @@ that environment variable for its command children. Its unversioned format is:
 
 ```json
 {
-  "runtime": {"version": "0.1.1"},
+  "runtime": {"version": "0.1.2"},
   "workflow": {"id": "example"},
   "run": {"id": "example-run"},
   "plugins": [{"name": "shell", "version": "0.1.0"}]

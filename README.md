@@ -134,7 +134,7 @@ Transist is **not**:
 
 ## Release Status
 
-Transist `0.1.1` is a **public beta (pre-1.0)** patch release. Versioned public
+Transist `0.1.2` is a **public beta (pre-1.0)** patch release. Versioned public
 surfaces are protected in the current minor line; stability begins only at
 `1.0.0`. Minor releases may break documented surfaces with changelog,
 release-note, and migration guidance. Workspace crates are implementation
@@ -145,9 +145,10 @@ binary archive on the
 There is no supported public Rust library distribution; workspace crates are
 implementation units for the source checkout.
 
-See the [0.1.1 release note](docs/public/releases/0.1.1.md) for the loop-routing
-fix and adoption guidance, and the [0.1.0 release note](docs/public/releases/0.1.0.md)
-for initial capabilities and limitations. Runtime, admin, and server use `0.1.1`;
+See the [0.1.2 release note](docs/public/releases/0.1.2.md) for evidence and
+handshake fixes, the [0.1.1 release note](docs/public/releases/0.1.1.md) for
+loop-routing adoption guidance, and the [0.1.0 release note](docs/public/releases/0.1.0.md)
+for initial capabilities and limitations. Runtime, admin, and server use `0.1.2`;
 bundled packages and exact catalog pins remain `0.1.0`. Runtime-owned schema and
 protocol contracts remain `v1`. Start in a fresh home
 and preserve matching runtime, reviewed bundle, and home together for recovery.

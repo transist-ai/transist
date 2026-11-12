@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.2] — Evidence and Handshake Diagnostics
+
 - Report process stdout closure before the APP handshake response as a transport
   failure rather than a timeout, in both live preflight and invocation diagnostics.
   Handshake deadline expiry remains a timeout; stdout read errors are transport failures.
@@ -10,6 +12,9 @@
 - Capture actual adapter invocation start and finish timestamps independently of
   monotonic elapsed duration, including failure and cancellation results. Existing
   invocation records retain their original timestamps.
+
+Runtime, admin, and server use `0.1.2`; bundled packages and exact catalog pins
+remain `0.1.0`. See the [release notes](docs/public/releases/0.1.2.md).
 
 ## [0.1.1] — Bounded Loop Routing Fix
 

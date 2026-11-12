@@ -98,7 +98,7 @@ private key.
      The runtime never receives a private key. Keep it outside the runtime
      home, never print or read it, and use `0600` on Unix.
      Maintained catalog flows/modules and exact plugin pins stay `0.1.0`;
-     schemas remain `v1` and runtime/admin crates use `0.1.1`. Changed same-version
+     schemas remain `v1` and runtime/admin crates use `0.1.2`. Changed same-version
      bytes need a newly reviewed signature/bundle and a fresh target home.
      Preserve the preceding home/bundle for pinned runs and rollback; never
      overwrite installed payloads or remove pins/runs to resolve collisions.
