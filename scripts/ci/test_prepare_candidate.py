@@ -805,7 +805,8 @@ class RealPayloadTests(unittest.TestCase):
         cls.dist = cls.root / "downloaded"
         cls.dist.mkdir()
         (cls.root / "scripts").symlink_to(prep.ROOT / "scripts", target_is_directory=True)
-        cls.ident = rc.identity(10, "1.2.3", "a" * 40, "f" * 40, "prepare.yml", 20, 1)
+        version = rc.workspace_version(prep.ROOT / "Cargo.toml")
+        cls.ident = rc.identity(10, version, "a" * 40, "f" * 40, "prepare.yml", 20, 1)
         cls.record = {"identity": cls.ident, "release_id": 42, "state": "preparing", "receipt": None}
         cls.helper = prep.Preparation("owner/repo", 10, rc.Candidates(MemoryState(), 10), cls.root)
         cls.secret = cls.root / "ephemeral.key"
@@ -817,7 +818,7 @@ class RealPayloadTests(unittest.TestCase):
         (cls.dist / "packaging-provenance.json").write_text(json.dumps(packaging))
         targets = [t["target_triple"] for t in json.loads(prep.INVENTORY.read_text())["released_archives"]]
         for target in targets:
-            package = f"transist-v1.2.3-{target}"
+            package = f"transist-{cls.ident['final_tag']}-{target}"
             names = expected_members(str(prep.INVENTORY), str(prep.ROOT), package, target)
             archive_path = cls.dist / (package + ".tar.gz")
             binaries = {}
@@ -840,9 +841,9 @@ class RealPayloadTests(unittest.TestCase):
             provenance = {"kind": "native-build", "target": target, "source": packaging["source"],
                           "binaries": [{"name": n, "sha256": d} for n, d in binaries.items()]}
             (cls.dist / f"build-provenance-{target}.json").write_text(json.dumps(provenance))
-        with tarfile.open(cls.dist / "transist-v1.2.3-sbom.tar.gz", "w:gz") as archive:
+        with tarfile.open(cls.dist / f"transist-{cls.ident['final_tag']}-sbom.tar.gz", "w:gz") as archive:
             data = json.dumps({"bomFormat": "CycloneDX", "specVersion": "1.5", "version": 1,
-                               "components": [{"type": "application", "name": "transist", "version": "1.2.3"}]}).encode()
+                               "components": [{"type": "application", "name": "transist", "version": cls.ident["version"]}]}).encode()
             info = tarfile.TarInfo("fixture.cdx.json")
             info.size = len(data)
             archive.addfile(info, io.BytesIO(data))
@@ -864,7 +865,7 @@ class RealPayloadTests(unittest.TestCase):
 
     @classmethod
     def manifest(cls):
-        cls.command(["bash", str(prep.ROOT / "scripts/ci/release_manifest.sh"), "generate", "v1.2.3", str(cls.dist)])
+        cls.command(["bash", str(prep.ROOT / "scripts/ci/release_manifest.sh"), "generate", cls.ident["final_tag"], str(cls.dist)])
         cls.sign(cls.dist / "release-manifest.txt")
 
     def verify(self):
