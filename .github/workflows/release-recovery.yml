@@ -1,0 +1,118 @@
+name: Release Recovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_id:
+        description: "Exact failed, ready, reserved or published candidate ID (main only)"
+        required: true
+        type: string
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  resolve:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      source_sha: ${{ steps.resolve.outputs.source_sha }}
+      candidate_id: ${{ steps.resolve.outputs.candidate_id }}
+      operation: ${{ steps.resolve.outputs.operation }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_ID: ${{ inputs.candidate_id }}
+        run: python3 scripts/ci/recover_candidate.py --candidate-id "$CANDIDATE_ID"
+
+  readiness:
+    needs: resolve
+    if: ${{ needs.resolve.outputs.operation == 'prepare' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    permissions:
+      contents: read
+    container:
+      image: rust:1.88.0-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0
+      options: --cap-add=SYS_ADMIN --cap-add=NET_ADMIN --security-opt apparmor=unconfined --security-opt seccomp=unconfined
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve.outputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install pinned dependencies
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          bash scripts/ci/install_debian_tools.sh bubblewrap ripgrep git jq python3 curl unzip nodejs npm pip3
+          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy --component llvm-tools-preview --no-self-update
+          bash scripts/ci/install_ci_tools.sh all
+          cargo build --locked -p transist-sandbox-launcher
+          install -Dm755 target/debug/transist-sandbox-launcher /usr/libexec/transist/transist-sandbox-launcher
+      - name: Re-run full readiness for the failed candidate source
+        run: bash scripts/ci/check_release_readiness.sh
+
+  claim:
+    needs: [resolve, readiness]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+      checks: read
+    outputs:
+      candidate_id: ${{ steps.claim.outputs.candidate_id }}
+      release_tag: ${{ steps.claim.outputs.release_tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve.outputs.source_sha }}
+          path: candidate-source
+          persist-credentials: false
+      - id: claim
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_ID: ${{ inputs.candidate_id }}
+        run: python3 scripts/ci/recover_candidate.py --claim --candidate-id "$CANDIDATE_ID" --source-directory candidate-source
+
+  prepare:
+    needs: [resolve, claim]
+    permissions:
+      contents: write
+      actions: read
+      checks: read
+      attestations: write
+      id-token: write
+    uses: ./.github/workflows/release.yml
+    with:
+      candidate_id: ${{ needs.claim.outputs.candidate_id }}
+      source_sha: ${{ needs.resolve.outputs.source_sha }}
+      release_tag: ${{ needs.claim.outputs.release_tag }}
+
+  publish:
+    needs: [resolve, claim, prepare]
+    if: >-
+      always() && needs.resolve.result == 'success' &&
+      (needs.resolve.outputs.operation == 'publish' || needs.prepare.result == 'success')
+    permissions:
+      contents: write
+      actions: read
+      checks: read
+      attestations: read
+    uses: ./.github/workflows/release-publication.yml
+    with:
+      candidate_id: ${{ needs.claim.outputs.candidate_id || needs.resolve.outputs.candidate_id }}
+      source_sha: ${{ needs.resolve.outputs.source_sha }}

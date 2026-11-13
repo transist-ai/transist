@@ -1,40 +1,31 @@
 # Release Environment Configuration
 
-This document describes the GitHub `release` environment and the live rules
-that protect release staging and publication. These settings are verified by
-`scripts/ci/check_release_candidate.sh` before staging.
+This document describes the draft-first release lifecycle and the live rules
+that protect preparation and publication. Automatic eligibility remains disabled
+unless `RELEASE_PIPELINE_ENABLED=true`; provisioning and hosted lifecycle
+validation are separate activation requirements.
 
 ## Release Environment
 
-A GitHub deployment environment named `release` protects the `stage-and-sign`,
-`attest-public-assets`, and `publish-release` jobs in `.github/workflows/release.yml`.
+Preparation runs through `.github/workflows/release.yml`. Publication runs through
+`.github/workflows/release-publication.yml`, called automatically after successful
+preparation. There is one publication approval, after the complete draft is ready.
 
 | Setting | Required value |
 |---|---|
-| Environment name | `release` |
-| Required reviewers | As committed in `.release_reviewers` |
-| Deployment branch policy | Selected custom policy from `.branch_policies` |
+| Environment names | `release-build` and `release-publish` |
+| Build reviewers | None |
+| Publication reviewer | `implicitly-awesome`; self-review allowed |
+| Deployment branch policy | Only `{name: "main", type: "branch"}` for both environments |
 | Administrator bypass | Disabled |
-| Wait timer | Optional |
+| Signing secret | `release-build` only |
 
-The environment must exist before the first `stage` operation. The
-`check_release_candidate.sh` script delegates read-only live policy checks to
-`check_release_policy.sh` before staging proceeds. The checker verifies the
-environment, required reviewers, disabled administrator bypass, and the exact
-deployment policy returned by the API's `.branch_policies` field.
-
-The committed `.branch_policies` file is the source of truth for the allowed
-deployment policy. Its current exact set is `{name: "v*", type: "tag"}` and
-`{name: "main", type: "branch"}`; the live API response is compared to that
-complete committed set. Release CD still requires dispatch from the exact
-release tag ref.
-
-The committed `.release_reviewers` file is the source of truth for the required
-reviewer set. It must contain a JSON array of reviewer login strings; the live
-API's `required_reviewers` protection-rule logins are compared to that exact
-committed set. Use that file's exact approved contents rather than an example
-reviewer list. A reviewer-policy change requires maintainer approval and matching
-live environment configuration before release operations.
+Both environments and the `release-state` branch must already exist. Candidate
+mode in `check_release_policy.sh` validates the environments, reviewer and
+self-review policy, disabled bypass and immutable tag rules. The legacy policy
+files remain for legacy checker compatibility; they do not widen the candidate
+workflow's main-only deployment policy. Publication has no signing key or OIDC
+write permission.
 
 ## v* Tag Protection Ruleset
 
@@ -61,9 +52,11 @@ GitHub API that:
   (permissive parameters are rejected whenever present).
 - It has no bypass actors.
 
-The candidate script also requires the remote tag to be an annotated tag whose
-peeled commit SHA (`refs/tags/${tag}^{}`) matches the release-candidate commit
-SHA exactly; a missing or mismatched remote peel is a hard failure.
+Preparation requires no permanent tag. After approval and reservation, publication
+creates an annotated `v<version>` tag at the receipt's exact commit. An existing
+tag is accepted only when it is an annotated tag with the correct name pointing
+directly to that commit. Lightweight, nested and wrong-target tags fail closed;
+no tag is moved or deleted.
 
 Preflight verifies the latest started workflow attempt for each required gate
 on the exact candidate SHA, including reruns of older workflow runs. It binds
@@ -73,8 +66,9 @@ run cannot be hidden by an older success.
 
 The candidate preflight also supports an untagged preparation mode and a
 publication mode that binds a receipt to durable candidate state and verifies
-the annotated tag in the target repository. These modes do not by themselves
-change the existing release workflow or provision its future environments.
+the annotated tag in the target repository. The publication workflow uses the
+production helper `publish_candidate.py` to reserve before tag creation and to
+recover interruptions without rebuilding or replacing assets.
 
 `Security Scan` also runs on pushes to `main`. The separate `Release Eligibility`
 workflow is disabled unless repository variable `RELEASE_PIPELINE_ENABLED` is
@@ -87,21 +81,20 @@ successful rerun clears that failure, but does not trigger preparation: a later
 successful push completion must re-evaluate it.
 Duplicate events can run duplicate checks but reuse the same active claim. The
 state branch must be provisioned before activation; missing state fails closed.
-This stage creates no draft. The existing manual release workflow remains in use.
+Eligibility claims the source and calls the six-platform preparation workflow.
 
 `scripts/ci/candidate_assets.py` provides offline building blocks for checking
 the 29 expected candidate asset names and downloaded bytes against independently
 recorded digests and API sizes. A download helper retrieves all listing pages
 and draft assets by release ID, then rechecks draft identity and the listing.
-It does not authenticate signatures, verify attestations, or promote candidates,
-and is not wired into either release workflow. It does not change the current
-manual staging and publication process.
+`prepare_candidate.py` and `publish_candidate.py` use these byte checks alongside
+signature, source provenance and cryptographic attestation verification.
 
 Release preflight requires existing successful `Mainline Validation / main-gate`
 and `Security Scan / security-gate` checks on that exact SHA. Release CD does
-not call a `release-security` job or rerun the security workflow; obtain the
-exact-SHA security result before staging. Local aggregate release readiness
-remains a separate pre-tag requirement; see
+not call a `release-security` job or rerun the security workflow. Hosted aggregate
+readiness runs automatically before preparation. Local aggregate release readiness
+remains available for development and diagnosis; see
 [CI and Contribution Governance](ci-and-contribution-governance.md).
 
 ## Draft-First Atomic Publication
@@ -112,25 +105,63 @@ validation environments. ARM64 musl builds and smokes in pinned Bookworm with
 native `musl-tools`. One central pinned Linux job packages all six archives.
 See [Supported Platforms](../public/reference/supported-platforms.md).
 
-Release publication follows a two-phase model:
+1. **Prepare:** build, smoke, centrally package and sign the six platforms;
+   create a private `candidate-<candidate_id>` draft targeting the exact SHA;
+   upload the 29 assets once by release ID; download and independently verify
+   signatures, manifest, SBOM, archive members and commit/tree provenance.
+   Attest those verified downloaded archive bytes. Readiness records the immutable
+   receipt in `release-state/state.json` through bounded compare-and-swap.
+2. **Review:** the summary job displays candidate SHA/tree, version, the draft's
+   actual download URL, manifest digest, preparation results and run link before
+   the `release-publish` job requests approval. Download and test the final bytes,
+   then approve that environment deployment. No manual stage/publish dispatch is
+   part of the normal path.
+3. **Publish:** after approval, revalidate the receipt, source, current eligibility,
+   live policies and latest exact-SHA checks. Reserve `ready → publishing` by CAS
+   before tag or release effects. Download and authenticate every asset against
+   the receipt, then create/verify the annotated final tag. Patch the draft's tag
+   and verify identity and unchanged asset IDs/digests again. Revalidate policy
+   immediately before publishing with JSON booleans `draft: false`,
+   `prerelease: false` and API enum `make_latest: "true"`. Verify public identity,
+   assets and final tag, then record `published`.
 
-1. **Stage**: The `stage` operation builds, tests, packages, signs, and
-   uploads all assets to a **draft** GitHub release. No asset is ever
-   uploaded to a public release. If any build, sign, or check fails, the
-   draft remains incomplete but no public release exists.
+Publication never rebuilds, repackages, signs, uploads, deletes or replaces assets.
+The signature-verification key is taken from the exact source checkout. Attestation
+verification binds both source and signer digest to the preparation workflow
+revision on main, requires its workflow directory to match the candidate's, and
+retains the candidate SHA/tree provenance binding inside the verified bytes.
 
-2. **Publish**: The `publish` operation compares the draft's exact asset
-   names and digests against the signed release manifest and verifies source
-   provenance. `attest-public-assets` records the verified archive digests and
-   attests them when the repository is public; `publish-release` re-verifies
-   the draft and requires that same digest set before updating the release:
+### Interrupted preparation or publication
 
-   ```bash
-   gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
-     -f draft=false -f tag_name="$RELEASE_TAG" --jq .html_url
-   ```
+Dispatch **Release Recovery** (`release-recovery.yml`) from **main**, with only
+the exact `candidate_id` from the original summary or durable state. No arbitrary
+source ref, version or operation may be supplied. Every publication recovery
+passes a new summary and fresh `release-publish` approval.
 
-   A verification failure leaves the release as a draft.
+- **Failed preparation:** re-run aggregate readiness and latest source checks,
+  then claim a new candidate ID using this recovery run ID/attempt. Build and
+  upload a new private draft. The failed attempt and its incomplete draft remain
+  inspectable; no assets are overwritten. Concurrent recovery claims permit only
+  the owning attempt to prepare.
+- **Ready:** use the unchanged receipt and assets; approval can fail if a newer
+  fully verified descendant superseded it while review was pending. Duplicate
+  automatic completions reconcile metadata but do not queue another approval.
+- **Publishing:** reservation is retained after any failure. Recover the same
+  candidate after missing tag creation, final-tag patch, publication, or state
+  recording. Other candidates cannot supersede a reserved publication.
+- **Matching public release:** verify its exact release ID, SHA, final annotated
+  tag, all 29 byte digests, signatures, provenance and attestations. Treat it as
+  idempotent success and reconcile `published` without release mutations. Later
+  gate failures or mutable eligibility changes do not block recording this
+  already-completed effect. Fresh recovery environment approval still applies;
+  current eligibility and policy checks gate new publication effects only.
+- **Mismatching public release or final tag:** fail hard. Do not move the tag,
+  redraft the public release, overwrite assets or release the reservation.
+
+Failures leave the release private unless the publish API operation already
+succeeded. A lost API response is recovered by re-reading authoritative state.
+Publication effects are serialized across automatic and recovery jobs; the CAS
+reservation also rejects a concurrent newer-candidate promotion.
 
 ### Manifest
 
@@ -149,9 +180,9 @@ is listed in the manifest with a matching digest, and that no unexpected
 extra assets exist. The only allowed assets outside the manifest are
 `release-manifest.txt` and `release-manifest.txt.minisig`.
 
-Staging refuses to upload when the draft already has any asset names. The
-upload deliberately does not use `--clobber`; incomplete draft releases must be
-discarded and rebuilt without deleting the protected tag or overwriting assets.
+Preparation refuses to upload when the draft already has any asset names. The
+upload deliberately does not use `--clobber`; failed preparation recovery creates
+a new attempt and a new draft without deleting tags or overwriting assets.
 
 ## Verification Key
 
@@ -236,9 +267,11 @@ and files containing private-key or credential markers, even when a broad
 
 ## Rollback
 
-- For transient CI, signing, or upload failure: discard the incomplete draft
-  release, retain the protected tag, and re-run `stage` at the unchanged
-  tag/SHA. Do not replace individual assets or delete the tag.
+- Disable `RELEASE_PIPELINE_ENABLED` to stop automatic candidate creation.
+- For transient CI, signing, or upload failure: recover the failed candidate ID
+  from main to create a new preparation attempt. Retain incomplete drafts.
+- For interrupted publication: recover only the reserved candidate ID through
+  fresh approval. Never clear its reservation or replace individual assets.
 - For a source or generated-artifact defect after the protected tag is
   created: leave the release unpublished and immutable, bump the patch
   version, repeat the release-candidate gate, and publish only the new tag.

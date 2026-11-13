@@ -255,6 +255,7 @@ class Preparation:
                 subjects[name] = subject["digest"]
         if subjects != expected:
             raise ValueError("attestation subjects do not bind exact archive digests")
+        workflow_sha = self.workflow_source(record)
         for name in sorted(expected):
             # workflow_run's OIDC source SHA is the orchestration commit, which
             # can be newer than the checked-out candidate. Authenticate the
@@ -263,12 +264,43 @@ class Preparation:
             subprocess.run(["gh", "attestation", "verify", str(directory / name),
                             "--bundle", str(path), "--repo", self.repository,
                             "--signer-workflow", f"{self.repository}/.github/workflows/release.yml",
-                            "--source-ref", "refs/heads/main",
+                             "--source-ref", "refs/heads/main",
+                             "--source-digest", workflow_sha,
+                             "--signer-digest", workflow_sha,
                             "--deny-self-hosted-runners"], check=True)
         if path.read_bytes() != raw:
             raise ValueError("attestation bundle changed during verification")
         return [json.dumps({"bundle_sha256": hashlib.sha256(raw).hexdigest(),
-                            "subjects": subjects, "source_sha": record["identity"]["source_sha"]}, sort_keys=True)]
+                            "subjects": subjects, "source_sha": record["identity"]["source_sha"],
+                            "workflow_sha": workflow_sha}, sort_keys=True)]
+
+    def workflow_source(self, record: dict[str, Any]) -> str:
+        """Bind preparation's main workflow revision to the candidate workflow tree.
+
+        workflow_run can execute a newer main revision than the built source.
+        Permit that only when the complete workflow directory is unchanged.
+        """
+        ident = record["identity"]
+        run = github(f"repos/{self.repository}/actions/runs/{ident['run_id']}/attempts/{ident['attempt']}")
+        if (run["id"] != ident["run_id"] or run["run_attempt"] != ident["attempt"]
+                or run["path"] != ".github/workflows/" + ident["workflow"].removeprefix(".github/workflows/")
+                or run["head_branch"] != "main" or run["event"] not in ("workflow_run", "workflow_dispatch")
+                or run["repository"]["id"] != self.repository_id
+                or run["head_repository"]["id"] != self.repository_id
+                or not re.fullmatch(r"[0-9a-f]{40}", run["head_sha"])):
+            raise ValueError("preparation workflow identity mismatch")
+        commit = github(f"repos/{self.repository}/git/commits/{ident['source_sha']}")
+        if commit["sha"] != ident["source_sha"] or commit["tree"]["sha"] != ident["tree_sha"]:
+            raise ValueError("source commit/tree mismatch")
+        trees = []
+        for sha in (ident["source_sha"], run["head_sha"]):
+            entries = github(f"repos/{self.repository}/contents/.github/workflows?ref={sha}")
+            if not entries or any(e["type"] != "file" for e in entries):
+                raise ValueError("invalid workflow tree")
+            trees.append({e["path"]: e["sha"] for e in entries})
+        if trees[0] != trees[1]:
+            raise ValueError("candidate and preparation workflow trees differ")
+        return run["head_sha"]
 
     def ready(self, record: dict[str, Any], directory: Path, attestation_path: Path) -> None:
         """Verify all evidence, atomically promote, then label superseded drafts unpublishable."""

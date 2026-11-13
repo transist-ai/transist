@@ -844,6 +844,65 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+echo "--- Publication wiring: approval, recovery and side-effect boundary ---"
+if python3 - <<'PY'
+from pathlib import Path
+
+
+def validate(text: str, recovery: str, caller: str) -> None:
+    """Guard the single approval and main-only candidate recovery trust edges."""
+    summary, publish = text.split("  publish-release:\n", 1)
+    assert "environment:" not in summary and "publish_candidate.py summary" in summary
+    assert "needs: review-summary" in publish
+    assert "environment: release-publish" in publish
+    assert "group: release-publication-effects" in publish
+    assert "cancel-in-progress: false" in publish
+    assert "ref: ${{ github.workflow_sha }}" in publish
+    assert "ref: ${{ inputs.source_sha }}" in publish
+    assert "publish_candidate.py publish" in publish
+    assert "--source-directory candidate-source" in publish
+    for forbidden in ("secrets.", "id-token:", "attestations: write", "upload-artifact", "cargo ", "minisign -S"):
+        assert forbidden not in text
+    dispatch = recovery.split("permissions:", 1)[0]
+    assert "workflow_dispatch:" in dispatch and "candidate_id:" in dispatch
+    assert "source_sha:" not in dispatch and "release_tag:" not in dispatch and "operation:" not in dispatch
+    assert "github.ref == 'refs/heads/main'" in recovery
+    assert "recover_candidate.py --claim" in recovery
+    assert "needs: [resolve, readiness]" in recovery
+    assert "uses: ./.github/workflows/release-publication.yml" in recovery
+    assert "needs: [gates, eligible, prepare]" in caller
+    assert "uses: ./.github/workflows/release-publication.yml" in caller
+
+
+text = Path(".github/workflows/release-publication.yml").read_text()
+recovery = Path(".github/workflows/release-recovery.yml").read_text()
+caller = Path(".github/workflows/release-eligibility.yml").read_text()
+validate(text, recovery, caller)
+mutations = [
+    (text.replace("needs: review-summary", "needs: []"), recovery, caller),
+    (text.replace("environment: release-publish", "environment: release-build"), recovery, caller),
+    (text.replace("attestations: read", "attestations: write"), recovery, caller),
+    (text.replace("ref: ${{ inputs.source_sha }}", "ref: main"), recovery, caller),
+    (text.replace("group: release-publication-effects", "group: candidate-${{ inputs.candidate_id }}"), recovery, caller),
+    (text, recovery.replace("github.ref == 'refs/heads/main'", "true"), caller),
+    (text, recovery.replace("needs: [resolve, readiness]", "needs: resolve"), caller),
+    (text, recovery.replace("      candidate_id:", "      source_sha:", 1), caller),
+    (text, recovery, caller.replace("needs: [gates, eligible, prepare]", "needs: [eligible]")),
+]
+for number, values in enumerate(mutations, 1):
+    try:
+        validate(*values)
+    except (AssertionError, ValueError):
+        continue
+    raise AssertionError(f"publication wiring accepted mutation {number}")
+print(f"PASS  publication wiring and {len(mutations)} rejected trust-boundary mutations")
+PY
+then
+  record_pass "single pre-summarized approval, exact source and candidate-only recovery"
+else
+  record_fail "publication workflow contract or mutation rejection failed"
+fi
+
 echo "--- Test 22: packaged-doc link escaping the archive root fails ---"
 escape_pkg="$test_dir/escape-pkg"
 mkdir -p "$escape_pkg/docs"

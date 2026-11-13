@@ -82,6 +82,14 @@ class PreparationTests(unittest.TestCase):
         self.calls.append((path, method, copy.deepcopy(data), paginate))
         if path == "repos/owner/repo":
             return {"id": 10}
+        if "/actions/runs/" in path:
+            return {"id": 20, "run_attempt": 1, "path": ".github/workflows/release-eligibility.yml",
+                    "head_sha": "c" * 40, "head_branch": "main", "event": "workflow_run",
+                    "repository": {"id": 10}, "head_repository": {"id": 10}}
+        if "/git/commits/" in path:
+            return {"sha": self.ident["source_sha"], "tree": {"sha": self.ident["tree_sha"]}}
+        if "/contents/.github/workflows?" in path:
+            return [{"path": ".github/workflows/release.yml", "sha": "d" * 40, "type": "file"}]
         if path.endswith("/releases?per_page=100"):
             self.assertTrue(paginate)
             return [list(self.remote.values())]
@@ -90,7 +98,8 @@ class PreparationTests(unittest.TestCase):
             self.assertTrue(data["draft"])
             self.assertEqual(data["make_latest"], "false")
             self.assertEqual(data["target_commitish"], self.ident["source_sha"])
-            draft = dict(data, id=self.next_id)
+            draft = dict(data, id=self.next_id,
+                         html_url=f"https://github.com/owner/repo/releases/untagged-{self.next_id}")
             self.remote[self.next_id] = draft
             self.next_id += 1
             return copy.deepcopy(draft)
@@ -776,6 +785,14 @@ class PreparationTests(unittest.TestCase):
             self.assertIn("--input", command)
             self.assertIn("POST", command)
             self.assertIs(json.loads(call.call_args.kwargs["input"])["draft"], True)
+            GITHUB_TRANSPORT("repos/owner/repo/releases/42", "PATCH", {
+                "draft": False, "prerelease": False, "make_latest": "true"})
+            self.assertIn("PATCH", call.call_args.args[0])
+            self.assertNotIn("-f", call.call_args.args[0])
+            payload = json.loads(call.call_args.kwargs["input"])
+            self.assertIs(payload["draft"], False)
+            self.assertIs(payload["prerelease"], False)
+            self.assertEqual(payload["make_latest"], "true")
             GITHUB_TRANSPORT("repos/owner/repo/releases/42/assets?per_page=100", paginate=True)
             self.assertEqual(call.call_args.args[0][-2:], ["--paginate", "--slurp"])
 
