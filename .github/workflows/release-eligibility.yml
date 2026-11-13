@@ -1,0 +1,91 @@
+name: Release Eligibility
+
+on:
+  workflow_run:
+    workflows: [Mainline Validation, Security Scan]
+    types: [completed]
+    branches: [main]
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  gates:
+    if: ${{ vars.RELEASE_PIPELINE_ENABLED == 'true' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+    outputs:
+      source_sha: ${{ steps.gates.outputs.source_sha }}
+    steps:
+      - name: Checkout trusted default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate completion and both gates
+        id: gates
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci/release_eligibility.py
+
+  readiness:
+    needs: [gates]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    permissions:
+      contents: read
+    container:
+      image: rust:1.88.0-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0
+      options: --cap-add=SYS_ADMIN --cap-add=NET_ADMIN --security-opt apparmor=unconfined --security-opt seccomp=unconfined
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.gates.outputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Confirm candidate checkout
+        env:
+          SOURCE_SHA: ${{ needs.gates.outputs.source_sha }}
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+      - name: Install pinned dependencies
+        run: |
+          bash scripts/ci/install_debian_tools.sh bubblewrap ripgrep git jq python3 curl unzip nodejs npm pip3
+          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy --component llvm-tools-preview --no-self-update
+          bash scripts/ci/install_ci_tools.sh all
+          cargo build --locked -p transist-sandbox-launcher
+          install -Dm755 target/debug/transist-sandbox-launcher /usr/libexec/transist/transist-sandbox-launcher
+      - name: Run aggregate readiness
+        run: bash scripts/ci/check_release_readiness.sh
+
+  eligible:
+    needs: [gates, readiness]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+      checks: read
+    outputs:
+      candidate_id: ${{ steps.claim.outputs.candidate_id }}
+      candidate_state: ${{ steps.claim.outputs.candidate_state }}
+    steps:
+      - name: Checkout trusted default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Revalidate gates and claim candidate
+        id: claim
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.gates.outputs.source_sha }}
+        run: |
+          python3 scripts/ci/release_eligibility.py --claim
+          echo "Eligible exact source SHA: $SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"

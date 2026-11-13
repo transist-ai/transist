@@ -12,6 +12,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import release_candidates as rc
+import release_eligibility as eligibility
+import verify_candidate_policy as policy
 
 
 class FakeAPI:
@@ -247,6 +249,152 @@ class GitHubAPITests(unittest.TestCase):
         with patch.object(self.api, "_request", return_value={"id": 11}):
             with self.assertRaises(rc.CandidateError):
                 self.api.read()
+
+
+class EligibilityTests(unittest.TestCase):
+    def setUp(self):
+        self.sha = "a" * 40
+        self.run = {"id": 11, "run_attempt": 1, "name": "Mainline Validation",
+                    "path": ".github/workflows/main-ci.yml", "event": "push",
+                    "head_branch": "main", "head_sha": self.sha, "status": "completed",
+                    "conclusion": "success", "repository": {"id": 10}, "head_repository": {"id": 10},
+                    "run_started_at": "2026-01-01T00:00:00Z"}
+        self.security = dict(self.run, id=12, name="Security Scan", path=".github/workflows/security.yml")
+        self.event = {"action": "completed", "repository": {"id": 10, "full_name": "owner/repo"},
+                      "workflow_run": copy.deepcopy(self.run)}
+        self.runs = {"main-ci.yml": [self.run], "security.yml": [self.security]}
+
+    def api(self, path, paginate=False):
+        if path == "repos/owner/repo":
+            return {"id": 10}
+        for workflow, runs in self.runs.items():
+            if f"/workflows/{workflow}/runs?" in path:
+                return [{"workflow_runs": runs}]
+            for run in runs:
+                prefix = f"/actions/runs/{run['id']}/attempts/{run['run_attempt']}"
+                if path.endswith(prefix):
+                    return run
+                if prefix + "/jobs?" in path:
+                    gate = "main-gate" if workflow == "main-ci.yml" else "security-gate"
+                    return [{"jobs": [{"name": gate, "status": "completed", "conclusion": "success",
+                                       "run_id": run["id"], "check_run_url": f"https://api.github.com/repos/owner/repo/check-runs/{run['id']}"}]}]
+                if path.endswith(f"/check-runs/{run['id']}"):
+                    return {"id": run["id"], "name": "main-gate" if workflow == "main-ci.yml" else "security-gate",
+                            "head_sha": self.sha, "status": "completed", "conclusion": "success",
+                            "app": {"id": 15368, "slug": "github-actions"}}
+        raise AssertionError(path)
+
+    def validate(self):
+        with patch.dict("os.environ", {"GITHUB_REPOSITORY": "owner/repo"}), patch.object(policy, "api", side_effect=self.api):
+            return eligibility.validate(self.event, "owner/repo", 10)
+
+    def test_both_completion_events_and_duplicates(self):
+        self.assertEqual(self.validate(), self.sha)
+        self.assertEqual(self.validate(), self.sha)
+        self.event["workflow_run"] = copy.deepcopy(self.security)
+        self.assertEqual(self.validate(), self.sha)
+
+    def test_reject_wrong_completion_identity(self):
+        for field, value in (("event", "workflow_dispatch"), ("head_branch", "other"),
+                             ("head_repository", {"id": 11}), ("repository", {"id": 11}),
+                             ("path", ".github/workflows/other.yml"), ("conclusion", "failure")):
+            with self.subTest(field=field):
+                event = copy.deepcopy(self.event)
+                event["workflow_run"][field] = value
+                with self.assertRaises(ValueError):
+                    eligibility.completion(event, "owner/repo", 10)
+        self.event["repository"]["id"] = 11
+        with self.assertRaises(ValueError):
+            self.validate()
+
+    def test_partial_and_stale_runs_fail_closed(self):
+        self.runs["security.yml"] = []
+        with self.assertRaises(ValueError):
+            self.validate()
+        newer = dict(self.security, id=13, run_started_at="2026-01-02T00:00:00Z", conclusion="failure")
+        self.runs["security.yml"] = [self.security, newer]
+        with self.assertRaises(ValueError):
+            self.validate()
+        newer = dict(self.run, run_attempt=2, run_started_at="2026-01-02T00:00:00Z")
+        self.runs["security.yml"] = [self.security]
+        self.runs["main-ci.yml"] = [newer]
+        with self.assertRaises(ValueError):
+            self.validate()
+
+    def test_latest_scan_and_latest_push_must_both_pass(self):
+        for event in ("schedule", "workflow_dispatch"):
+            with self.subTest(event=event):
+                later = dict(self.security, id=13, event=event,
+                             run_started_at="2026-01-02T00:00:00Z")
+                self.runs["security.yml"] = [self.security, later]
+                self.assertEqual(self.validate(), self.sha)
+                later["conclusion"] = "failure"
+                with self.assertRaises(ValueError):
+                    self.validate()
+                later["conclusion"] = None
+                later["status"] = "in_progress"
+                with self.assertRaises(ValueError):
+                    self.validate()
+                later["conclusion"] = "success"
+                later["status"] = "completed"
+                self.security["conclusion"] = "failure"
+                with self.assertRaises(ValueError):
+                    self.validate()
+                self.security["conclusion"] = "success"
+                self.runs["security.yml"] = [later]
+                with self.assertRaises(ValueError):
+                    self.validate()
+                event_payload = copy.deepcopy(self.event)
+                event_payload["workflow_run"] = later
+                with self.assertRaises(ValueError):
+                    eligibility.completion(event_payload, "owner/repo", 10)
+
+    def test_durable_claim_deduplicates_and_rejects_bad_evidence(self):
+        state = FakeAPI()
+        def git(command, **kwargs):
+            if command[1] == "rev-parse":
+                return "f" * 40 + "\n"
+            return b'[workspace.package]\nversion = "1.2.3"\n'
+        def do_claim(expected_sha, run=20):
+            with patch.dict("os.environ", {"GITHUB_REPOSITORY": "owner/repo"}), \
+                 patch.object(policy, "api", side_effect=self.api), \
+                 patch.object(eligibility.subprocess, "check_output", side_effect=git):
+                return eligibility.claim(self.event, "owner/repo", 10, "token", run, 1, state, expected_sha)
+        with self.assertRaises(ValueError):
+            do_claim("b" * 40)
+        self.assertEqual(state.writes, 0)
+        first = do_claim(self.sha)
+        self.assertEqual(first["identity"]["source_sha"], self.sha)
+        self.assertEqual(first["identity"]["tree_sha"], "f" * 40)
+        self.assertEqual(first["identity"]["version"], "1.2.3")
+        self.assertEqual(first["state"], "preparing")
+        self.assertEqual(do_claim(self.sha, 21), first)
+        self.assertEqual(state.writes, 1)
+        self.security["conclusion"] = "failure"
+        with self.assertRaises(ValueError):
+            do_claim(self.sha, 22)
+        self.assertEqual(state.writes, 1)
+
+    def test_workflow_contract(self):
+        workflow = Path(".github/workflows/release-eligibility.yml").read_text()
+        security = Path(".github/workflows/security.yml").read_text()
+        self.assertIn("vars.RELEASE_PIPELINE_ENABLED == 'true'", workflow)
+        self.assertIn("workflows: [Mainline Validation, Security Scan]", workflow)
+        self.assertIn("ref: ${{ needs.gates.outputs.source_sha }}", workflow)
+        self.assertIn('test "$(git rev-parse HEAD)" = "$SOURCE_SHA"', workflow)
+        self.assertLess(workflow.index('git config --global --add safe.directory "$GITHUB_WORKSPACE"'),
+                        workflow.index('test "$(git rev-parse HEAD)"'))
+        self.assertIn("needs: [gates, readiness]", workflow)
+        self.assertIn("bash scripts/ci/check_release_readiness.sh", workflow)
+        self.assertIn("python3 scripts/ci/release_eligibility.py --claim", workflow)
+        self.assertIn("candidate_id: ${{ steps.claim.outputs.candidate_id }}", workflow)
+        self.assertNotIn("secrets.", workflow)
+        readiness = workflow.split("  readiness:", 1)[1].split("  eligible:", 1)[0]
+        self.assertNotIn("contents: write", readiness)
+        self.assertNotIn("GH_TOKEN", readiness)
+        self.assertIn("  push:\n    branches:\n      - main", security)
+        self.assertIn("  schedule:", security)
+        self.assertIn("  workflow_dispatch:", security)
 
 
 if __name__ == "__main__":

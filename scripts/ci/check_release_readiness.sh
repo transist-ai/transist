@@ -44,7 +44,7 @@ cd "$ROOT_DIR"
 
 step=0
 total=28
-hosted_checks=("Mainline Validation / main-gate (Linux + macOS + Alpine/musl release smoke)" "Security Scan / security-gate (weekly, manual, release staging)")
+hosted_checks=("Mainline Validation / main-gate (Linux + macOS + Alpine/musl release smoke)" "Security Scan / security-gate (main push, weekly, manual)")
 
 ADMIN_SIGN_OUTPUT_DIR=""
 COVERAGE_OUTPUT_DIR=""
