@@ -43,6 +43,17 @@ sets to report.
 
 ## Step 8: pending
 
+The initial full gate at Step 6 commit `64bf1c3` failed at maintainability after
+passing format, Clippy, Rustdoc, 2,227 default-feature tests, 2,241 all-feature
+tests and 222 security regression tests. The identity checker detected hardcoded
+synthetic release versions in a new signed-payload fixture. That fixture now
+derives its version and archive names from `Cargo.toml`; the identity checker
+(18 tests) and candidate suite (106 tests) pass. The checker was not weakened.
+
+Run the aggregate on the committed Step 8 tree and record its outcome alongside
+the origin plan. Logs use the `release-pipeline-step-8-` prefix in the specified
+external temp folder. A passed local gate does not remove the Step 7 blockers.
+
 The full local aggregate and first real six-platform candidate are required before
 completion. Enabling the variable is deferred until review, merge and successful
 Step 7 validation. Stop before approving any production publication.
