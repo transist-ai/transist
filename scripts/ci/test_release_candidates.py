@@ -6,14 +6,18 @@ import base64
 import copy
 import io
 import json
+import hashlib
+import tempfile
 import unittest
 import urllib.error
 from pathlib import Path
 from unittest.mock import patch
 
 import release_candidates as rc
+import candidate_assets
 import release_eligibility as eligibility
 import verify_candidate_policy as policy
+from test_prepare_candidate import PreparationTests, RealPayloadTests  # noqa: F401
 
 
 class FakeAPI:
@@ -143,6 +147,33 @@ class CandidateTests(unittest.TestCase):
             machine.ready(self.old["candidate_id"], old_receipt)
         self.assertEqual(api.state["candidates"][self.new["candidate_id"]]["state"], "ready")
 
+    def test_receipt_predecessor_is_bound_in_promotion_cas(self):
+        old_receipt = self.claim(self.old, 1)
+        new_receipt = self.claim(self.new, 2)
+        self.candidates.ready(self.old["candidate_id"], old_receipt)
+        new_receipt["supersedes"] = None
+        self.assert_rejected(self.candidates.ready, self.new["candidate_id"], new_receipt)
+        new_receipt["supersedes"] = self.old["candidate_id"]
+        self.api.conflicts = 1
+        self.candidates.ready(self.new["candidate_id"], new_receipt)
+        self.assertEqual(self.api.state["candidates"][self.new["candidate_id"]]["receipt"], new_receipt)
+
+    def test_predecessor_is_rechecked_when_cas_conflicts_with_reservation(self):
+        old_receipt = self.claim(self.old, 1)
+        new_receipt = self.claim(self.new, 2)
+        self.candidates.ready(self.old["candidate_id"], old_receipt)
+        new_receipt["supersedes"] = self.old["candidate_id"]
+        self.api.conflicts = 1
+
+        def reserve_during_conflict():
+            self.api.state["candidates"][self.old["candidate_id"]]["state"] = "publishing"
+
+        self.api.on_conflict = reserve_during_conflict
+        with self.assertRaisesRegex(rc.CandidateError, "predecessor changed"):
+            self.candidates.ready(self.new["candidate_id"], new_receipt)
+        self.assertEqual(self.api.state["candidates"][self.new["candidate_id"]]["state"], "preparing")
+        self.assertEqual(self.api.state["candidates"][self.old["candidate_id"]]["state"], "publishing")
+
     def test_failed_preparation_and_explicit_recovery(self):
         r = self.claim(self.old, 1)
         self.candidates.ready(self.old["candidate_id"], r)
@@ -205,6 +236,113 @@ class CandidateTests(unittest.TestCase):
     def test_invalid_state_fails_closed(self):
         self.api.state["repository_id"] = 99
         self.assert_rejected(self.candidates.claim, self.old)
+
+
+class CandidateAssetTests(unittest.TestCase):
+    def setUp(self):
+        self.names = candidate_assets.expected_assets(
+            "v1.2.3", Path("scripts/ci/release-archive-inventory.json"))
+        self.assets = [{"name": name, "id": index + 1, "size": len(name.encode()),
+                        "state": "uploaded"} for index, name in enumerate(sorted(self.names))]
+
+    def test_paginated_listing_rejects_incomplete_duplicate_and_unsafe_assets(self):
+        pages = [self.assets[:10], self.assets[10:20], self.assets[20:]]
+        self.assertEqual(set(candidate_assets.validate_listing(pages, self.names)), self.names)
+        variations = [self.assets[:-1], self.assets + [self.assets[0]],
+                      self.assets + [{"name": "../escape", "id": 99, "size": 0, "state": "uploaded"}],
+                      self.assets + [{"name": "extra", "id": 99, "size": 0, "state": "uploaded"}]]
+        duplicate_id = copy.deepcopy(self.assets)
+        duplicate_id[1]["id"] = duplicate_id[0]["id"]
+        variations.append(duplicate_id)
+        pending = copy.deepcopy(self.assets)
+        pending[0]["state"] = "starter"
+        variations.append(pending)
+        for entries in variations:
+            with self.subTest(entries=entries), self.assertRaises(ValueError):
+                candidate_assets.validate_listing([entries], self.names)
+
+    def test_downloaded_bytes_and_recorded_receipt_must_match(self):
+        listing = candidate_assets.validate_listing([self.assets], self.names)
+        expected = {name: {"sha256": hashlib.sha256(name.encode()).hexdigest(),
+                           "size": len(name.encode())} for name in self.names}
+        with tempfile.TemporaryDirectory() as root:
+            directory = Path(root)
+            for name in self.names:
+                (directory / name).write_bytes(name.encode())
+            self.assertEqual(candidate_assets.verify_downloads(directory, listing, expected), expected)
+            name = sorted(self.names)[0]
+            (directory / name).write_bytes(b"x" * len(name))
+            with self.assertRaises(ValueError):
+                candidate_assets.verify_downloads(directory, listing, expected)
+            (directory / name).write_bytes(name.encode())
+            tampered = copy.deepcopy(expected)
+            tampered[name]["sha256"] = "0" * 64
+            with self.assertRaises(ValueError):
+                candidate_assets.verify_downloads(directory, listing, tampered)
+            (directory / "unexpected").touch()
+            with self.assertRaises(ValueError):
+                candidate_assets.verify_downloads(directory, listing, expected)
+
+    def test_listing_ignores_download_counts_but_binds_server_digest(self):
+        first = copy.deepcopy(self.assets)
+        later = copy.deepcopy(self.assets)
+        for asset in first:
+            asset["download_count"] = 0
+        for asset in later:
+            asset["download_count"] = 1
+        self.assertEqual(candidate_assets.validate_listing([first], self.names),
+                         candidate_assets.validate_listing([later], self.names))
+        later[0]["digest"] = "sha256:" + "0" * 64
+        listing = candidate_assets.validate_listing([later], self.names)
+        with tempfile.TemporaryDirectory() as root:
+            directory = Path(root)
+            for name in self.names:
+                (directory / name).write_bytes(name.encode())
+            expected = candidate_assets.asset_digests(directory, self.names)
+            with self.assertRaisesRegex(ValueError, "bytes differ"):
+                candidate_assets.verify_downloads(directory, listing, expected)
+
+    def test_release_id_download_rechecks_pages_identity_and_bytes(self):
+        ident = candidate("a")
+        expected = {name: {"sha256": hashlib.sha256(name.encode()).hexdigest(),
+                           "size": len(name.encode())} for name in self.names}
+        release = {"id": 42, "draft": True, "tag_name": ident["draft_tag"],
+                   "target_commitish": ident["source_sha"]}
+        ids = {asset["id"]: asset["name"] for asset in self.assets}
+        listing_count = 0
+        mode = "valid"
+
+        def api(command, text):
+            nonlocal listing_count
+            self.assertTrue(text)
+            self.assertEqual(command[:2], ["gh", "api"])
+            if "/assets?" in command[2]:
+                self.assertEqual(command[3:], ["--paginate", "--slurp"])
+                listing_count += 1
+                pages = [self.assets[:10], self.assets[10:]]
+                if mode == "changed-listing" and listing_count == 2:
+                    pages = [self.assets[:-1]]
+                return json.dumps(pages)
+            self.assertEqual(command[2], "repos/owner/repo/releases/42")
+            return json.dumps(dict(release, target_commitish="b" * 40) if mode == "wrong-source" else release)
+
+        def download(command, stdout, check):
+            self.assertTrue(check)
+            asset_id = int(command[2].rsplit("/", 1)[1])
+            data = ids[asset_id].encode()
+            stdout.write(b"x" * len(data) if mode == "changed-bytes" else data)
+
+        for mode in ("valid", "wrong-source", "changed-bytes", "changed-listing"):
+            listing_count = 0
+            inventory = Path("scripts/ci/release-archive-inventory.json")
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as root, \
+                    patch.object(candidate_assets.subprocess, "check_output", side_effect=api), \
+                    patch.object(candidate_assets.subprocess, "run", side_effect=download):
+                if mode == "valid":
+                    self.assertEqual(candidate_assets.download_draft("owner/repo", 42, ident, Path(root), expected, inventory), expected)
+                else:
+                    with self.assertRaises(ValueError):
+                        candidate_assets.download_draft("owner/repo", 42, ident, Path(root), expected, inventory)
 
 
 class GitHubAPITests(unittest.TestCase):
@@ -348,6 +486,19 @@ class EligibilityTests(unittest.TestCase):
                 event_payload["workflow_run"] = later
                 with self.assertRaises(ValueError):
                     eligibility.completion(event_payload, "owner/repo", 10)
+
+    def test_receipt_check_ids_are_latest_verified_ids_and_fail_atomically(self):
+        later = dict(self.security, id=13, event="schedule", run_started_at="2026-01-02T00:00:00Z")
+        self.runs["security.yml"] = [self.security, later]
+        checks = []
+        with patch.dict("os.environ", {"GITHUB_REPOSITORY": "owner/repo"}), patch.object(policy, "api", side_effect=self.api):
+            policy.verify_gates(self.sha, require_push=True, check_run_ids=checks)
+            self.assertEqual(checks, [11, 13, 12])
+            later["conclusion"] = "failure"
+            checks[:] = [999]
+            with self.assertRaises(ValueError):
+                policy.verify_gates(self.sha, require_push=True, check_run_ids=checks)
+            self.assertEqual(checks, [999])
 
     def test_durable_claim_deduplicates_and_rejects_bad_evidence(self):
         state = FakeAPI()

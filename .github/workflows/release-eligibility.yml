@@ -75,6 +75,7 @@ jobs:
     outputs:
       candidate_id: ${{ steps.claim.outputs.candidate_id }}
       candidate_state: ${{ steps.claim.outputs.candidate_state }}
+      release_tag: ${{ steps.version.outputs.release_tag }}
     steps:
       - name: Checkout trusted default branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -89,3 +90,57 @@ jobs:
         run: |
           python3 scripts/ci/release_eligibility.py --claim
           echo "Eligible exact source SHA: $SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"
+      - name: Read final version from the exact candidate
+        id: version
+        env:
+          SOURCE_SHA: ${{ needs.gates.outputs.source_sha }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import subprocess
+          import tomllib
+
+          manifest = subprocess.check_output(["git", "show", f"{os.environ['SOURCE_SHA']}:Cargo.toml"])
+          version = tomllib.loads(manifest.decode("utf-8"))["workspace"]["package"]["version"]
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"release_tag=v{version}\n")
+          PY
+
+  reconcile:
+    needs: [eligible]
+    # Duplicate events may reuse a ready claim after the original run exhausted
+    # its label retries. Reconcile metadata only; never prepare or publish again.
+    if: ${{ needs.eligible.outputs.candidate_state == 'ready' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout trusted main reconciliation code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Reconcile the ready candidate's recorded predecessor label
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_ID: ${{ needs.eligible.outputs.candidate_id }}
+        run: python3 scripts/ci/prepare_candidate.py reconcile --candidate-id "$CANDIDATE_ID"
+
+  prepare:
+    needs: [gates, eligible]
+    # Duplicate completions reuse the active claim, but only its owning attempt
+    # may build and upload. A ready or failed candidate cannot be prepared again.
+    if: >-
+      needs.eligible.outputs.candidate_state == 'preparing' &&
+      needs.eligible.outputs.candidate_id == format('{0}-{1}-{2}', needs.gates.outputs.source_sha, github.run_id, github.run_attempt)
+    permissions:
+      contents: write
+      actions: read
+      checks: read
+      attestations: write
+      id-token: write
+    uses: ./.github/workflows/release.yml
+    with:
+      candidate_id: ${{ needs.eligible.outputs.candidate_id }}
+      source_sha: ${{ needs.gates.outputs.source_sha }}
+      release_tag: ${{ needs.eligible.outputs.release_tag }}

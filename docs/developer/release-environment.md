@@ -89,6 +89,14 @@ Duplicate events can run duplicate checks but reuse the same active claim. The
 state branch must be provisioned before activation; missing state fails closed.
 This stage creates no draft. The existing manual release workflow remains in use.
 
+`scripts/ci/candidate_assets.py` provides offline building blocks for checking
+the 29 expected candidate asset names and downloaded bytes against independently
+recorded digests and API sizes. A download helper retrieves all listing pages
+and draft assets by release ID, then rechecks draft identity and the listing.
+It does not authenticate signatures, verify attestations, or promote candidates,
+and is not wired into either release workflow. It does not change the current
+manual staging and publication process.
+
 Release preflight requires existing successful `Mainline Validation / main-gate`
 and `Security Scan / security-gate` checks on that exact SHA. Release CD does
 not call a `release-security` job or rerun the security workflow; obtain the
@@ -156,6 +164,35 @@ Before signing, the workflow verifies that the signing secret's key ID
 matches the committed public key's key ID. A mismatch prevents all signing.
 
 ## Local And Hosted Regression Gates
+
+For focused pipeline development (plan Steps 1–7), run
+`bash scripts/ci/test_release_invariants.sh --fixture-build`. This explicit
+test-only mode replaces the isolated candidate dry-run's native build with
+synthetic binaries using `tests/fixtures/release/cargo_fixture.py`; all other
+checks and real Cargo tool probes remain enabled. It is accepted for the Step 4
+focused invariant check, alongside the candidate tests, release inventory and
+supply-chain checks. It does not establish native binary/platform compatibility
+or replace the full final release-readiness gate. Default invocation and hosted
+release preparation do not enable this mode.
+
+The reusable preparation workflow's failure finalizer covers upstream builds,
+signing, attestation, and post-promotion errors. It verifies repository, run,
+attempt and main-ref ownership before failing a preparing claim; ready and
+publication-reserved candidates remain intact. Receipt evidence uploads run
+even after a later step fails. A `ready` helper retry revalidates the exact
+persisted identity, assets and attestation evidence without replacing its
+receipt. Only the predecessor recorded by the promotion CAS is relabelled;
+historical superseded drafts are not scanned or modified.
+
+If all three in-job label attempts fail after promotion, rerun the original
+`Release Eligibility` workflow or let a duplicate eligible completion event
+re-evaluate the same source. When the active claim is already `ready`, its
+separate `reconcile` job checks out trusted `main` code and runs
+`prepare_candidate.py reconcile --candidate-id <candidate-id>`. It validates the
+authoritative ready receipt and current draft identity before reconciling only
+the recorded predecessor's label. It requires no original-run ownership, local
+assets, signing key, or publication approval; it cannot prepare, promote, modify
+assets, create tags, or publish. Errors leave the ready receipt and state intact.
 
 `test_release_invariants.sh` uses fixture-backed GitHub API responses to test
 exact SHA and provider identity, pagination, duplicate check runs, latest
