@@ -23,8 +23,8 @@ def require(condition: bool, message: str) -> None:
         raise ValueError(message)
 
 
-def verify_gates(sha: str) -> str:
-    """Verify latest attempts and checks for the source SHA; return the API root."""
+def verify_gates(sha: str, *, require_push: bool = False, trigger: tuple[str, int, int] | None = None) -> str:
+    """Verify latest attempts and, optionally, latest push attempts for the source SHA."""
     repo = os.environ["GITHUB_REPOSITORY"]
     require(bool(re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo)), "invalid repository")
     root = f"repos/{repo}"
@@ -42,30 +42,42 @@ def verify_gates(sha: str) -> str:
                     and attempt["head_sha"] == sha, f"{workflow} attempt identity mismatch")
             started = datetime.strptime(attempt["run_started_at"], "%Y-%m-%dT%H:%M:%SZ")
             attempts.append((started, attempt))
-        latest = max(started for started, _ in attempts)
-        newest = [run for started, run in attempts if started == latest]
-        require(len(newest) == 1, f"ambiguous latest {workflow} attempt timestamp")
-        run = newest[0]
-        require(run["path"] == f".github/workflows/{workflow}" and run["head_branch"] == "main"
-                and run["event"] in (("push", "workflow_dispatch") if workflow == "main-ci.yml" else ("push", "schedule", "workflow_dispatch"))
-                and run["repository"]["id"] == repository_id
-                and run["head_repository"]["id"] == repository_id, f"{workflow} source identity mismatch")
-        require(run["status"] == "completed" and run["conclusion"] == "success", f"latest {workflow} run did not succeed")
-        attempt = run["run_attempt"]
-        require(type(attempt) is int and attempt > 0, "invalid workflow attempt")
-        pages = api(f"{root}/actions/runs/{run['id']}/attempts/{attempt}/jobs?per_page=100", True)
-        jobs = [job for page in pages for job in page["jobs"] if job["name"] == gate]
-        require(len(jobs) == 1, f"missing or duplicate {gate} job")
-        job = jobs[0]
-        require(job["status"] == "completed" and job["conclusion"] == "success", f"{gate} did not succeed")
-        match = re.fullmatch(r"https://api\.github\.com/repos/" + re.escape(repo) + r"/check-runs/([0-9]+)", job["check_run_url"])
-        require(match is not None and job["run_id"] == run["id"], f"{gate} job identity mismatch")
-        check_id = int(match.group(1))
-        check = api(f"{root}/check-runs/{check_id}")
-        require(check["id"] == check_id and check["name"] == gate and check["head_sha"] == sha
-                and check["status"] == "completed" and check["conclusion"] == "success"
-                and check["app"]["id"] == 15368 and check["app"]["slug"] == "github-actions",
-                f"{gate} check identity mismatch")
+        def latest_run(options: list) -> dict:
+            require(bool(options), f"missing eligible {workflow} workflow attempt")
+            latest = max(started for started, _ in options)
+            newest = [run for started, run in options if started == latest]
+            require(len(newest) == 1, f"ambiguous latest {workflow} attempt timestamp")
+            return newest[0]
+
+        latest = latest_run(attempts)
+        selected = [latest]
+        if require_push:
+            push = latest_run([(started, run) for started, run in attempts if run["event"] == "push"])
+            if trigger is not None and trigger[0] == workflow:
+                require((push["id"], push["run_attempt"]) == trigger[1:], f"stale {workflow} completion")
+            if push is not latest:
+                selected.append(push)
+        for run in selected:
+            require(run["path"] == f".github/workflows/{workflow}" and run["head_branch"] == "main"
+                    and run["event"] in (("push", "workflow_dispatch") if workflow == "main-ci.yml" else ("push", "schedule", "workflow_dispatch"))
+                    and run["repository"]["id"] == repository_id
+                    and run["head_repository"]["id"] == repository_id, f"{workflow} source identity mismatch")
+            require(run["status"] == "completed" and run["conclusion"] == "success", f"latest {workflow} run did not succeed")
+            attempt = run["run_attempt"]
+            require(type(attempt) is int and attempt > 0, "invalid workflow attempt")
+            pages = api(f"{root}/actions/runs/{run['id']}/attempts/{attempt}/jobs?per_page=100", True)
+            jobs = [job for page in pages for job in page["jobs"] if job["name"] == gate]
+            require(len(jobs) == 1, f"missing or duplicate {gate} job")
+            job = jobs[0]
+            require(job["status"] == "completed" and job["conclusion"] == "success", f"{gate} did not succeed")
+            match = re.fullmatch(r"https://api\.github\.com/repos/" + re.escape(repo) + r"/check-runs/([0-9]+)", job["check_run_url"])
+            require(match is not None and job["run_id"] == run["id"], f"{gate} job identity mismatch")
+            check_id = int(match.group(1))
+            check = api(f"{root}/check-runs/{check_id}")
+            require(check["id"] == check_id and check["name"] == gate and check["head_sha"] == sha
+                    and check["status"] == "completed" and check["conclusion"] == "success"
+                    and check["app"]["id"] == 15368 and check["app"]["slug"] == "github-actions",
+                    f"{gate} check identity mismatch")
     print("PASS  exact-SHA latest workflow attempts and GitHub Actions checks")
     return root
 

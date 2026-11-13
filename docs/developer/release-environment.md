@@ -76,6 +76,19 @@ publication mode that binds a receipt to durable candidate state and verifies
 the annotated tag in the target repository. These modes do not by themselves
 change the existing release workflow or provision its future environments.
 
+`Security Scan` also runs on pushes to `main`. The separate `Release Eligibility`
+workflow is disabled unless repository variable `RELEASE_PIPELINE_ENABLED` is
+`true`. It checks both latest successful push gates on the completion event's
+exact SHA, runs the aggregate readiness check on that checkout without signing
+secrets, and rechecks the gates before atomically claiming the candidate in the
+`release-state` branch. Both the latest run and the latest push run must pass;
+a newer failed or unfinished scheduled or manual scan blocks eligibility. A
+successful rerun clears that failure, but does not trigger preparation: a later
+successful push completion must re-evaluate it.
+Duplicate events can run duplicate checks but reuse the same active claim. The
+state branch must be provisioned before activation; missing state fails closed.
+This stage creates no draft. The existing manual release workflow remains in use.
+
 Release preflight requires existing successful `Mainline Validation / main-gate`
 and `Security Scan / security-gate` checks on that exact SHA. Release CD does
 not call a `release-security` job or rerun the security workflow; obtain the

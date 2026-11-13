@@ -377,7 +377,7 @@ CI is split into three cost/trust tiers:
   stay manual and non-blocking until a target is formally promoted.
 - **Security Scan (`Security Scan / security-gate`)** requires the security audit
   (regressions, cargo-deny, npm audit, and full-history secret scanning) on a weekly
-  schedule and on demand. CodeQL is public-only: the gate requires success for a
+  push to `main`, on a weekly schedule, and on demand. CodeQL is public-only: the gate requires success for a
   public repository and exactly `skipped` for a private repository. Private
   success is audit-only evidence. A successful exact-SHA gate is required before
   release staging; see [Security Policy](SECURITY.md#ci-security-scanning).
