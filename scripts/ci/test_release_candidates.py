@@ -18,6 +18,7 @@ import candidate_assets
 import release_eligibility as eligibility
 import verify_candidate_policy as policy
 from test_prepare_candidate import PreparationTests, RealPayloadTests  # noqa: F401
+from test_publish_candidate import PublicationTests  # noqa: F401
 
 
 class FakeAPI:

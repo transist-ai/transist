@@ -382,13 +382,14 @@ CI is split into three cost/trust tiers:
   success is audit-only evidence. A successful exact-SHA gate is required before
   release staging; see [Security Policy](SECURITY.md#ci-security-scanning).
 
-Release staging requires the exact tagged SHA to pass `Mainline Validation /
-main-gate` and `Security Scan / security-gate`. Release preflight verifies
-existing check results; Release CD does not run a fresh `release-security` job
-or repeat the local aggregate readiness suite. Obtain the exact-SHA security
-result before staging. Release CD must be dispatched from
-the exact release tag ref (`github.ref == refs/tags/<tag>`); the workflow
-rejects any other ref so every check attaches to the tag SHA. Sandbox-dependent
+Automatic release eligibility requires the exact source SHA to pass `Mainline
+Validation / main-gate` and `Security Scan / security-gate`, then runs aggregate
+readiness before preparing a complete signed private draft. After draft review,
+one `release-publish` approval revalidates current policy/checks, reserves the
+candidate and publishes the unchanged bytes with an annotated final tag. Recovery
+uses only a candidate ID dispatched from main and requires fresh publication
+approval. See the release environment guide for interrupted-publication handling.
+Sandbox-dependent
 tests must fail when the expected platform backend is unavailable; do not skip
 them to make a platform green.
 
@@ -396,8 +397,7 @@ All six archives are centrally packaged; ARM64 musl uses native Bookworm with
 `musl-tools` for build and archive smoke. See
 [Supported Platforms](docs/public/reference/supported-platforms.md) and
 [Release Environment Configuration](docs/developer/release-environment.md) for
-the environment-gated `stage-and-sign`, `attest-public-assets`, and
-`publish-release` jobs.
+the `release-build` preparation and `release-publish` publication environments.
 
 The hosted gates are not a substitute for local validation. The full local gates
 below remain the mandatory pre-merge (and pre-release) evidence for a

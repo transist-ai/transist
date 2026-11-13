@@ -144,3 +144,15 @@ jobs:
       candidate_id: ${{ needs.eligible.outputs.candidate_id }}
       source_sha: ${{ needs.gates.outputs.source_sha }}
       release_tag: ${{ needs.eligible.outputs.release_tag }}
+
+  publish:
+    needs: [gates, eligible, prepare]
+    permissions:
+      contents: write
+      actions: read
+      checks: read
+      attestations: read
+    uses: ./.github/workflows/release-publication.yml
+    with:
+      candidate_id: ${{ needs.eligible.outputs.candidate_id }}
+      source_sha: ${{ needs.gates.outputs.source_sha }}
