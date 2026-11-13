@@ -335,6 +335,46 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+echo "--- Test 13b: untagged preparation and publication mode boundaries ---"
+mode_clone="$test_dir/candidate-mode"
+git clone --quiet --no-tags --no-hardlinks "$repo_root" "$mode_clone"
+git -C "$mode_clone" config user.email "test@example.com"
+git -C "$mode_clone" config user.name "Candidate Mode Test"
+cp scripts/ci/check_release_candidate.sh "$mode_clone/scripts/ci/check_release_candidate.sh"
+cp scripts/ci/verify_candidate_policy.py scripts/ci/verify_release_refs.py "$mode_clone/scripts/ci/"
+# Isolate the mode boundary from the separate, fixture-tested live policy.
+printf '#!/usr/bin/env bash\nexit 0\n' > "$mode_clone/scripts/ci/check_release_policy.sh"
+git -C "$mode_clone" add scripts/ci/check_release_candidate.sh scripts/ci/check_release_policy.sh scripts/ci/verify_candidate_policy.py scripts/ci/verify_release_refs.py
+git -C "$mode_clone" commit -q -m "fixture candidate mode"
+mode_sha="$(git -C "$mode_clone" rev-parse HEAD)"
+mode_bin="$test_dir/mode-bin"
+mkdir -p "$mode_bin"
+cat > "$mode_bin/gh" <<'EOF'
+#!/usr/bin/env bash
+[[ "$1" == api && "$2" == "repos/fixture-owner/fixture-repo/compare/$GH_MODE_SHA...main" ]]
+printf '{"base_commit":{"sha":"%s"},"status":"ahead"}\n' "$GH_MODE_SHA"
+EOF
+chmod +x "$mode_bin/gh"
+mode_output="$(cd "$mode_clone" && GITHUB_REPOSITORY=fixture-owner/fixture-repo GH_MODE_SHA="$mode_sha" PATH="$mode_bin:$PATH" bash scripts/ci/check_release_candidate.sh --preparation "$TAG" --sha "$mode_sha" 2>&1)" && mode_status=0 || mode_status=$?
+if [[ "$mode_status" -eq 0 && "$mode_output" == *"Preparation validation passed"* ]] \
+    && ! git -C "$mode_clone" show-ref --verify --quiet "refs/tags/$TAG"; then
+  record_pass "untagged exact candidate passes preparation"
+else
+  record_fail "untagged candidate preparation failed"
+  printf '%s\n' "$mode_output" >&2
+fi
+if (cd "$mode_clone" && bash scripts/ci/check_release_candidate.sh --publication "$TAG" --sha "$mode_sha" >/dev/null 2>&1); then
+  record_fail "publication accepted a missing receipt"
+else
+  record_pass "publication requires a receipt"
+fi
+if (cd "$mode_clone" && bash scripts/ci/check_release_candidate.sh --dry-run --preparation "$TAG" --sha "$mode_sha" >/dev/null 2>&1); then
+  record_fail "dry-run accepted a live preparation mode"
+else
+  record_pass "dry-run rejects live mode combinations"
+fi
+
+# ---------------------------------------------------------------------------
 echo "--- Test 14: checksum sidecar follows an archive outside dist ---"
 outside_dir="$test_dir/outside-archive"
 mkdir -p "$outside_dir/payload"
@@ -596,6 +636,11 @@ fi
 
 # ---------------------------------------------------------------------------
 echo "--- Test 21: fixture-driven GitHub API release policy checks ---"
+if python3 scripts/ci/test_candidate_policy.py; then
+  record_pass "candidate workflow and environment policy fixtures pass"
+else
+  record_fail "candidate workflow and environment policy fixtures failed"
+fi
 fixture_file="tests/fixtures/release/github-api.json"
 fake_gh="$test_dir/gh"
 cp "tests/fixtures/release/fake_gh.sh" "$fake_gh"
@@ -623,8 +668,10 @@ run_policy_case() {
 }
 
 run_policy_case valid pass
+run_policy_case mainline-dispatch pass
 run_policy_case wrong-sha fail
 run_policy_case wrong-provider fail
+run_policy_case wrong-workflow fail
 run_policy_case latest-failure fail
 run_policy_case latest-incomplete fail
 run_policy_case invalid-ruleset fail

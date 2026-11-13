@@ -65,10 +65,16 @@ The candidate script also requires the remote tag to be an annotated tag whose
 peeled commit SHA (`refs/tags/${tag}^{}`) matches the release-candidate commit
 SHA exactly; a missing or mismatched remote peel is a hard failure.
 
-The check-runs query is paginated and bound to the candidate commit SHA. Only
-GitHub Actions check runs (`app.id` `15368`, `app.slug` `github-actions`) are
-eligible; duplicate names are resolved by the newest completion/start time,
-and a newer failure or incomplete run cannot be hidden by an older success.
+Preflight verifies the latest started workflow attempt for each required gate
+on the exact candidate SHA, including reruns of older workflow runs. It binds
+the gate job and check run to the expected workflow and GitHub Actions identity
+(`app.id` `15368`, `app.slug` `github-actions`). A newer failure or incomplete
+run cannot be hidden by an older success.
+
+The candidate preflight also supports an untagged preparation mode and a
+publication mode that binds a receipt to durable candidate state and verifies
+the annotated tag in the target repository. These modes do not by themselves
+change the existing release workflow or provision its future environments.
 
 Release preflight requires existing successful `Mainline Validation / main-gate`
 and `Security Scan / security-gate` checks on that exact SHA. Release CD does

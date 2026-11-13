@@ -31,6 +31,35 @@ case "$endpoint" in
          end
     ' "$fixture"
     ;;
+  repos/*/actions/workflows/*/runs\?*)
+    workflow="${endpoint#*/actions/workflows/}"
+    workflow="${workflow%%/*}"
+    if [[ "$workflow" == main-ci.yml ]]; then id=101; else id=102; fi
+    jq -nc --argjson id "$id" --arg sha "$(jq -r '.candidate_sha' "$fixture")" \
+      --arg case "$case_name" '{workflow_runs: [{id: $id, run_attempt: 1, head_sha: (if $case == "wrong-sha" then "2222222222222222222222222222222222222222" else $sha end)}]} | [.]'
+    ;;
+  repos/*/actions/runs/*/attempts/*/jobs\?*)
+    if [[ "$endpoint" == *'/runs/101/'* ]]; then id=101; gate=main-gate; else id=102; gate=security-gate; fi
+    jq -nc --argjson id "$id" --arg gate "$gate" '{jobs: [{name: $gate, run_id: $id, status: "completed", conclusion: "success", check_run_url: ("https://api.github.com/repos/fixture-owner/fixture-repo/check-runs/" + ($id|tostring))}]} | [.]'
+    ;;
+  repos/*/actions/runs/*/attempts/*)
+    if [[ "$endpoint" == *'/runs/101/'* ]]; then id=101; workflow=main-ci.yml; else id=102; workflow=security.yml; fi
+    jq -nc --argjson id "$id" --arg workflow "$workflow" --arg case "$case_name" \
+      --arg sha "$(jq -r '.candidate_sha' "$fixture")" \
+      '{id: $id, run_attempt: 1, head_sha: $sha, path: (".github/workflows/" + (if $case == "wrong-workflow" then "other.yml" else $workflow end)),
+        head_branch: "main", event: (if $id == 101 and $case == "mainline-dispatch" then "workflow_dispatch" else "push" end), repository: {id: 5}, head_repository: {id: 5},
+        run_started_at: "2026-08-10T11:00:00Z",
+        status: (if $id == 101 and $case == "latest-incomplete" then "in_progress" else "completed" end),
+        conclusion: (if $id == 101 and $case == "latest-failure" then "failure" elif $id == 101 and $case == "latest-incomplete" then null else "success" end)}'
+    ;;
+  repos/*/check-runs/*)
+    id="${endpoint##*/}"
+    if [[ "$id" == 101 ]]; then gate=main-gate; else gate=security-gate; fi
+    jq -nc --argjson id "$id" --arg gate "$gate" --arg case "$case_name" \
+      --arg sha "$(jq -r '.candidate_sha' "$fixture")" \
+      '{id: $id, name: $gate, head_sha: $sha, status: "completed", conclusion: "success",
+        app: (if $case == "wrong-provider" then {id: 999, slug: "other-provider"} else {id: 15368, slug: "github-actions"} end)}'
+    ;;
   repos/*/commits/*/check-runs)
     jq -c --arg case "$case_name" '
       .base.check_runs as $runs
@@ -74,6 +103,9 @@ case "$endpoint" in
          else $policies
         end
     ' "$fixture"
+    ;;
+  repos/fixture-owner/fixture-repo)
+    jq -nc '{id: 5}'
     ;;
   *)
     echo "fixture has no response for endpoint: $endpoint" >&2

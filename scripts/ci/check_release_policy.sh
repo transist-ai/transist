@@ -12,8 +12,13 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+policy_mode=legacy
+if [[ "${1:-}" == --candidate ]]; then
+  policy_mode=candidate
+  shift
+fi
 candidate_sha="${1:-}"
-if [[ -z "$candidate_sha" || "$candidate_sha" == -* ]]; then
+if [[ $# -ne 1 || ! "$candidate_sha" =~ ^[0-9a-f]{40}$ ]]; then
   echo "Usage: $0 <candidate-commit-sha>" >&2
   exit 1
 fi
@@ -91,39 +96,13 @@ if [[ "$tag_ruleset_valid" -ne 1 ]]; then
 fi
 pass "live v* rules block tag update and deletion with no bypass and no force-push allowance"
 
-check_runs_json="$(gh api "$repo_api/commits/${candidate_sha}/check-runs" --paginate --slurp 2>/dev/null)" \
-  || fail "could not retrieve check runs for SHA $candidate_sha"
-
-check_status() {
-  local check_name="$1"
-  jq -r --arg check_name "$check_name" --arg candidate_sha "$candidate_sha" '
-    [ .[]
-      | if type == "array" then .[]?
-        else (.check_runs // [])[]?
-        end
-      | select(.name == $check_name or (.name | endswith("/ " + $check_name)))
-      | select(.head_sha == $candidate_sha)
-      | select((.app.slug // "") == "github-actions")
-      | select((.app.id // 0) == 15368)
-    ] as $runs
-    | if ($runs | length) == 0 then "not_found"
-      else
-        ($runs | sort_by(.completed_at // .started_at // "") | last)
-        | if (.conclusion // "") == "" then "not_completed" else .conclusion end
-      end
-  ' <<< "$check_runs_json" 2>/dev/null || echo "error"
-}
-
-main_gate_status="$(check_status main-gate)"
-security_gate_status="$(check_status security-gate)"
-
-if [[ "$main_gate_status" != "success" ]]; then
-  fail "Mainline Validation gate did not pass for SHA $candidate_sha (status: $main_gate_status)"
+if [[ "$policy_mode" == candidate ]]; then
+  python3 "$repo_root/scripts/ci/verify_candidate_policy.py" "$candidate_sha"
+  exit $?
 fi
-if [[ "$security_gate_status" != "success" ]]; then
-  fail "Security Gate check did not pass for SHA $candidate_sha (status: $security_gate_status)"
-fi
-pass "release-candidate gates passed for exact SHA $candidate_sha from GitHub Actions"
+
+python3 "$repo_root/scripts/ci/verify_candidate_policy.py" --gates-only "$candidate_sha" \
+  || fail "exact-SHA workflow gate verification failed"
 
 env_json="$(gh api "$repo_api/environments/release" 2>/dev/null)" \
   || fail "release environment not found; create a GitHub environment named 'release'"
