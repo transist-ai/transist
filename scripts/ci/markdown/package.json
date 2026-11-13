@@ -1,7 +1,7 @@
 {
   "name": "transist-ci-markdown",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Repository Markdown checks using the maintained markdownlint library.",
   "license": "MPL-2.0",
   "scripts": {

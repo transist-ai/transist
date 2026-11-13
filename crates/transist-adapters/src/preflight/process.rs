@@ -101,8 +101,8 @@ pub(crate) fn run_process_preflight_probe(
         if let Err(error) = probe {
             // Stderr is untrusted plugin output and may contain secrets, so it
             // is deliberately not surfaced in durable preflight diagnostics.
-            // The exit status is sufficient to distinguish a sandbox/launcher
-            // setup failure from a handshake that simply exceeded its deadline.
+            // This status is observed after cleanup; it does not establish the
+            // original exit cause or who sent a terminating signal.
             if let Some(status) = exit_status {
                 bail!("{error}; plugin process exited with {status}");
             }

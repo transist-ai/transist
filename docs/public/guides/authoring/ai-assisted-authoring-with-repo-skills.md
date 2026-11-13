@@ -89,7 +89,7 @@ an authored gate is a later run decision. Deterministic fake-test permission doe
 not authorize real services. Follow the separate
 [governed lifecycle](../../reference/cli.md#workflow-management) when requested.
 
-Runtime and admin use `0.1.1`; catalog releases/pins remain `0.1.0` and schemas
+Runtime and admin use `0.1.2`; catalog releases/pins remain `0.1.0` and schemas
 remain `v1`.
 Changed bytes need a matching signature and fresh home, not replacement of an
 installed same-version payload. Preserve the old home/bundle for rollback; see

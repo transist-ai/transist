@@ -90,26 +90,13 @@ approve_run_id="gate-approve-$(now_ms)"
 $TRANSIST_BIN --home "$TRANSIST_HOME" workflows run demo_08_manual_gate@0.1.0 --run-ref "$approve_run_id" --trusted-execution --local-only
 wait_for_blocked "$approve_run_id"
 request_json_path="$TRANSIST_HOME/runs/run_${approve_run_id}/steps/review_gate.json"
-$TRANSIST_BIN --home "$TRANSIST_HOME" runs gate approve "$approve_run_id" --reason "lgtm"
-
-# Assert gate-path persistence: the gate decision must be written under
-# gates/review-gate.json immediately after approval (before the kernel
-# processes it) OR be present in the history directory.
-gate_req_path="$TRANSIST_HOME/runs/run_${approve_run_id}/gates/review-gate.json"
-gate_history_dir="$TRANSIST_HOME/runs/run_${approve_run_id}/gates/history"
-if [ -f "$gate_req_path" ]; then
-  jq -e '.gate_id == "review-gate"' "$gate_req_path" >/dev/null && echo "OK: gate request persisted under gates/review-gate.json" || { echo "FAIL: gate_id mismatch in gates/review-gate.json"; exit 1; }
-elif ls "${gate_history_dir}/"*approved.json >/dev/null 2>&1; then
-  echo "OK: gate decision processed and persisted to gates/history/"
-else
-  echo "FAIL: gate decision not persisted under gates/ namespace"; exit 1
-fi
-
+# Assert the active step's identity before approval lets the runner consume it.
+# gates/review-gate.json is a transient decision, not the pending request.
 [ -f "$request_json_path" ] && echo "OK: gate request captured" || { echo "FAIL: missing gate request"; exit 1; }
 jq -e '.last_result.output.gate_id == "review-gate"' "$request_json_path" >/dev/null && echo "OK: gate id pinned" || { echo "FAIL: gate id mismatch"; exit 1; }
-decision_json="$(ls "$TRANSIST_HOME/runs/run_${approve_run_id}/gates/history/"*approved.json 2>/dev/null | head -n 1)"
-[ -n "$decision_json" ] && echo "OK: approval recorded" || { echo "FAIL: missing approval decision"; exit 1; }
-jq -e '.decision == "approved"' "$decision_json" >/dev/null && echo "OK: approval decision matches" || { echo "FAIL: approval decision mismatch"; exit 1; }
+$TRANSIST_BIN --home "$TRANSIST_HOME" runs gate approve "$approve_run_id" --reason "lgtm"
+python3 "$REPO_ROOT/.agents/testing/manual_gate_wait.py" \
+  "$TRANSIST_HOME/runs/run_${approve_run_id}" approved lgtm --expected-status success
 
 # Step 3 -- Reject path
 reject_run_id="gate-reject-$(now_ms)"
@@ -121,8 +108,8 @@ reject_rc=$?
 set -e
 
 [ "$reject_rc" -eq 0 ] && echo "OK: reject command accepted" || { echo "FAIL: reject command failed"; exit 1; }
-reject_json="$(ls "$TRANSIST_HOME/runs/run_${reject_run_id}/gates/history/"*rejected.json 2>/dev/null | head -n 1)"
-jq -e '.decision == "rejected" and .reason == "no-go"' "$reject_json" >/dev/null && echo "OK: rejection recorded" || { echo "FAIL: rejection record mismatch"; exit 1; }
+python3 "$REPO_ROOT/.agents/testing/manual_gate_wait.py" \
+  "$TRANSIST_HOME/runs/run_${reject_run_id}" rejected no-go
 
 # Step 4 -- Request-changes path
 changes_run_id="gate-changes-$(now_ms)"
@@ -130,9 +117,8 @@ $TRANSIST_BIN --home "$TRANSIST_HOME" workflows run demo_08_manual_gate@0.1.0 --
 wait_for_blocked "$changes_run_id"
 $TRANSIST_BIN --home "$TRANSIST_HOME" runs gate request-changes "$changes_run_id" --reason "fixes"
 
-decision_json="$(ls "$TRANSIST_HOME/runs/run_${changes_run_id}/gates/history/"*request_changes.json 2>/dev/null | head -n 1)"
-[ -n "$decision_json" ] && echo "OK: changes decision recorded" || { echo "FAIL: missing request-changes decision"; exit 1; }
-jq -e '.decision == "request_changes" and .reason == "fixes"' "$decision_json" >/dev/null && echo "OK: changes reason recorded" || { echo "FAIL: changes reason mismatch"; exit 1; }
+python3 "$REPO_ROOT/.agents/testing/manual_gate_wait.py" \
+  "$TRANSIST_HOME/runs/run_${changes_run_id}" request_changes fixes
 
 # Step 5 -- Gate-id mismatch
 mismatch_run_id="gate-mismatch-$(now_ms)"

@@ -49,7 +49,7 @@ that environment variable for its command children. Its unversioned format is:
 
 ```json
 {
-  "runtime": {"version": "0.1.1"},
+  "runtime": {"version": "0.1.2"},
   "workflow": {"id": "example"},
   "run": {"id": "example-run"},
   "plugins": [{"name": "shell", "version": "0.1.0"}]
@@ -71,6 +71,25 @@ copied data contains a runtime-known secret. Readers must tolerate additive fiel
 there is no new format identifier or APP envelope field. The file lasts only for
 the invocation; persist needed non-secret data through declared managed documents,
 not the file path. See [Path and Resource Semantics](path-and-resource-semantics.md#invocation-runtime-metadata).
+
+### Process Handshake Failures
+
+Before invocation, the process adapter waits for an APP handshake response:
+
+- Deadline expiry reports `timed out waiting for handshake response` and maps to
+  `timeout_error`, exit code `124`.
+- Stdout closure before a response reports
+  `plugin stdout closed before handshake response` and maps to `transport_error`,
+  exit code `2`. Stdout read failures also map to `transport_error`, preserving
+  their read diagnostic.
+- Malformed handshake JSON or an invalid handshake remains `protocol_error`.
+
+Live preflight uses the same receive distinction while retaining the failed
+`adapter_handshake` check and suppressing plugin stderr in its diagnostics.
+Any appended process exit status is observed **after cleanup**: it does not
+identify the original exit cause or who sent a signal. Stdout closure alone
+does not prove that the child exited. These diagnostics do not detect OS kill
+causes, change deadlines, or change process cleanup.
 
 ### Process Lifecycle After A Terminal Result
 

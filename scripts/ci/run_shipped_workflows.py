@@ -688,6 +688,7 @@ def run_plan_replay(session, wf):
     target_run = "replay-target"
     session.run(source_run, wf)
     session.wait_terminal(source_run, "success")
+    session.wait_runner_finished(source_run)
     session.cli(["runs", "replay", source_run, "--run-ref", target_run], cwd=session.workspace)
     session.wait_terminal(target_run, wf["terminal"])
     for check in wf.get("checks") or []:

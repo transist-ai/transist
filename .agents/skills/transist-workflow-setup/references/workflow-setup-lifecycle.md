@@ -52,7 +52,7 @@ module. Modules inherit root workspace and network ceilings and may only narrow
 them. If installation validation reports a mismatch, correct the declaring root
 or module, validate and publish a newly reviewed package; never hand-author a
 broader policy fragment. Maintained catalog releases/pins stay `0.1.0`, schemas
-stay `v1`, and runtime/admin crates use `0.1.1`. Changed same-version bytes require
+stay `v1`, and runtime/admin crates use `0.1.2`. Changed same-version bytes require
 a new signature and fresh home. Keep the old home/bundle for pinned runs and
 rollback; never overwrite installed bytes or delete pinned packages/runs.
 For the current authoring/persistence contract, follow

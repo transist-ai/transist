@@ -556,6 +556,35 @@ class SessionIsolationTests(unittest.TestCase):
             )
             self.assertTrue((workspace / ".retry-ok").exists())
 
+    def test_replay_waits_for_source_runner_before_command(self) -> None:
+        """Terminal status alone must not authorize replay ahead of finalization."""
+        session = Mock(workspace=Path("/fixture"))
+        workflow = {"terminal": "success", "checks": []}
+        driver.run_plan_replay(session, workflow)
+        self.assertEqual(
+            session.mock_calls,
+            [
+                call.run("replay-source", workflow),
+                call.wait_terminal("replay-source", "success"),
+                call.wait_runner_finished("replay-source"),
+                call.cli(
+                    ["runs", "replay", "replay-source", "--run-ref", "replay-target"],
+                    cwd=Path("/fixture"),
+                ),
+                call.wait_terminal("replay-target", "success"),
+                call.run_checks(workflow),
+            ],
+        )
+
+    def test_replay_does_not_dispatch_when_source_runner_does_not_finish(self) -> None:
+        """A failed completion wait must propagate without retrying replay."""
+        session = Mock(workspace=Path("/fixture"))
+        session.wait_runner_finished.side_effect = driver.WorkflowError("runner still active")
+        with self.assertRaisesRegex(driver.WorkflowError, "runner still active"):
+            driver.run_plan_replay(session, {"terminal": "success", "checks": []})
+        session.cli.assert_not_called()
+        session.run_checks.assert_not_called()
+
     def test_secret_delivery_policy_is_configured_before_check(self) -> None:
         """Checking and running the secret demo share its explicit delivery grant."""
         with tempfile.TemporaryDirectory() as directory:

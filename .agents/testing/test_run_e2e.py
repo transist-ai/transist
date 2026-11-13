@@ -17,6 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import run_e2e
+from test_manual_gate_wait import TestManualGateWait  # Included in the standard harness gate.
 
 
 class TestDiscoverSuites(unittest.TestCase):

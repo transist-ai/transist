@@ -8,6 +8,35 @@ use crate::*;
 
 const LIVE_PROGRESS_RECORD_SCHEMA_V1: &str = "transist.live_progress.v1";
 
+/// Handshake stdout receive failures, independent of the child's exit cause.
+#[derive(Debug)]
+pub(crate) enum HandshakeReceiveError {
+    Timeout { what: String },
+    Disconnected { what: String },
+    ReadError(anyhow::Error),
+}
+
+impl std::fmt::Display for HandshakeReceiveError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Timeout { what } => write!(formatter, "timed out waiting for {what}"),
+            Self::Disconnected { what } => {
+                write!(formatter, "plugin stdout closed before {what}")
+            }
+            Self::ReadError(error) => std::fmt::Display::fmt(error, formatter),
+        }
+    }
+}
+
+impl std::error::Error for HandshakeReceiveError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::ReadError(error) => Some(error.as_ref()),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(crate) enum InvokeResultReceiveError {
     NoTerminalFrame {
@@ -146,16 +175,22 @@ pub(crate) fn spawn_stderr_reader(stderr: ChildStderr) -> thread::JoinHandle<Str
     })
 }
 
+/// Receive one handshake line by the deadline, preserving transport failures.
 pub(crate) fn recv_line(
     rx: &Receiver<Result<String>>,
     deadline: Instant,
     what: &str,
-) -> Result<String> {
+) -> std::result::Result<String, HandshakeReceiveError> {
     let now = Instant::now();
     let timeout = deadline.saturating_duration_since(now);
     match rx.recv_timeout(timeout) {
-        Ok(line) => line,
-        Err(_) => bail!("timed out waiting for {}", what),
+        Ok(line) => line.map_err(HandshakeReceiveError::ReadError),
+        Err(mpsc::RecvTimeoutError::Timeout) => Err(HandshakeReceiveError::Timeout {
+            what: what.to_string(),
+        }),
+        Err(mpsc::RecvTimeoutError::Disconnected) => Err(HandshakeReceiveError::Disconnected {
+            what: what.to_string(),
+        }),
     }
 }
 
@@ -377,6 +412,72 @@ mod tests {
     use transist_protocol::{
         AdapterKind, InvokePaths, InvokeStep, TEP_INVOKE_REQUEST_TYPE_V1, TEP_PROTOCOL_VERSION_V1,
     };
+
+    #[test]
+    fn handshake_receive_valid_line() {
+        let (tx, rx) = mpsc::channel();
+        tx.send(Ok("handshake\n".to_string())).unwrap();
+        assert_eq!(
+            recv_line(&rx, Instant::now(), "handshake response").unwrap(),
+            "handshake\n"
+        );
+    }
+
+    #[test]
+    fn handshake_receive_buffered_line_before_eof() {
+        let (tx, rx) = mpsc::channel();
+        tx.send(Ok("handshake\n".to_string())).unwrap();
+        drop(tx);
+        assert_eq!(
+            recv_line(&rx, Instant::now(), "handshake response").unwrap(),
+            "handshake\n"
+        );
+    }
+
+    #[test]
+    fn handshake_receive_expired_deadline() {
+        let (_tx, rx) = mpsc::channel();
+        let error = recv_line(
+            &rx,
+            Instant::now() - Duration::from_secs(1),
+            "handshake response",
+        )
+        .unwrap_err();
+        assert!(matches!(error, HandshakeReceiveError::Timeout { .. }));
+        assert_eq!(
+            error.to_string(),
+            "timed out waiting for handshake response"
+        );
+    }
+
+    #[test]
+    fn handshake_receive_eof() {
+        let (tx, rx) = mpsc::channel();
+        drop(tx);
+        let error = recv_line(
+            &rx,
+            Instant::now() + Duration::from_secs(30),
+            "handshake response",
+        )
+        .unwrap_err();
+        assert!(matches!(error, HandshakeReceiveError::Disconnected { .. }));
+        assert_eq!(
+            error.to_string(),
+            "plugin stdout closed before handshake response"
+        );
+    }
+
+    #[test]
+    fn handshake_receive_reader_failure() {
+        let (tx, rx) = mpsc::channel();
+        let diagnostic = "failed reading plugin stdout: synthetic read failure";
+        tx.send(Err(anyhow!(diagnostic))).unwrap();
+        let error = recv_line(&rx, Instant::now(), "handshake response").unwrap_err();
+        assert!(matches!(error, HandshakeReceiveError::ReadError(_)));
+        assert_eq!(error.to_string(), diagnostic);
+        assert!(!error.to_string().contains("timed out"));
+        assert!(std::error::Error::source(&error).is_some());
+    }
 
     fn sample_request(max_timeout_ms: Option<u64>) -> ExecutionRequest {
         ExecutionRequest {
