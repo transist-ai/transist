@@ -6,18 +6,21 @@
 # Usage:
 #   check_release_candidate.sh --dry-run <tag> --sha <sha>
 #   check_release_candidate.sh <tag> --sha <sha>
+#   check_release_candidate.sh --preparation <tag> --sha <sha>
+#   check_release_candidate.sh --publication <tag> --sha <sha> --receipt <file>
 #
 # --dry-run: performs all local build/package/manifest checks without creating
 #            a Git ref, GitHub release, or uploaded asset. No GitHub API calls
 #            are made; remote tag, live rules, release environment, and
 #            release-candidate gate checks are skipped.
+# Preparation checks source and candidate policy without requiring a tag.
+# Publication additionally binds the receipt to live state and verifies the tag.
 #
 # Non-dry-run: performs full pre-stage validation:
 #   1. tag is v<Cargo workspace version>
-#   2. tag commit is reachable from origin/main
-#   3. remote refs/tags/<tag> object SHA equals local annotated tag-object SHA
-#   4. local and remote peeled refs/tags/<tag>^{} commit SHA both equal the
-#      release-candidate SHA
+#   2. candidate commit is reachable from the selected repository's main
+#   3. repository tag object equals the local annotated tag object
+#   4. local and repository tag targets equal the candidate SHA
 #   5. live v* rules block tag update and deletion
 #   6. changelog contains the version
 #   7. full release-candidate gate passed for the same SHA
@@ -34,6 +37,8 @@ cd "$repo_root"
 # Argument parsing
 # ---------------------------------------------------------------------------
 dry_run=0
+mode=legacy
+receipt=""
 tag=""
 sha=""
 while [[ "$#" -gt 0 ]]; do
@@ -41,6 +46,16 @@ while [[ "$#" -gt 0 ]]; do
     --dry-run)
       dry_run=1
       shift
+      ;;
+    --preparation|--publication)
+      [[ "$mode" == legacy ]] || { echo "FAIL: multiple modes" >&2; exit 1; }
+      mode="${1#--}"
+      shift
+      ;;
+    --receipt)
+      receipt="${2:-}"
+      [[ -n "$receipt" ]] || { echo "FAIL: --receipt requires a value" >&2; exit 1; }
+      shift 2
       ;;
     --sha)
       sha="${2:-}"
@@ -61,6 +76,13 @@ while [[ "$#" -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "$dry_run" -eq 1 && ( "$mode" != legacy || -n "$receipt" ) ]] || \
+   [[ "$mode" == publication && -z "$receipt" ]] || \
+   [[ "$mode" != publication && -n "$receipt" ]]; then
+  echo "FAIL: incompatible mode or receipt arguments" >&2
+  exit 1
+fi
 
 if [[ -z "$tag" ]]; then
   echo "Usage: $0 [--dry-run] <tag> --sha <sha>" >&2
@@ -121,7 +143,7 @@ if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   fail "tag must match v<major>.<minor>.<patch>. Got: $tag"
 fi
 
-workspace_version="$(grep -m1 '^version' Cargo.toml | sed 's/^version *= *"*//;s/"//')"
+workspace_version="$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')"
 if [[ -z "$workspace_version" ]]; then
   fail "could not determine workspace version from Cargo.toml"
 fi
@@ -241,7 +263,7 @@ if [[ "$dry_run" -eq 1 ]]; then
   # Build the release binaries required for the local target.
   echo ""
   echo "--- Building release binaries from committed SHA ---"
-  (cd "$source_dir" && cargo +1.88.0 build --locked --release "${release_packages[@]}")
+  (cd "$source_dir" && cargo +1.88.0 build --offline --locked --release "${release_packages[@]}")
   pass "release binaries built"
 
   command -v jq >/dev/null 2>&1 || fail "jq is required to verify candidate provenance"
@@ -389,32 +411,28 @@ fi
 echo ""
 echo "=== Full pre-stage validation ==="
 
-# 5. Validate tag commit is reachable from origin/main
-git fetch --no-tags origin main >/dev/null 2>&1 || fail "could not fetch origin/main"
-if ! git merge-base --is-ancestor "$resolved_sha" refs/remotes/origin/main 2>/dev/null; then
-  fail "release-candidate SHA $resolved_sha is not reachable from origin/main"
-fi
-pass "release-candidate SHA is reachable from origin/main"
+# Verify ancestry in the same repository used for policy and receipt checks.
+python3 scripts/ci/verify_release_refs.py main "$resolved_sha" \
+  || fail "release-candidate SHA is not reachable from repository main"
+pass "release-candidate SHA is reachable from repository main"
 
-# 6. Validate remote tag object SHA equals local annotated tag-object SHA
-remote_tag_sha="$(git ls-remote origin "refs/tags/${tag}" 2>/dev/null | cut -f1 || true)"
-if [[ -z "$remote_tag_sha" ]]; then
-  fail "tag $tag not found on remote (refs/tags/${tag})"
+if [[ "$mode" != legacy ]]; then
+  run_step "candidate policy and exact-SHA hosted gates" \
+    bash scripts/ci/check_release_policy.sh --candidate "$resolved_sha"
+  if [[ "$mode" == preparation ]]; then
+    echo "=== Preparation validation passed ==="
+    exit 0
+  fi
+  python3 scripts/ci/verify_release_receipt.py "$receipt" "$resolved_sha" "$resolved_tree" "$tag" \
+    || fail "preparation receipt validation failed"
+  pass "preparation receipt matches reserved candidate state"
 fi
 
+# 6. Validate the local annotated tag and the API-selected repository's tag.
 local_tag_sha="$(git rev-parse "refs/tags/${tag}^{tag}" 2>/dev/null || true)"
 if [[ -z "$local_tag_sha" ]]; then
   fail "tag $tag must be an annotated tag"
 fi
-if [[ -z "$local_tag_sha" ]]; then
-  fail "tag $tag not found locally"
-fi
-
-if [[ "$remote_tag_sha" != "$local_tag_sha" ]]; then
-  fail "remote tag SHA ($remote_tag_sha) does not match local tag SHA ($local_tag_sha)"
-fi
-pass "remote tag object SHA matches local tag object SHA"
-
 # 7. Validate peeled commit SHA matches release-candidate SHA
 local_peeled_sha="$(git rev-parse "refs/tags/${tag}^{}" 2>/dev/null || true)"
 if [[ -z "$local_peeled_sha" ]]; then
@@ -425,23 +443,15 @@ if [[ "$local_peeled_sha" != "$resolved_sha" ]]; then
 fi
 pass "local peeled tag commit SHA matches release-candidate SHA"
 
-# Validate remote peeled SHA (via ls-remote dereferencing). Query both the tag
-# ref and its peeled ^{} ref so an annotated tag is validated against the
-# release-candidate SHA; a missing peel is a hard failure.
-remote_peel_line="$(git ls-remote origin "refs/tags/${tag}" "refs/tags/${tag}^{}" 2>/dev/null || true)"
-# ls-remote output for annotated tags includes a second line with ^{} suffix
-remote_peeled_sha="$(echo "$remote_peel_line" | grep '\^{}' | cut -f1 || true)"
-if [[ -z "$remote_peeled_sha" ]]; then
-  fail "remote peeled SHA for tag $tag is not available via ls-remote; the tag must be an annotated tag pointing at the release-candidate commit"
-fi
-if [[ "$remote_peeled_sha" != "$resolved_sha" ]]; then
-  fail "remote peeled tag SHA ($remote_peeled_sha) does not match release-candidate SHA ($resolved_sha)"
-fi
-pass "remote peeled tag commit SHA matches release-candidate SHA"
+python3 scripts/ci/verify_release_refs.py tag "$tag" "$resolved_sha" "$local_tag_sha" \
+  || fail "repository tag object or target does not match candidate"
+pass "repository annotated tag object and target match candidate"
 
 # 8-11. Validate the live release policy and exact-SHA hosted gates.
-run_step "live release policy and exact-SHA hosted gates" \
-  bash scripts/ci/check_release_policy.sh "$resolved_sha"
+if [[ "$mode" == legacy ]]; then
+  run_step "live release policy and exact-SHA hosted gates" \
+    bash scripts/ci/check_release_policy.sh "$resolved_sha"
+fi
 
 echo ""
 echo "=== Pre-stage validation passed ==="
