@@ -1,15 +1,18 @@
 name: Release CD
 
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
-      operation:
-        description: "stage: build, sign, and upload to draft; publish: verify, attest when public, and publish"
+      candidate_id:
+        description: "Claimed preparation candidate owned by this run and attempt"
         required: true
-        type: choice
-        options: [stage, publish]
+        type: string
+      source_sha:
+        description: "Exact candidate source commit"
+        required: true
+        type: string
       release_tag:
-        description: "Existing immutable release tag (for example, v0.1.0)"
+        description: "Final version used in asset names; no permanent tag is created"
         required: true
         type: string
 
@@ -23,7 +26,7 @@ env:
   RUST_BACKTRACE: short
 
 concurrency:
-  group: release-${{ inputs.release_tag }}
+  group: release-preparation-${{ inputs.candidate_id }}
   cancel-in-progress: false
 
 defaults:
@@ -35,8 +38,8 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       RELEASE_TAG: ${{ inputs.release_tag }}
-      DISPATCH_REF: ${{ github.ref }}
-      GH_TOKEN: ${{ github.token }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      CANDIDATE_ID: ${{ inputs.candidate_id }}
     steps:
       - name: Validate release tag
         run: |
@@ -45,22 +48,19 @@ jobs:
             echo "invalid release tag: $RELEASE_TAG" >&2
             exit 1
           }
-      - name: Require dispatch from the exact release tag ref
+      - name: Require exact source and claim ownership
         run: |
           set -euo pipefail
-          [[ "$DISPATCH_REF" == "refs/tags/$RELEASE_TAG" ]] || {
-            echo "FAIL: workflow dispatched from $DISPATCH_REF; expected refs/tags/$RELEASE_TAG" >&2
-            echo "      Dispatch Release CD from the exact release tag ref so preflight can" >&2
-            echo "      bind existing hosted gates and release assets to the tag SHA." >&2
-            exit 1
-          }
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$CANDIDATE_ID" = "${SOURCE_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          test "$GITHUB_REF" = refs/heads/main
 
   release-preflight:
-    if: inputs.operation == 'stage'
     needs: validate-input
     runs-on: ubuntu-24.04
     env:
       RELEASE_TAG: ${{ inputs.release_tag }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
       GH_TOKEN: ${{ github.token }}
     permissions:
       contents: read
@@ -69,18 +69,18 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: refs/tags/${{ inputs.release_tag }}
+          ref: ${{ inputs.source_sha }}
           fetch-depth: 0
+          persist-credentials: false
       - name: Install pinned preflight tools
         run: bash scripts/ci/install_ci_tools.sh preflight
-      - name: Verify exact tag and required hosted gates
+      - name: Verify untagged exact source and required hosted gates
         run: |
           set -euo pipefail
-          release_sha="$(git rev-parse "refs/tags/$RELEASE_TAG^{}")"
-          bash scripts/ci/check_release_candidate.sh "$RELEASE_TAG" --sha "$release_sha"
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          bash scripts/ci/check_release_candidate.sh --preparation "$RELEASE_TAG" --sha "$SOURCE_SHA"
 
   build:
-    if: inputs.operation == 'stage'
     needs: release-preflight
     strategy:
       fail-fast: true
@@ -121,7 +121,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: refs/tags/${{ inputs.release_tag }}
+          ref: ${{ inputs.source_sha }}
           fetch-depth: 0
       - name: Install Alpine runtime and sandbox tools
         if: matrix.target == 'x86_64-unknown-linux-musl'
@@ -136,7 +136,7 @@ jobs:
         if: matrix.target == 'x86_64-unknown-linux-musl'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: refs/tags/${{ inputs.release_tag }}
+          ref: ${{ inputs.source_sha }}
           fetch-depth: 0
       - name: Install GNU build tools
         if: matrix.target == 'x86_64-unknown-linux-gnu'
@@ -215,7 +215,6 @@ jobs:
           if-no-files-found: error
 
   package:
-    if: inputs.operation == 'stage'
     needs: [validate-input, build]
     runs-on: ubuntu-24.04
     # Packaging is intentionally centralized so archive bytes do not depend on
@@ -229,7 +228,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: refs/tags/${{ inputs.release_tag }}
+          ref: ${{ inputs.source_sha }}
           fetch-depth: 0
       - name: Install packaging tools
         run: bash scripts/ci/install_debian_tools.sh jq python3
@@ -263,7 +262,7 @@ jobs:
           set -euo pipefail
           git config --global --add safe.directory '*'
           mkdir -p dist
-          release_sha="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+          release_sha="$(git rev-parse 'HEAD^{commit}')"
           tree_sha="$(git rev-parse "$release_sha^{tree}")"
           bash scripts/ci/record_packaging_provenance.sh dist/packaging-provenance.json \
             --commit "$release_sha" --tree "$tree_sha"
@@ -317,7 +316,6 @@ jobs:
           if-no-files-found: error
 
   archive-smoke:
-    if: inputs.operation == 'stage'
     needs: [validate-input, package]
     strategy:
       fail-fast: true
@@ -353,7 +351,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: refs/tags/${{ inputs.release_tag }}
+          ref: ${{ inputs.source_sha }}
           fetch-depth: 0
       - name: Install Alpine runtime and sandbox tools
         if: matrix.target == 'x86_64-unknown-linux-musl'
@@ -368,7 +366,7 @@ jobs:
         if: matrix.target == 'x86_64-unknown-linux-musl'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: refs/tags/${{ inputs.release_tag }}
+          ref: ${{ inputs.source_sha }}
           fetch-depth: 0
       - name: Trust container checkout for release inspection
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -393,18 +391,18 @@ jobs:
         run: |
           set -euo pipefail
           archive="dist/transist-${RELEASE_TAG}-${{ matrix.target }}.tar.gz"
-          release_sha="$(git rev-parse "refs/tags/$RELEASE_TAG^{}")"
+          release_sha="$(git rev-parse 'HEAD^{commit}')"
           tree_sha="$(git rev-parse "$release_sha^{tree}")"
           bash scripts/ci/check_release_archive.sh "${{ matrix.target }}" "$RELEASE_TAG" \
             --expected-commit "$release_sha" --expected-tree "$tree_sha" \
             --allow-unsigned "$archive"
           bash scripts/ci/run_quickstart_smoke.sh --archive "$archive" --require-isolation
-      - name: Archive reproducibility from the tagged source
+      - name: Archive reproducibility from the exact candidate source
         run: |
           set -euo pipefail
           # The archive-smoke host is always a native release target (gnu, musl,
           # or aarch64-apple-darwin), so determinism is exercised directly from
-          # the tagged source at release time.
+          # the exact candidate source before a permanent tag exists.
           bash scripts/ci/test_archive_reproducibility.sh "${{ matrix.target }}"
       - name: Run shipped workflows from the final package
         run: |
@@ -416,14 +414,15 @@ jobs:
           bash scripts/ci/run_shipped_workflows.sh --archive "$archive"
 
   stage-and-sign:
-    if: inputs.operation == 'stage'
     needs: [validate-input, release-preflight, package, archive-smoke]
     runs-on: ubuntu-24.04
     container:
       image: rust:1.88.0-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0
-    environment: release
+    environment: release-build
     env:
       RELEASE_TAG: ${{ inputs.release_tag }}
+      CANDIDATE_ID: ${{ inputs.candidate_id }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
       GH_TOKEN: ${{ github.token }}
       CI_CONTAINER_IMAGE: rust:1.88.0-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0
       CI_RUNNER_IMAGE: ubuntu-24.04
@@ -431,10 +430,12 @@ jobs:
       contents: write
       checks: read
       actions: read
+      attestations: write
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: refs/tags/${{ inputs.release_tag }}
+          ref: ${{ inputs.source_sha }}
           fetch-depth: 0
       - name: Install signing and SBOM tools
         run: |
@@ -500,248 +501,74 @@ jobs:
           minisign -Vq -p transist-release.minisign.pub -m dist/release-manifest.txt -x dist/release-manifest.txt.minisig
           bash scripts/ci/release_manifest.sh verify "$RELEASE_TAG" dist
           bash scripts/ci/release_manifest.sh compare-draft "$RELEASE_TAG" dist
-      - name: Create or require a draft release
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Create candidate draft and upload exact assets by release ID
+        run: python3 scripts/ci/prepare_candidate.py upload --candidate-id "$CANDIDATE_ID" --directory dist
+      - name: Download and independently verify the signed candidate bytes
         run: |
           set -euo pipefail
-          if gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft' >/tmp/is-draft 2>/dev/null; then
-            test "$(< /tmp/is-draft)" = true || { echo "FAIL: release is already published" >&2; exit 1; }
-          else
-            gh release create "$RELEASE_TAG" --draft --verify-tag --title "$RELEASE_TAG" --generate-notes
-          fi
-      - name: Upload exact draft asset set without overwrites
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          expected_assets=(
-            "transist-${RELEASE_TAG}-x86_64-unknown-linux-gnu.tar.gz"
-            "transist-${RELEASE_TAG}-x86_64-unknown-linux-gnu.tar.gz.sha256"
-            "transist-${RELEASE_TAG}-x86_64-unknown-linux-gnu.tar.gz.minisig"
-            "transist-${RELEASE_TAG}-x86_64-unknown-linux-musl.tar.gz"
-            "transist-${RELEASE_TAG}-x86_64-unknown-linux-musl.tar.gz.sha256"
-            "transist-${RELEASE_TAG}-x86_64-unknown-linux-musl.tar.gz.minisig"
-            "transist-${RELEASE_TAG}-aarch64-apple-darwin.tar.gz"
-            "transist-${RELEASE_TAG}-aarch64-apple-darwin.tar.gz.sha256"
-            "transist-${RELEASE_TAG}-aarch64-apple-darwin.tar.gz.minisig"
-            "transist-${RELEASE_TAG}-x86_64-apple-darwin.tar.gz"
-            "transist-${RELEASE_TAG}-x86_64-apple-darwin.tar.gz.sha256"
-            "transist-${RELEASE_TAG}-x86_64-apple-darwin.tar.gz.minisig"
-            "transist-${RELEASE_TAG}-aarch64-unknown-linux-gnu.tar.gz"
-            "transist-${RELEASE_TAG}-aarch64-unknown-linux-gnu.tar.gz.sha256"
-            "transist-${RELEASE_TAG}-aarch64-unknown-linux-gnu.tar.gz.minisig"
-            "transist-${RELEASE_TAG}-aarch64-unknown-linux-musl.tar.gz"
-            "transist-${RELEASE_TAG}-aarch64-unknown-linux-musl.tar.gz.sha256"
-            "transist-${RELEASE_TAG}-aarch64-unknown-linux-musl.tar.gz.minisig"
-            "build-provenance-x86_64-unknown-linux-gnu.json"
-            "build-provenance-x86_64-unknown-linux-musl.json"
-            "build-provenance-aarch64-apple-darwin.json"
-            "build-provenance-x86_64-apple-darwin.json"
-            "build-provenance-aarch64-unknown-linux-gnu.json"
-            "build-provenance-aarch64-unknown-linux-musl.json"
-            "packaging-provenance.json"
-            "transist-${RELEASE_TAG}-sbom.tar.gz"
-            "transist-release.minisign.pub"
-            "release-manifest.txt"
-            "release-manifest.txt.minisig"
-          )
-          for asset in "${expected_assets[@]}"; do
-            [[ -f "dist/$asset" ]] || { echo "FAIL: missing staged asset $asset" >&2; exit 1; }
-          done
-          existing_assets="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')"
-          [[ -z "$existing_assets" ]] || {
-            echo "FAIL: draft already contains assets; refusing to overwrite" >&2
-            printf '  %s\n' "$existing_assets" >&2
-            exit 1
-          }
-          # Deliberately omit --clobber: an existing remote name is an error.
-          gh release upload "$RELEASE_TAG" "${expected_assets[@]/#/dist/}"
-      - name: Verify downloaded draft is anchored to the committed key
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          downloaded="$(mktemp -d)"
-          trap 'rm -rf "$downloaded"' EXIT
-          gh release download "$RELEASE_TAG" --dir "$downloaded" --pattern '*'
-          cmp -s "$downloaded/transist-release.minisign.pub" transist-release.minisign.pub
-          minisign -Vq -p transist-release.minisign.pub -m "$downloaded/release-manifest.txt" -x "$downloaded/release-manifest.txt.minisig"
-          for target in x86_64-unknown-linux-gnu x86_64-unknown-linux-musl aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-gnu aarch64-unknown-linux-musl; do
-            archive="$downloaded/transist-${RELEASE_TAG}-${target}.tar.gz"
-            minisign -Vq -p transist-release.minisign.pub \
-              -m "$archive" \
-              -x "$archive.minisig"
-          done
-          bash scripts/ci/release_manifest.sh verify "$RELEASE_TAG" "$downloaded"
-          bash scripts/ci/release_manifest.sh compare-draft "$RELEASE_TAG" "$downloaded"
-          release_sha="$(git rev-parse "refs/tags/$RELEASE_TAG^{}")"
-          tree_sha="$(git rev-parse "$release_sha^{tree}")"
-          for provenance in "$downloaded"/build-provenance-*.json; do
-            [[ -f "$provenance" ]] || { echo "FAIL: missing build provenance" >&2; exit 1; }
-            jq -e --arg commit "$release_sha" --arg tree "$tree_sha" \
-              '.source.commit_sha == $commit and .source.tree_sha == $tree' \
-              "$provenance" >/dev/null
-          done
-          # Independent re-validation of the downloaded (published) draft for
-          # all six targets: archive checksum sidecars, member inspection,
-          # provenance-to-packaged-binary digest comparison, and SBOM semantic
-          # validation. Nothing is re-uploaded.
-          bash scripts/ci/verify_downloaded_draft.sh "$RELEASE_TAG" "$downloaded" \
-            --expected-commit "$release_sha" --expected-tree "$tree_sha"
-
-  attest-public-assets:
-    if: inputs.operation == 'publish'
-    needs: validate-input
-    runs-on: ubuntu-24.04
-    environment: release
-    env:
-      RELEASE_TAG: ${{ inputs.release_tag }}
-    permissions:
-      attestations: write
-      # GitHub omits draft releases from the authenticated release list unless
-      # the workflow token has release write access. Publication remains a
-      # separate, gated job.
-      contents: write
-      id-token: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: refs/tags/${{ inputs.release_tag }}
-          fetch-depth: 0
-      - name: Install release verification tools
-        run: bash scripts/ci/install_ci_tools.sh verification
-      - name: Check repository visibility for public attestations
-        id: repository
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          visibility="$(gh api "repos/$GITHUB_REPOSITORY" --jq .visibility)"
-          echo "repository visibility: $visibility"
-          echo "visibility=$visibility" >> "$GITHUB_OUTPUT"
-          if [[ "$visibility" != "public" ]]; then
-            echo "WARN: repository is $visibility; GitHub artifact attestation is unavailable and will be skipped" >&2
-          fi
-      - name: Verify complete draft and source provenance before attestation
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          # Drafts whose URL has changed to an `untagged-*` slug return 404
-          # from the release-by-tag endpoint, but remain discoverable by their
-          # tag_name in the authenticated release list.
-          release_id="$(bash scripts/ci/resolve_github_release_id.sh \
-            "$GITHUB_REPOSITORY" "$RELEASE_TAG")"
-          is_draft="$(gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" --jq .draft)"
-          test "$is_draft" = true
-          downloaded="$(mktemp -d)"
-          trap 'rm -rf "$downloaded"' EXIT
-          gh api "repos/$GITHUB_REPOSITORY/releases/$release_id/assets" --jq '.[].id' \
-            | while read -r asset_id; do
-                name="$(gh api "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" --jq .name)"
-                gh api "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" \
-                  -H "Accept: application/octet-stream" > "$downloaded/$name"
-              done
-          cmp -s "$downloaded/transist-release.minisign.pub" transist-release.minisign.pub
+          python3 scripts/ci/prepare_candidate.py download --candidate-id "$CANDIDATE_ID" --directory downloaded
+          cmp -s downloaded/transist-release.minisign.pub transist-release.minisign.pub
           minisign -Vq -p transist-release.minisign.pub \
-            -m "$downloaded/release-manifest.txt" \
-            -x "$downloaded/release-manifest.txt.minisig"
+            -m downloaded/release-manifest.txt -x downloaded/release-manifest.txt.minisig
           for target in x86_64-unknown-linux-gnu x86_64-unknown-linux-musl aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-gnu aarch64-unknown-linux-musl; do
-            minisign -Vq -p transist-release.minisign.pub \
-              -m "$downloaded/transist-${RELEASE_TAG}-${target}.tar.gz" \
-              -x "$downloaded/transist-${RELEASE_TAG}-${target}.tar.gz.minisig"
+            archive="downloaded/transist-${RELEASE_TAG}-${target}.tar.gz"
+            minisign -Vq -p transist-release.minisign.pub -m "$archive" -x "$archive.minisig"
           done
-          bash scripts/ci/release_manifest.sh verify "$RELEASE_TAG" "$downloaded"
-          bash scripts/ci/release_manifest.sh compare-draft "$RELEASE_TAG" "$downloaded"
-          release_sha="$(git rev-parse "refs/tags/$RELEASE_TAG^{}")"
-          tree_sha="$(git rev-parse "$release_sha^{tree}")"
-          for provenance in "$downloaded"/build-provenance-*.json; do
-            [[ -f "$provenance" ]] || { echo "FAIL: missing build provenance" >&2; exit 1; }
-            jq -e --arg commit "$release_sha" --arg tree "$tree_sha" \
-              '.source.commit_sha == $commit and .source.tree_sha == $tree' \
-              "$provenance" >/dev/null
-          done
-          bash scripts/ci/verify_downloaded_draft.sh "$RELEASE_TAG" "$downloaded" \
-            --expected-commit "$release_sha" --expected-tree "$tree_sha"
-          mkdir -p release-assets
-          cp "$downloaded"/*.tar.gz release-assets/
-          (cd release-assets && shasum -a 256 ./*.tar.gz | sort) > release-assets-digests.txt
-      - name: Publish attestation digest set
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: release-attestation-digests-${{ github.run_id }}
-          path: release-assets-digests.txt
-          if-no-files-found: error
-      - name: Attest release archives
-        if: steps.repository.outputs.visibility == 'public'
+          bash scripts/ci/release_manifest.sh verify "$RELEASE_TAG" downloaded
+          bash scripts/ci/release_manifest.sh compare-draft "$RELEASE_TAG" downloaded
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          tree_sha="$(git rev-parse 'HEAD^{tree}')"
+          bash scripts/ci/verify_downloaded_draft.sh "$RELEASE_TAG" downloaded \
+            --expected-commit "$SOURCE_SHA" --expected-tree "$tree_sha"
+      - name: Attest verified downloaded archives
+        id: attestation
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: release-assets/*.tar.gz
-
-  publish-release:
-    if: inputs.operation == 'publish'
-    needs: [validate-input, attest-public-assets]
-    runs-on: ubuntu-24.04
-    environment: release
-    env:
-      RELEASE_TAG: ${{ inputs.release_tag }}
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: refs/tags/${{ inputs.release_tag }}
-      - name: Download attestation digest set
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: release-attestation-digests-${{ github.run_id }}
-          path: attestation-digests
-      - name: Install minisign
-        run: bash scripts/ci/install_ci_tools.sh verification
-      - name: Verify complete draft before publication
+          subject-path: downloaded/*.tar.gz
+      - name: Verify attestation evidence and atomically mark candidate ready
         env:
-          GH_TOKEN: ${{ github.token }}
+          ATTESTATION_PATH: ${{ steps.attestation.outputs.bundle-path }}
         run: |
           set -euo pipefail
-          release_id="$(bash scripts/ci/resolve_github_release_id.sh \
-            "$GITHUB_REPOSITORY" "$RELEASE_TAG")"
-          is_draft="$(gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" --jq .draft)"
-          test "$is_draft" = true
-          downloaded="$(mktemp -d)"
-          trap 'rm -rf "$downloaded"' EXIT
-          gh api "repos/$GITHUB_REPOSITORY/releases/$release_id/assets" --jq '.[].id' \
-            | while read -r asset_id; do
-                name="$(gh api "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" --jq .name)"
-                gh api "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" \
-                  -H "Accept: application/octet-stream" > "$downloaded/$name"
-              done
-          cmp -s "$downloaded/transist-release.minisign.pub" transist-release.minisign.pub
-          minisign -Vq -p transist-release.minisign.pub -m "$downloaded/release-manifest.txt" -x "$downloaded/release-manifest.txt.minisig"
-          for target in x86_64-unknown-linux-gnu x86_64-unknown-linux-musl aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-gnu aarch64-unknown-linux-musl; do
-            minisign -Vq -p transist-release.minisign.pub \
-              -m "$downloaded/transist-${RELEASE_TAG}-${target}.tar.gz" \
-              -x "$downloaded/transist-${RELEASE_TAG}-${target}.tar.gz.minisig"
+          test -s "$ATTESTATION_PATH"
+          # A committed promotion may need another attempt to label its exact
+          # predecessor. The helper revalidates ready receipts without re-promoting.
+          for attempt in 1 2 3; do
+            printf 'Readiness verification attempt %s/3\n' "$attempt"
+            if python3 scripts/ci/prepare_candidate.py ready --candidate-id "$CANDIDATE_ID" \
+              --directory downloaded --attestation-path "$ATTESTATION_PATH"; then
+              exit 0
+            fi
           done
-          bash scripts/ci/release_manifest.sh verify "$RELEASE_TAG" "$downloaded"
-          bash scripts/ci/release_manifest.sh compare-draft "$RELEASE_TAG" "$downloaded"
-          release_sha="$(git rev-parse "refs/tags/$RELEASE_TAG^{}")"
-          tree_sha="$(git rev-parse "$release_sha^{tree}")"
-          for provenance in "$downloaded"/build-provenance-*.json; do
-            [[ -f "$provenance" ]] || { echo "FAIL: missing build provenance" >&2; exit 1; }
-            jq -e --arg commit "$release_sha" --arg tree "$tree_sha" \
-              '.source.commit_sha == $commit and .source.tree_sha == $tree' \
-              "$provenance" >/dev/null
-          done
-          bash scripts/ci/verify_downloaded_draft.sh "$RELEASE_TAG" "$downloaded" \
-            --expected-commit "$release_sha" --expected-tree "$tree_sha"
-          (cd "$downloaded" && shasum -a 256 ./*.tar.gz | sort) > published-release-digests.txt
-          diff -u attestation-digests/release-assets-digests.txt published-release-digests.txt
-      - name: Publish verified draft release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          release_id="$(bash scripts/ci/resolve_github_release_id.sh \
-            "$GITHUB_REPOSITORY" "$RELEASE_TAG")"
-          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
-            -f draft=false -f tag_name="$RELEASE_TAG" --jq .html_url
+          exit 1
+      - name: Retain candidate receipt outside the public asset inventory
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: candidate-receipt-${{ inputs.candidate_id }}
+          path: |
+            .candidate-assets.json
+            .candidate-receipt.json
+            ${{ steps.attestation.outputs.bundle-path }}
+          if-no-files-found: warn
+          include-hidden-files: true
+
+  preparation-failure:
+    # Include every preparation job: signing/attestation may never be reached.
+    needs: [validate-input, release-preflight, build, package, archive-smoke, stage-and-sign]
+    if: ${{ always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')) }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      CANDIDATE_ID: ${{ inputs.candidate_id }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      # Finalization executes trusted orchestration code, not candidate code;
+      # it works even when source validation/checkout or all builds failed.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Record only the owning run and attempt's preparation failure
+        run: python3 scripts/ci/prepare_candidate.py fail --candidate-id "$CANDIDATE_ID"

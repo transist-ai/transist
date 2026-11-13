@@ -97,10 +97,13 @@ def _validate_identity(value: dict[str, Any]) -> None:
 
 
 def _validate_receipt(receipt: Any, candidate: dict[str, Any], release_id: int) -> None:
-    if not isinstance(receipt, dict) or set(receipt) != {
-        "identity", "release_id", "assets", "manifest_digest", "check_run_ids", "attestations"
-    }:
+    required = {"identity", "release_id", "assets", "manifest_digest", "check_run_ids", "attestations"}
+    if not isinstance(receipt, dict) or set(receipt) not in (required, required | {"supersedes"}):
         raise CandidateError("malformed receipt")
+    prior = receipt.get("supersedes")
+    if prior is not None and (not isinstance(prior, str) or not re.fullmatch(
+            r"[0-9a-f]{40}-[1-9][0-9]*-[1-9][0-9]*", prior)):
+        raise CandidateError("invalid superseded predecessor")
     if receipt["identity"] != candidate or receipt["release_id"] != release_id or not _positive(release_id):
         raise CandidateError("receipt identity or release ID mismatch")
     assets = receipt["assets"]
@@ -252,6 +255,12 @@ class Candidates:
                 release_ids.add(record["release_id"])
         if current > 1:
             raise CandidateError("multiple current candidates")
+        for record in state["candidates"].values():
+            prior = (record["receipt"] or {}).get("supersedes")
+            if prior is not None:
+                predecessor = state["candidates"].get(prior)
+                if predecessor is None or predecessor is record or predecessor["state"] != "superseded":
+                    raise CandidateError("receipt predecessor is not superseded")
         if any(r["identity"]["version"] in published_versions and r["state"] in ("ready", "publishing") for r in state["candidates"].values()):
             raise CandidateError("active candidate for published version")
 
@@ -303,6 +312,10 @@ class Candidates:
         def apply(state: dict[str, Any]) -> None:
             r = self._record(state, candidate_id, "preparing")
             _validate_receipt(receipt, r["identity"], r["release_id"])
+            current = next((key for key, other in state["candidates"].items()
+                            if other["state"] == "ready"), None)
+            if "supersedes" in receipt and receipt["supersedes"] != current:
+                raise CandidateError("promotion predecessor changed")
             for other in state["candidates"].values():
                 if other["state"] == "published" and other["identity"]["version"] == r["identity"]["version"]:
                     raise CandidateError("version already published")

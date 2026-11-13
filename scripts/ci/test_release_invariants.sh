@@ -21,10 +21,25 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$repo_root"
 
+fixture_build=false
+case "${1:-}" in
+  "") ;;
+  --fixture-build) fixture_build=true; shift ;;
+  *) echo "Usage: $0 [--fixture-build]" >&2; exit 1 ;;
+esac
+[[ "$#" -eq 0 ]] || { echo "Usage: $0 [--fixture-build]" >&2; exit 1; }
+
 failures=0
 test_dir="$(mktemp -d)"
 candidate_worktree="$test_dir/release-candidate-worktree"
 trap 'git -C "$repo_root" worktree remove --force "$candidate_worktree" >/dev/null 2>&1 || true; rm -rf "$test_dir"' EXIT
+if [[ "$fixture_build" == true ]]; then
+  mkdir -p "$test_dir/fixture-bin"
+  cp tests/fixtures/release/cargo_fixture.py "$test_dir/fixture-bin/cargo"
+  chmod +x "$test_dir/fixture-bin/cargo"
+  export PATH="$test_dir/fixture-bin:$PATH"
+  echo "FIXTURE MODE: synthetic isolated dry-run binaries; no native platform/build validation"
+fi
 
 record_fail() {
   echo "FAIL  $1" >&2
@@ -713,35 +728,119 @@ else
   record_pass "release lookup rejects a missing tag_name"
 fi
 
-lookup_call_count="$(grep -c 'resolve_github_release_id.sh' .github/workflows/release.yml || true)"
-if [[ "$lookup_call_count" -eq 3 ]] \
-    && ! grep -Fq 'releases/tags/$RELEASE_TAG' .github/workflows/release.yml; then
-  record_pass "publish workflow consistently uses untagged-safe release lookup"
-else
-  record_fail "publish workflow bypasses the untagged-safe release lookup"
-fi
-
-if python3 - .github/workflows/release.yml <<'PY'
+if python3 - <<'PY'
+import re
 import sys
+from pathlib import Path
 
-text = open(sys.argv[1], encoding="utf-8").read()
-job = text.split("  attest-public-assets:\n", 1)[1].split("\n  publish-release:\n", 1)[0]
-publish = text.split("  publish-release:\n", 1)[1]
-valid = (
-    "      contents: write\n" in job
-    and "install_ci_tools.sh verification" in job
-    and "install_ci_tools.sh release" not in job
-    and "id: repository" in job
-    and "if: steps.repository.outputs.visibility == 'public'" in job
-    and "install_ci_tools.sh verification" in publish
-    and "install_ci_tools.sh release" not in publish
-)
-raise SystemExit(0 if valid else 1)
+release = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
+eligibility = Path(".github/workflows/release-eligibility.yml").read_text(encoding="utf-8")
+
+
+def validate(workflow: str, caller: str) -> None:
+    """Assert the callable preparation boundary, exact source, and readiness order."""
+    assert "  workflow_call:\n" in workflow
+    assert "workflow_dispatch:" not in workflow and "inputs.operation" not in workflow
+    for name in ("candidate_id", "source_sha", "release_tag"):
+        assert re.search(rf"^      {name}:\n.*?        required: true\n        type: string", workflow, re.M | re.S)
+    preparation, finalizer = workflow.split("  preparation-failure:\n", 1)
+    refs = re.findall(r"^          ref: (.+)$", preparation, re.M)
+    assert len(refs) == 7 and set(refs) == {"${{ inputs.source_sha }}"}
+    assert "needs: [validate-input, release-preflight, build, package, archive-smoke, stage-and-sign]" in finalizer
+    jobs = set(re.findall(r"^  ([a-z][a-z-]+):\n", workflow.split("\njobs:\n", 1)[1], re.M))
+    dependencies = re.search(r"needs: \[([^\]]+)\]", finalizer).group(1).split(", ")
+    assert set(dependencies) == jobs - {"preparation-failure"}
+    assert "always()" in finalizer
+    for outcome in ("failure", "cancelled", "skipped"):
+        assert f"contains(needs.*.result, '{outcome}')" in finalizer
+    assert 'prepare_candidate.py fail --candidate-id "$CANDIDATE_ID"' in finalizer
+    assert "ref: ${{ github.workflow_sha }}" in finalizer
+    assert "environment:" not in finalizer and "secrets." not in finalizer
+    assert "refs/tags/" not in workflow
+    assert 'test "$CANDIDATE_ID" = "${SOURCE_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"' in workflow
+    assert 'test "$GITHUB_REF" = refs/heads/main' in workflow
+    assert 'check_release_candidate.sh --preparation "$RELEASE_TAG" --sha "$SOURCE_SHA"' in workflow
+    environments = re.findall(r"^    environment: (.+)$", workflow, re.M)
+    assert environments == ["release-build"]
+    signing = workflow.split("  stage-and-sign:\n", 1)[1]
+    assert "MINISIGN_SECRET_KEY" not in workflow.split("  stage-and-sign:\n", 1)[0]
+    assert "      attestations: write\n" in signing and "      id-token: write\n" in signing
+    assert "gh release " not in workflow and "draft=false" not in workflow
+    assert "publish-release:" not in workflow and "release-publish" not in workflow
+    commands = [
+        'prepare_candidate.py upload --candidate-id "$CANDIDATE_ID" --directory dist',
+        'prepare_candidate.py download --candidate-id "$CANDIDATE_ID" --directory downloaded',
+        'verify_downloaded_draft.sh "$RELEASE_TAG" downloaded',
+        "id: attestation",
+        'prepare_candidate.py ready --candidate-id "$CANDIDATE_ID"',
+    ]
+    positions = [signing.index(command) for command in commands]
+    assert positions == sorted(positions)
+    assert "subject-path: downloaded/*.tar.gz" in signing
+    assert "cmp -s downloaded/transist-release.minisign.pub transist-release.minisign.pub" in signing
+    assert "-m downloaded/release-manifest.txt -x downloaded/release-manifest.txt.minisig" in signing
+    assert 'release_manifest.sh compare-draft "$RELEASE_TAG" downloaded' in signing
+    assert "if: steps.repository" not in signing and "continue-on-error" not in signing
+    assert "ATTESTATION_PATH: ${{ steps.attestation.outputs.bundle-path }}" in signing
+    assert '--directory downloaded --attestation-path "$ATTESTATION_PATH"' in signing
+    assert 'test -s "$ATTESTATION_PATH"' in signing
+    assert 'for attempt in 1 2 3; do' in signing
+    receipt = signing.split("name: Retain candidate receipt", 1)[1]
+    assert "            .candidate-assets.json\n" in receipt
+    assert "            .candidate-receipt.json\n" in receipt
+    assert "include-hidden-files: true" in receipt and "            dist/" not in receipt
+    assert "if: ${{ always() }}" in receipt and "if-no-files-found: warn" in receipt
+    prepare = caller.split("  prepare:\n", 1)[1]
+    assert "needs: [gates, eligible]" in prepare
+    assert "needs.eligible.outputs.candidate_state == 'preparing'" in prepare
+    assert "needs.eligible.outputs.candidate_id == format('{0}-{1}-{2}', needs.gates.outputs.source_sha, github.run_id, github.run_attempt)" in prepare
+    assert "uses: ./.github/workflows/release.yml" in prepare
+    for name, value in (("candidate_id", "needs.eligible.outputs.candidate_id"),
+                        ("source_sha", "needs.gates.outputs.source_sha"),
+                        ("release_tag", "needs.eligible.outputs.release_tag")):
+        assert f"{name}: ${{{{ {value} }}}}" in prepare
+    assert "secrets: inherit" not in caller
+    reconciliation = caller.split("  reconcile:\n", 1)[1].split("  prepare:\n", 1)[0]
+    assert "needs: [eligible]" in reconciliation
+    assert "if: ${{ needs.eligible.outputs.candidate_state == 'ready' }}" in reconciliation
+    assert "ref: main" in reconciliation and "persist-credentials: false" in reconciliation
+    assert "CANDIDATE_ID: ${{ needs.eligible.outputs.candidate_id }}" in reconciliation
+    assert 'prepare_candidate.py reconcile --candidate-id "$CANDIDATE_ID"' in reconciliation
+    for forbidden in ("environment:", "secrets.", "--directory", "--attestation-path"):
+        assert forbidden not in reconciliation
+
+
+validate(release, eligibility)
+# Mutations prove the checker rejects missing trust edges, rather than only
+# recognizing the happy-path text of the current workflow.
+mutations = [
+    (release.replace("ref: ${{ inputs.source_sha }}", "ref: main", 1), eligibility),
+    (release.replace("environment: release-build", "environment: release"), eligibility),
+    (release.replace("subject-path: downloaded/*.tar.gz", "subject-path: dist/*.tar.gz"), eligibility),
+    (release.replace('--attestation-path "$ATTESTATION_PATH"', ""), eligibility),
+    (release.replace("            .candidate-receipt.json", "            dist/.candidate-receipt.json"), eligibility),
+    (release, eligibility.replace("candidate_state == 'preparing'", "candidate_state == 'ready'")),
+    (release, eligibility.replace("github.run_id, github.run_attempt)", "github.run_id, 1)")),
+    (release.replace("needs: [validate-input, release-preflight, build, package, archive-smoke, stage-and-sign]", "needs: [stage-and-sign]"), eligibility),
+    (release.replace("if: ${{ always() }}", "if: ${{ success() }}"), eligibility),
+    (release.replace("contains(needs.*.result, 'failure')", "false"), eligibility),
+    (release.replace("for attempt in 1 2 3; do", "for attempt in 1; do"), eligibility),
+    (release, eligibility.replace("ref: main", "ref: ${{ needs.gates.outputs.source_sha }}")),
+    (release, eligibility.replace('prepare_candidate.py reconcile --candidate-id "$CANDIDATE_ID"',
+                                  'prepare_candidate.py ready --candidate-id "$CANDIDATE_ID"')),
+]
+for number, (workflow, caller) in enumerate(mutations, 1):
+    try:
+        validate(workflow, caller)
+    except (AssertionError, ValueError, IndexError):
+        continue
+    sys.exit(f"preparation contract accepted mutation {number}")
+print(f"PASS  preparation wiring and {len(mutations)} rejected trust-boundary mutations")
 PY
 then
-  record_pass "publish jobs use bounded tools and gate public attestations by visibility"
+  record_pass "reusable preparation binds source, claim owner, downloaded attestation, and private receipt"
 else
-  record_fail "publish jobs lack draft access, bounded tools, or visibility-gated attestations"
+  record_fail "reusable preparation contract or mutation rejection failed"
 fi
 
 # ---------------------------------------------------------------------------
@@ -1026,11 +1125,10 @@ else
   record_fail "focused CI contract suite failed"
 fi
 
-if grep -Fq 'release.yml/badge.svg?event=workflow_dispatch' README.md \
-    && ! grep -Fq 'release.yml/badge.svg?branch=main' README.md; then
-  record_pass "release badge reports manually dispatched tag workflows"
+if grep -Fq "vars.RELEASE_PIPELINE_ENABLED == 'true'" .github/workflows/release-eligibility.yml; then
+  record_pass "automatic preparation remains behind the repository activation variable"
 else
-  record_fail "release badge is filtered to a branch that cannot trigger Release CD"
+  record_fail "automatic preparation lacks its repository activation guard"
 fi
 
 security_gate="scripts/ci/run_security_regression_suite.sh"
@@ -1596,21 +1694,21 @@ if contents.get("linux_required_files") != ["bin/transist-sandbox-launcher"]:
     errors.append("Linux launcher inventory is not exact")
 
 for target in expected_targets:
-    archive = f'transist-${{RELEASE_TAG}}-{target}.tar.gz'
-    for suffix in ("", ".sha256", ".minisig"):
-        if f'"{archive}{suffix}"' not in workflow:
-            errors.append(f"exact staged asset list omits {archive}{suffix}")
-    if f'"build-provenance-{target}.json"' not in workflow:
-        errors.append(f"exact staged asset list omits {target} provenance")
+    archive = f'transist-${{{{ inputs.release_tag }}}}-{target}.tar.gz'
+    for suffix in ("", ".sha256"):
+        if f'            dist/{archive}{suffix}\n' not in workflow:
+            errors.append(f"packaged asset transfer omits {archive}{suffix}")
+    if f'            dist/build-provenance-{target}.json\n' not in workflow:
+        errors.append(f"packaged asset transfer omits {target} provenance")
+    if workflow.count(f'            target: {target}\n') != 2:
+        errors.append(f"build and native smoke matrices must each include {target}")
 
 if 'needs: [validate-input, release-preflight, package, archive-smoke]' not in workflow:
     errors.append("staging does not require preflight, every build, and native smoke result")
-if 'needs: [validate-input, attest-public-assets]' not in workflow:
-    errors.append("publication does not require attestation")
-if workflow.find('bash scripts/ci/release_manifest.sh compare-draft') > workflow.find('gh release upload'):
+if workflow.find('bash scripts/ci/release_manifest.sh compare-draft') > workflow.find('prepare_candidate.py upload'):
     errors.append("draft asset comparison does not precede upload")
-if workflow.count('bash scripts/ci/release_manifest.sh compare-draft') < 3:
-    errors.append("draft validation is not repeated before upload, attestation, and publication")
+if 'prepare_candidate.py download' not in workflow or 'prepare_candidate.py ready' not in workflow:
+    errors.append("candidate draft download verification and readiness are required")
 if 'if [[ "${{ matrix.target }}" == *-linux-* ]]; then' not in workflow:
     errors.append("release build does not exclude the Linux launcher explicitly for macOS")
 arm_musl_matrix = '''          - os: ubuntu-24.04-arm
@@ -1659,7 +1757,7 @@ PY
 }
 
 if [[ -z "$(release_target_contract_violations scripts/ci/release-archive-inventory.json .github/workflows/release.yml)" ]]; then
-  record_pass "current target names, sidecars, provenance, launcher split, and publication gates are complete"
+  record_pass "current target names, sidecars, provenance, launcher split, and preparation gates are complete"
 else
   record_fail "current six-target release contract is incomplete"
   release_target_contract_violations scripts/ci/release-archive-inventory.json .github/workflows/release.yml >&2

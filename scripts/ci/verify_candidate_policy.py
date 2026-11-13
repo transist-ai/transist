@@ -23,12 +23,18 @@ def require(condition: bool, message: str) -> None:
         raise ValueError(message)
 
 
-def verify_gates(sha: str, *, require_push: bool = False, trigger: tuple[str, int, int] | None = None) -> str:
-    """Verify latest attempts and, optionally, latest push attempts for the source SHA."""
+def verify_gates(sha: str, *, require_push: bool = False, trigger: tuple[str, int, int] | None = None,
+                 check_run_ids: list[int] | None = None) -> str:
+    """Verify latest source-SHA gates and optionally require latest push attempts.
+
+    Returns the repository API root. If supplied, check_run_ids is replaced by
+    the exact validated IDs only after every required attempt passes.
+    """
     repo = os.environ["GITHUB_REPOSITORY"]
     require(bool(re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo)), "invalid repository")
     root = f"repos/{repo}"
     repository_id = api(root)["id"]
+    verified_ids = []
     for workflow, gate in (("main-ci.yml", "main-gate"), ("security.yml", "security-gate")):
         pages = api(f"{root}/actions/workflows/{workflow}/runs?head_sha={sha}&per_page=100", True)
         runs = [run for page in pages for run in page["workflow_runs"] if run["head_sha"] == sha]
@@ -78,6 +84,10 @@ def verify_gates(sha: str, *, require_push: bool = False, trigger: tuple[str, in
                     and check["status"] == "completed" and check["conclusion"] == "success"
                     and check["app"]["id"] == 15368 and check["app"]["slug"] == "github-actions",
                     f"{gate} check identity mismatch")
+            if check_id not in verified_ids:
+                verified_ids.append(check_id)
+    if check_run_ids is not None:
+        check_run_ids[:] = verified_ids
     print("PASS  exact-SHA latest workflow attempts and GitHub Actions checks")
     return root
 
