@@ -78,15 +78,16 @@
       "protection_rules": [
         {
           "type": "required_reviewers",
-          "reviewers": [{"reviewer": {"login": "implicitly-awesome"}}]
-        }
+          "prevent_self_review": false,
+          "reviewers": [{"type": "User", "reviewer": {"login": "implicitly-awesome"}}]
+        },
+        {"id": 101, "node_id": "ENPR_branch", "type": "branch_policy"}
       ],
       "reviewers": ["implicitly-awesome"]
     },
     "branch_policies": {
-      "total_count": 2,
+      "total_count": 1,
       "branch_policies": [
-        {"id": 7, "name": "v*", "type": "tag"},
         {"id": 8, "name": "main", "type": "branch"}
       ]
     }

@@ -73,7 +73,8 @@ tool and Cargo caches persist. No production keys or provider credentials are ne
   a CodeQL scan. Private hosted success is audit-only evidence; maintainers enable
   GitHub security features when making the repository public.
 - Final qualification requires green PR, Mainline Validation and Security Scan
-  gates on the same final commit. Do not stage/publish a release to test CI.
+  gates on the same final commit. Use synthetic lifecycle fixtures for pipeline
+  tests; production draft review and publication approval are separate operations.
 
 ## Cache Policy and Cleanup
 

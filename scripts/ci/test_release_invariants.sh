@@ -356,10 +356,10 @@ git clone --quiet --no-tags --no-hardlinks "$repo_root" "$mode_clone"
 git -C "$mode_clone" config user.email "test@example.com"
 git -C "$mode_clone" config user.name "Candidate Mode Test"
 cp scripts/ci/check_release_candidate.sh "$mode_clone/scripts/ci/check_release_candidate.sh"
-cp scripts/ci/verify_candidate_policy.py scripts/ci/verify_release_refs.py "$mode_clone/scripts/ci/"
+cp scripts/ci/verify_candidate_policy.py scripts/ci/verify_release_refs.py scripts/ci/release_environment_policy.py "$mode_clone/scripts/ci/"
 # Isolate the mode boundary from the separate, fixture-tested live policy.
 printf '#!/usr/bin/env bash\nexit 0\n' > "$mode_clone/scripts/ci/check_release_policy.sh"
-git -C "$mode_clone" add scripts/ci/check_release_candidate.sh scripts/ci/check_release_policy.sh scripts/ci/verify_candidate_policy.py scripts/ci/verify_release_refs.py
+git -C "$mode_clone" add scripts/ci/check_release_candidate.sh scripts/ci/check_release_policy.sh scripts/ci/verify_candidate_policy.py scripts/ci/verify_release_refs.py scripts/ci/release_environment_policy.py
 git -C "$mode_clone" commit -q -m "fixture candidate mode"
 mode_sha="$(git -C "$mode_clone" rev-parse HEAD)"
 mode_bin="$test_dir/mode-bin"
@@ -661,8 +661,6 @@ fake_gh="$test_dir/gh"
 cp "tests/fixtures/release/fake_gh.sh" "$fake_gh"
 chmod +x "$fake_gh"
 candidate_sha="$(jq -r '.candidate_sha' "$fixture_file")"
-fixture_reviewers="$test_dir/release-reviewers.json"
-jq -c '.base.environment.reviewers' "$fixture_file" > "$fixture_reviewers"
 
 run_policy_case() {
   local case_name="$1"
@@ -670,7 +668,6 @@ run_policy_case() {
   local output status
   output="$(PATH="$test_dir:$PATH" GH_API_FIXTURE_FILE="$fixture_file" \
     GH_API_CASE="$case_name" GITHUB_REPOSITORY="fixture-owner/fixture-repo" \
-    RELEASE_REVIEWERS_FILE="$fixture_reviewers" \
     bash scripts/ci/check_release_policy.sh "$candidate_sha" 2>&1)" && status=0 || status=$?
   if [[ "$expected" == "pass" && "$status" -eq 0 ]]; then
     record_pass "GitHub API fixture accepted: $case_name"

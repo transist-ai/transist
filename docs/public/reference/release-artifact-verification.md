@@ -209,27 +209,52 @@ review or incident response.
 
 ## Draft-First Publication
 
-Releases follow a two-phase model:
+Successful merges to `main` pass exact-SHA mainline/security checks and automatic
+hosted aggregate readiness before six-platform building, packaging, signing,
+uploading and downloaded-draft verification. A ready candidate has all 29 assets,
+source commit/tree provenance, verified attestations and a durable digest receipt.
+No permanent version tag exists yet. Failed preparations remain inspectable and
+cannot become ready or supersede a valid draft.
 
-1. **Stage**: Build, test, package, sign, and upload all assets to a draft
-   release. No asset is ever uploaded to a public release during staging. If
-   any build, sign, or check fails, the draft remains incomplete but no public
-   release exists.
+### Download and test a ready draft
 
-2. **Publish**: Compare the draft's exact asset names and digests against the
-   signed release manifest, verify source provenance, and compare the archive
-   digests with the attestation job's verified set. Only after these checks does
-   the workflow update the release through the GitHub API:
+Drafts require authenticated repository write access even in a public repository.
+Open the draft URL in the preparation summary; verify the candidate ID, SHA/tree,
+version, manifest digest and preparation results. The candidate draft's tag is
+`candidate-<full-source-SHA>-<run-ID>-<attempt>`; filenames use the final version.
+Download by the numeric **release ID** in that summary/receipt, not by final tag:
 
-   ```bash
-   gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
-     -f draft=false -f tag_name="$RELEASE_TAG" --jq .html_url
-   ```
+```bash
+# Set the exact reviewed release ID; list all pages before downloading assets.
+release_id=12345
+gh api --paginate "repos/transist-ai/transist/releases/${release_id}/assets?per_page=100" \
+  --jq '.[] | [.id, .name, .size] | @tsv'
+# For each expected asset, use its numeric asset ID and exact filename.
+gh api -H 'Accept: application/octet-stream' \
+  repos/transist-ai/transist/releases/assets/67890 > release-manifest.txt
+```
 
-   A verification failure leaves the release as a draft.
+Download the complete expected set into a fresh directory. Apply the signature,
+checksum, manifest, committed-key comparison, provenance, SBOM and attestation
+checks above. Obtain the verification key from the receipt's exact source SHA,
+not from the draft alone. On a supported isolated test host, inspect archive
+members before extraction, then test the downloaded binaries and bundled examples.
+Record the candidate ID and tested digests. Draft access or missing platform test
+coverage is a limitation, not verification evidence.
 
-Staging refuses a draft that already contains assets and never uses
-`--clobber`. Discard an incomplete draft release without deleting its protected
-tag, then restage the unchanged tag/SHA. Source or generated-artifact defects
-require a new patch version and tag; published assets are never overwritten.
+The normal operator path is **review/test the ready draft, then approve its
+`release-publish` deployment once**. Publication revalidates current policy and
+exact-SHA checks, atomically reserves `ready → publishing`, rechecks all downloaded
+digests, creates/verifies the annotated final tag and makes the same release public.
+Publication never rebuilds, re-signs, uploads, deletes or replaces assets.
+
+A newer fully verified descendant can supersede an older ready candidate while
+review is pending; its draft is retained but approval cannot publish it. A
+publication reservation cannot be superseded. Interrupted publication retains that
+reservation: dispatch **Release Recovery** on `main` with the same candidate ID
+and provide fresh approval. Recovery verifies existing effects and resumes without
+rebuilding. A matching already-public release is idempotent success; changed bytes,
+wrong release identity or a lightweight/wrong-target tag fail hard. Never move or
+delete a permanent tag or overwrite assets. Source changes require a new version;
+an existing reservation requires investigation/reconciliation, never automatic reset.
 See the [release environment and rollback procedure](../../developer/release-environment.md).

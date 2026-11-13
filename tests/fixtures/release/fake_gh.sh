@@ -76,11 +76,12 @@ case "$endpoint" in
         end
     ' "$fixture"
     ;;
-  repos/*/environments/release)
-    jq -c --arg case "$case_name" '
+  repos/*/environments/release-build|repos/*/environments/release-publish)
+    jq -c --arg endpoint "$endpoint" --arg case "$case_name" '
        .base.environment as $environment
        | .cases[$case] as $config
-       | if ($config.wrong_reviewer // false)
+        | if ($endpoint | endswith("release-build")) then $environment | .protection_rules |= map(select(.type == "branch_policy"))
+          elif ($config.wrong_reviewer // false)
          then $environment | .protection_rules[0].reviewers[0].reviewer.login = "someone-else"
          elif ($config.extra_reviewer // false)
          then $environment | .protection_rules[0].reviewers += [{"reviewer": {"login": "another-reviewer"}}]
@@ -90,18 +91,18 @@ case "$endpoint" in
         end
     ' "$fixture"
     ;;
-  repos/*/environments/release/deployment-branch-policies)
+  repos/*/environments/release-*/deployment-branch-policies\?*)
     jq -c --arg case "$case_name" '
       .base.branch_policies as $policies
       | .cases[$case] as $config
       | if ($config.extra_policy // false)
          then $policies | .branch_policies += [{"id": 8, "name": "main", "type": "branch"}]
          elif ($config.wrong_tag_type // false)
-         then $policies | .branch_policies[0].type = "branch"
+          then $policies | .branch_policies[0].type = "tag"
          elif ($config.empty_policy // false)
          then $policies | .branch_policies = []
          else $policies
-        end
+         end | [.]
     ' "$fixture"
     ;;
   repos/fixture-owner/fixture-repo)

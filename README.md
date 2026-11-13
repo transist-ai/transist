@@ -2,7 +2,7 @@
 
 [![Mainline Validation](https://github.com/transist-ai/transist/actions/workflows/main-ci.yml/badge.svg?branch=main)](https://github.com/transist-ai/transist/actions/workflows/main-ci.yml)
 [![Security Scan](https://github.com/transist-ai/transist/actions/workflows/security.yml/badge.svg?branch=main)](https://github.com/transist-ai/transist/actions/workflows/security.yml)
-[![Release](https://github.com/transist-ai/transist/actions/workflows/release.yml/badge.svg?event=workflow_dispatch)](https://github.com/transist-ai/transist/actions/workflows/release.yml?query=event%3Aworkflow_dispatch)
+[![Release](https://github.com/transist-ai/transist/actions/workflows/release-eligibility.yml/badge.svg)](https://github.com/transist-ai/transist/actions/workflows/release-eligibility.yml)
 [![MSRV](https://img.shields.io/badge/MSRV-1.88.0-blue?logo=rust)](rust-toolchain.toml)
 [![Docs](https://img.shields.io/badge/docs-transist.ai-blue)](https://transist.ai/docs)
 [![License: MPL-2.0](https://img.shields.io/badge/license-MPL%202.0-blue.svg)](LICENSE)
@@ -322,7 +322,7 @@ plugins.
 - [Threat Model](docs/public/security/threat-model.md) for the standalone security posture
 - [Release Artifact Verification](docs/public/reference/release-artifact-verification.md) for downloaded release archives
 - [Platform Distribution Signing](docs/public/reference/platform-distribution-signing.md) for the release-signing posture
-- [Release Environment Configuration](docs/developer/release-environment.md) for the GitHub environment and tag protection ruleset
+- [Release Environment Configuration](docs/developer/release-environment.md) for draft review, publication approval, reproducible environment setup and immutable tags
 - [Developer Docs](docs/developer/architecture/kernel-contract.md) for runtime and protocol internals
 - [Vision](VISION.md) for deeper product framing and kernel boundary decisions
 - [Roadmap](ROADMAP.md) for planned product and platform work

@@ -12,9 +12,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-policy_mode=legacy
 if [[ "${1:-}" == --candidate ]]; then
-  policy_mode=candidate
   shift
 fi
 candidate_sha="${1:-}"
@@ -41,15 +39,13 @@ branch_policies_file="$repo_root/.branch_policies"
 
 committed_policies="$(jq -c '
   if (type == "array"
-      and length >= 1
-      and any(.[]; . == {name: "v*", type: "tag"})
-      and all(.[]; (.name | type == "string") and (.type | type == "string")))
+      and . == [{name: "main", type: "branch"}])
   then sort_by(.name, .type)
-  else error("expected a deployment policy array including at least one v* tag entry")
+  else error("expected exactly the main branch deployment policy")
   end
 ' "$branch_policies_file" 2>/dev/null)" \
   || fail "committed deployment policy source is malformed: $branch_policies_file"
-pass "committed deployment policy source is valid (includes v* tag policy)"
+pass "committed deployment policy source is valid (main branch only)"
 
 repo_api="repos/${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
 
@@ -96,81 +92,6 @@ if [[ "$tag_ruleset_valid" -ne 1 ]]; then
 fi
 pass "live v* rules block tag update and deletion with no bypass and no force-push allowance"
 
-if [[ "$policy_mode" == candidate ]]; then
-  python3 "$repo_root/scripts/ci/verify_candidate_policy.py" "$candidate_sha"
-  exit $?
-fi
-
-python3 "$repo_root/scripts/ci/verify_candidate_policy.py" --gates-only "$candidate_sha" \
-  || fail "exact-SHA workflow gate verification failed"
-
-env_json="$(gh api "$repo_api/environments/release" 2>/dev/null)" \
-  || fail "release environment not found; create a GitHub environment named 'release'"
-pass "release environment exists"
-
-reviewers_file="${RELEASE_REVIEWERS_FILE:-$repo_root/.release_reviewers}"
-[[ -f "$reviewers_file" ]] \
-  || fail "committed reviewer source is missing: $reviewers_file"
-
-expected_reviewers="$(jq -c '
-  if type == "array" and (all(.[]; type == "string"))
-  then sort
-  else error("expected a JSON array of reviewer login strings")
-  end
-' "$reviewers_file" 2>/dev/null)" \
-  || fail "committed reviewer source is malformed: $reviewers_file"
-pass "committed reviewer source is a valid login array"
-
-required_reviewers="$(jq -c '
-  [
-    .protection_rules[]?
-    | select(.type == "required_reviewers")
-    | if (.reviewers | type) != "array" then error("reviewers must be an array")
-      else .reviewers[]
-        | if type != "object" then error("reviewer must be an object")
-          elif ((.reviewer | type) == "object" and (.reviewer.login | type) == "string")
-          then .reviewer.login
-          elif (.login | type) == "string" then .login
-          else error("reviewer login is missing")
-          end
-      end
-  ] | sort
-' <<< "$env_json" 2>/dev/null || echo "false")"
-
-if [[ "$required_reviewers" == "false" ]]; then
-  fail "release environment protection rules are malformed"
-fi
-[[ "$required_reviewers" == "$expected_reviewers" ]] \
-  || fail "release environment reviewers ($required_reviewers) must match committed source ($expected_reviewers)"
-pass "release environment reviewers match the committed source"
-
-jq -e 'has("can_admins_bypass") and (.can_admins_bypass == false)' <<< "$env_json" >/dev/null 2>&1 \
-  || fail "release environment allows administrator bypass"
-pass "release environment administrator bypass is disabled"
-
-jq -e '
-  ((.deployment_branch_policy // {}).protected_branches == false)
-  and ((.deployment_branch_policy // {}).custom_branch_policies == true)
-' <<< "$env_json" >/dev/null 2>&1 \
-  || fail "release environment must use selected custom deployment policies, not protected branches"
-
-deployment_policies="$(gh api "$repo_api/environments/release/deployment-branch-policies" 2>/dev/null)" \
-  || fail "could not retrieve release environment deployment policies"
-
-# The API returns deployment policies in .branch_policies. Compare its complete
-# name/type set to the committed source, rather than merely finding one entry.
-jq -e --argjson expected "$committed_policies" '
-  ((.branch_policies // []) | type == "array")
-  and ((.branch_policies // []) | all(.[];
-      type == "object"
-      and (.name | type == "string")
-      and (.type | type == "string")
-    ))
-  and (([.branch_policies[]?
-      | {name: .name, type: .type}
-    ] | sort_by(.name, .type)) == $expected)
-' <<< "$deployment_policies" >/dev/null 2>&1 \
-  || fail "release environment deployment policies must match committed .branch_policies exactly"
-pass "release environment deployment policy is exactly v* tags"
+python3 "$repo_root/scripts/ci/verify_candidate_policy.py" "$candidate_sha"
 
 echo "Release policy checks passed."

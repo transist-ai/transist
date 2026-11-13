@@ -6,15 +6,17 @@ public release line.
 ## Current State
 
 See [Supported Platforms](supported-platforms.md) for the exact release matrix.
-The current release targets are `x86_64-unknown-linux-gnu`,
-`x86_64-unknown-linux-musl`, and
+The six release targets are `x86_64-unknown-linux-gnu`,
+`x86_64-unknown-linux-musl`, `aarch64-unknown-linux-gnu`,
+`aarch64-unknown-linux-musl`, `x86_64-apple-darwin`, and
 `aarch64-apple-darwin`. All archives are
 packaged deterministically on one pinned Linux job and verified with minisign
 signatures and SHA-256 checksums.
 
 Releases are published through draft-first atomic publication: assets are
-staged to a draft release, verified against a signed release manifest, and
-then transitioned to public in one final step. See
+prepared automatically as a complete draft, verified against a signed release
+manifest, reviewed/tested and then published unchanged after one approval. The
+permanent annotated tag is created only after approval and reservation. See
 [Release Artifact Verification](release-artifact-verification.md)
 for details.
 
@@ -67,8 +69,12 @@ installer, signing path, or path example is published for unsupported targets.
 
 - release-signing keys stay outside the runtime workspace and runtime binaries
 - key custody is limited to release maintainers
-- CI minisign signing uses a dedicated release key stored only in repository or
-  organization secrets so signing remains non-interactive
+- CI minisign signing uses the existing dedicated release key in the main-only
+  `release-build` environment so signing remains non-interactive; `release-publish`
+  has no signing key. Owner-supplied secure-file provisioning and signing
+  validation precede explicit removal of older repository/organization access;
+  GitHub secrets cannot be exported. See the
+  [setup procedure](../../developer/release-environment.md#reproducible-setup-step-7-only).
 - the committed `transist-release.minisign.pub` (key ID
   `202B06AC561F2B56`) is the only verification-key source; verification docs
   require a byte-for-byte comparison before trusting a downloaded key
