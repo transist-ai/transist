@@ -86,12 +86,25 @@ does not replace the applicable local and release-boundary commands below:
       release readiness — runs every check above plus supply-chain pins, legal
       notices, full-git-history secret scanning, schema/OpenAPI contracts, release
       archive inventory, admin sign/verify conformance, and release invariants;
-      required before tagging a release)
+      required at final release-engineering integration; automatic hosted
+      eligibility runs the same aggregate on the exact candidate SHA)
 - [ ] Commits are signed off with `git commit -s` (DCO).
 
 Record each command, its result, and any skipped check with a justification in
 the checklist description below. A command that failed, or was not run, must be
 explicitly approved by a maintainer before merging to `main`.
+
+For intermediate plan steps, record only that step's focused checks; full gates
+remain required after final integration. For release-pipeline changes confirm:
+
+- [ ] Normal operation is draft download/testing, then one `release-publish`
+      approval; no manual stage dispatch or pre-created final tag.
+- [ ] Supersession, reserved-publication recovery and immutable-tag failures
+      preserve the same assets and require fresh recovery approval.
+- [ ] Committed reviewers/main-only deployment policies match the policy tests.
+- [ ] Setup defaults to read-only checking; any live apply, owner-supplied key
+      migration and activation are separately authorized and evidenced. No secret
+      export, implicit pipeline enablement or automatic old-secret deletion.
 
 ## Tests
 

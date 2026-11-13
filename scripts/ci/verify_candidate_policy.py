@@ -9,6 +9,8 @@ import subprocess
 import sys
 from datetime import datetime
 
+from release_environment_policy import load_policy, validate_environment
+
 
 def api(path: str, paginate: bool = False) -> object:
     """Read a GitHub API endpoint, collecting every page when requested."""
@@ -48,7 +50,7 @@ def verify_gates(sha: str, *, require_push: bool = False, trigger: tuple[str, in
                     and attempt["head_sha"] == sha, f"{workflow} attempt identity mismatch")
             started = datetime.strptime(attempt["run_started_at"], "%Y-%m-%dT%H:%M:%SZ")
             attempts.append((started, attempt))
-        def latest_run(options: list) -> dict:
+        def latest_run(options: list, workflow: str = workflow) -> dict:
             require(bool(options), f"missing eligible {workflow} workflow attempt")
             latest = max(started for started, _ in options)
             newest = [run for started, run in options if started == latest]
@@ -95,20 +97,11 @@ def verify_gates(sha: str, *, require_push: bool = False, trigger: tuple[str, in
 def verify(sha: str) -> None:
     """Verify both release environments and the required hosted gates."""
     root = verify_gates(sha)
+    load_policy()
     for name in ("release-build", "release-publish"):
         env = api(f"{root}/environments/{name}")
-        require(env["can_admins_bypass"] is False, f"{name} allows admin bypass")
-        require(env["deployment_branch_policy"] == {"protected_branches": False, "custom_branch_policies": True}, f"{name} deployment policy invalid")
         pages = api(f"{root}/environments/{name}/deployment-branch-policies?per_page=100", True)
-        policies = [(p["name"], p["type"]) for page in pages for p in page["branch_policies"]]
-        require(policies == [("main", "branch")], f"{name} must allow only main")
-        rules = [r for r in env["protection_rules"] if r["type"] == "required_reviewers"]
-        if name == "release-build":
-            require(not rules or (len(rules) == 1 and rules[0]["reviewers"] == []), "release-build requires reviewers")
-        else:
-            require(len(rules) == 1 and rules[0]["prevent_self_review"] is False, "publication self-review policy invalid")
-            require(len(rules[0]["reviewers"]) == 1 and rules[0]["reviewers"][0]["type"] == "User"
-                    and rules[0]["reviewers"][0]["reviewer"]["login"] == "implicitly-awesome", "publication reviewer invalid")
+        validate_environment(name, env, [p for page in pages for p in page["branch_policies"]])
     print("PASS  candidate environments and exact-SHA latest workflow attempts")
 
 

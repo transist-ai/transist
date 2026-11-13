@@ -3,9 +3,17 @@
 This document describes how to verify that the published `transist` release
 archives match the source at the tagged release commit.
 
-Releases use draft-first atomic publication: assets are staged to a draft
-release, verified against a signed release manifest, and then transitioned to
-public. The release workflow never creates, moves, or deletes a tag.
+Releases use automatic draft-first publication. Exact-commit hosted checks and
+aggregate readiness precede six-platform preparation. A complete draft is verified
+against its signed manifest before human review/testing and one `release-publish`
+approval. Publication reserves that candidate, creates its permanent annotated
+`v<version>` tag at the recorded source commit, and publishes the same 29 assets.
+It never rebuilds, re-signs, replaces bytes, moves or deletes tags. Archive names
+use the final tag before it exists; candidate receipts bind source commit/tree and
+all digests outside the public asset set. See
+[Release Artifact Verification](release-artifact-verification.md) for draft access
+and [Release Environment Configuration](../../developer/release-environment.md)
+for supersession and interrupted-publication recovery.
 
 ## Toolchain
 
@@ -14,8 +22,9 @@ public. The release workflow never creates, moves, or deletes a tag.
   explicit policy change.
 - **Cargo:** ships with the Rust toolchain.
 - **Platform:** results are expected to match only the same published target
-  triple (`x86_64-unknown-linux-gnu`, `x86_64-unknown-linux-musl`, or
-  `aarch64-apple-darwin`). Build runners and containers are provenance inputs,
+  triple (`x86_64-unknown-linux-gnu`, `x86_64-unknown-linux-musl`,
+  `aarch64-unknown-linux-gnu`, `aarch64-unknown-linux-musl`,
+  `x86_64-apple-darwin`, or `aarch64-apple-darwin`). Build runners and containers are provenance inputs,
   not alternate artifact identities.
 
 ## CI Build Environment

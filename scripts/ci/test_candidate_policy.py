@@ -31,9 +31,10 @@ class CandidatePolicyTest(unittest.TestCase):
         self.publish = {"can_admins_bypass": False,
             "deployment_branch_policy": {"protected_branches": False, "custom_branch_policies": True},
             "protection_rules": [{"type": "required_reviewers", "prevent_self_review": False,
-                "reviewers": [{"type": "User", "reviewer": {"login": "implicitly-awesome"}}]}]}
+                "reviewers": [{"type": "User", "reviewer": {"login": "implicitly-awesome"}}]},
+                {"id": 101, "node_id": "ENPR_branch", "type": "branch_policy"}]}
         self.build = copy.deepcopy(self.publish)
-        self.build["protection_rules"] = []
+        self.build["protection_rules"] = [copy.deepcopy(self.publish["protection_rules"][1])]
 
     def api(self, path: str, paginate: bool = False) -> object:
         if path == "repos/o/r":

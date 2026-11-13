@@ -54,9 +54,9 @@ purpose, and expensive or privileged validation runs only in trusted contexts.
 |---|---|---|---|---|
 | **1. PR CI** | `pr-ci.yml` | `pull_request` (opened, synchronize, reopened, ready_for_review) on `main`; validation jobs require ready-for-review state | CI static contracts, DCO, Markdown lint, cargo-deny and optional dependency review feed `preflight-gate`; only then run full `check_pr_ready.sh`, schema/OpenAPI and coverage | Linux glibc containers and a clean Linux runner, `contents: read`. Draft validation jobs are skipped. `validate-full` retains release build, archive reproducibility, quickstart smoke, E2E and shipped-workflow coverage. Duplicate hosted `validate-fast` is removed. |
 | **2. Default-branch CI** | `main-ci.yml` | `push` to `main` + input-free `workflow_dispatch` | Linux x86-64/glibc + macOS Apple Silicon + Alpine/musl release build and quickstart smoke, focused musl runtime-temp regression, plus coverage-instrumented default-feature tests | Trusted `main` context, low merge volume. No full PR-readiness, clippy, E2E harness, static, or security gate. Coverage is required by `main-gate`. |
-| **3. Release CI** | `release.yml` | `workflow_dispatch` (stage / publish), dispatched from the exact protected tag ref | Exact-SHA preflight requires existing successful `main-gate` and `security-gate` checks. Six-target native builds and archive smoke, central packaging, reproducibility, shipped-workflow coverage, checksums, signing, SBOM, verification, attestation, publication. No fresh `release-security` job. A guard requires `refs/tags/<release_tag>`. | Trusted, maintainer-triggered, isolated release credentials. |
+| **3. Release CI** | `release-eligibility.yml` → `release.yml` → `release-publication.yml` | Completed mainline/security push runs on `main`, behind `RELEASE_PIPELINE_ENABLED=true` | Latest exact-SHA gates and secret-free aggregate readiness, then six-target preparation, signing, SBOM, downloaded verification and attestation. One approval reserves and publishes unchanged assets, creating the final annotated tag. | Trusted source-repository `main`; signing in `release-build`, approval in `release-publish`. Recovery dispatch accepts only a candidate ID on main. |
 | **Security Scan** | `security.yml` | push to `main` + weekly `schedule` + `workflow_dispatch` + reusable `workflow_call` | Always-required security audit: regressions, cargo-deny, npm audit, full-history secret scan. Public-only CodeQL. | Gate requires audit success and CodeQL success when public, exactly skipped when private (audit-only evidence). Trusted contexts only; no PR trigger. Release CD consumes an existing exact-SHA result and does not call this workflow. |
-| **Coverage** | `pr-ci.yml` / `main-ci.yml` / local release readiness | ready PR + every push to `main` + local pre-tag gate | Pinned `cargo-llvm-cov`; HTML, LCOV, and text reports | Generation is required by `pr-gate`, `main-gate`, and the local canonical release gate; the percentage remains informational with no threshold. |
+| **Coverage** | `pr-ci.yml` / `main-ci.yml` / aggregate release readiness | ready PR + every push to `main` + hosted candidate eligibility or local diagnosis | Pinned `cargo-llvm-cov`; HTML, LCOV, and text reports | Generation is required by `pr-gate`, `main-gate`, and aggregate readiness; the percentage remains informational with no threshold. |
 | **Markdown lint** | `pr-ci.yml` | ready PR | Locked `markdownlint` library gate using existing JSONC rules and file-selection semantics | Required by `pr-gate`; no runtime or release behavior. |
 | **External links** | `link-check.yml` | ready PR + weekly `schedule` + manual | SHA-256-verified Lychee release asset over Markdown links | Informational. Network and link failures are reported and never block unrelated PR or mainline gates. |
 
@@ -69,7 +69,7 @@ Checks outside the mainline gate have these homes:
 | Check outside the mainline gate | Trusted home |
 |---|---|
 | Unit tests, clippy, rustdoc, full release tail, E2E suites, shipped-workflow coverage | Ready PR: `pr-ci.yml` `validate-full`; local: `bash scripts/ci/check_pr_ready.sh` (full gate) before merging to `main` |
-| Supply-chain pins, legal notices, full-history secrets, public-tree, schema contracts, release invariants | Local: `bash scripts/ci/check_release_readiness.sh` before tagging |
+| Supply-chain pins, legal notices, full-history secrets, public-tree, schema contracts, release invariants | Automatic exact-SHA eligibility: `bash scripts/ci/check_release_readiness.sh`; local development/diagnosis and final integration use the same gate |
 | Linux x86-64/glibc release build + quickstart smoke | `main-ci.yml` `platform-smoke` (Linux) per push to `main` |
 | macOS Apple Silicon release build + quickstart smoke | `main-ci.yml` `platform-smoke` (macOS) per push to `main` |
 | Alpine / musl release build + quickstart smoke | `main-ci.yml` `musl-smoke` per push to `main` |
@@ -77,12 +77,12 @@ Checks outside the mainline gate have these homes:
 | Security regression suite | Local `check_release_readiness.sh` and `run_security_regression_suite.sh`; hosted `security.yml` |
 | Public-only CodeQL / always-required security audit | `security.yml` (push to `main`, weekly cron or manual dispatch); private runs require skipped CodeQL, public runs require successful CodeQL; release preflight requires successful exact-SHA `security-gate` |
 
-Mainline smoke covers three hosts; release staging defines all six supported
+Mainline smoke covers three hosts; release preparation defines all six supported
 targets. ARM64 musl uses native Bookworm with `musl-tools` for build and archive
 smoke, and one central pinned Linux job packages all six archives. See
 [Supported Platforms](../public/reference/supported-platforms.md) and
-[Release Environment Configuration](release-environment.md) for the three
-environment-gated signing, attestation, and publication jobs.
+[Release Environment Configuration](release-environment.md) for the
+signing/attestation boundary and the separate publication approval.
 
 ### How To Run Full Validation Manually
 
@@ -111,8 +111,10 @@ environment-gated signing, attestation, and publication jobs.
   inventory, reproducibility, smoke, E2E, admin sign/verify conformance, SBOM,
   signature/provenance, and release invariants). It runs the workspace test
   suite under both the default and the all-feature feature sets on the local
-  qualification host. Release CD consumes existing hosted gate results and
-  runs native archive checks; it does not rerun this aggregate suite.
+   qualification host. Automatic eligibility runs this aggregate on the exact
+   candidate in a secret-free hosted job. Preparation additionally consumes
+   existing hosted gate results and runs all six native archive checks. No manual
+   pre-tag qualification or security dispatch is part of normal publication.
 - **Security regression:** `bash scripts/ci/run_security_regression_suite.sh`
   (required in addition to `check_pr_ready.sh` for dependency, trust, secret,
   or local-only changes).
@@ -148,9 +150,15 @@ Keep step branches local until that boundary to avoid repeated hosted validation
 Hardware-dependent, privileged, and release validation runs only from trusted
 repository-controlled events:
 
-- `release.yml` `workflow_dispatch` (`stage` /
-  `publish`) on a protected `v*` tag, guarded by protected tags and exact-SHA
-  release-candidate checks.
+- Completed source-repository push gates on `main` trigger exact-SHA eligibility
+  and reusable `release.yml` preparation. Publication through
+  `release-publication.yml` requires one `release-publish` approval after draft
+  review/testing. `release-recovery.yml` accepts only a candidate ID from `main`
+  and requires fresh approval. No release or tag event prepares candidates.
+- Configure both main-only environments and the data-only orphan `release-state`
+  branch with `setup_release_pipeline.py --check` (default read-only) or explicit
+  `--apply` during provisioning. See [Release Environment Configuration](release-environment.md)
+  for key custody, supersession, reservation recovery and immutable-tag failures.
 - Persistent Transist-owned infrastructure (self-hosted runners, dedicated
   devices, machines with sensitive credentials) never executes arbitrary code
   from external pull requests. See the Trust Boundary section of
@@ -202,9 +210,9 @@ are required, whether secrets are required, and its expected cost.
 | **lint** | PR (`validate-fast` + `markdownlint`) + local full gate | Linux glibc | none | none | Cheap: `cargo fmt --check`, clippy `--all-features`, and tracked-Markdown lint. |
 | **unit** | PR (`validate-full`) + local full gate | Linux glibc | none | none | `cargo test --workspace --all-targets`. |
 | **integration-light** | PR (`validate-full`) + local full gate | Linux glibc | sandbox launcher (local) | none | Deterministic in-process/launcher integration. |
-| **integration-full** | PR (`validate-full`) + local pre-merge / release readiness | Linux glibc + macOS | filesystem sandbox (bwrap / macOS profile) | none | E2E suites and shipped-workflow coverage; release staging runs shipped-workflow coverage from all six archives. Not run on every `main` push. |
-| **cross-platform** | main smoke + release staging | Main: Linux x86-64 glibc/musl + macOS ARM64; release: all six target triples | none | none | Mainline runs release build + quickstart smoke on its three-host subset; release adds native archive smoke for all targets. ARM64 musl uses Bookworm/musl-tools. Archive reproducibility is local/release. |
+| **integration-full** | PR (`validate-full`) + local pre-merge / automatic release readiness | Linux glibc + macOS | filesystem sandbox (bwrap / macOS profile) | none | E2E suites and shipped-workflow coverage; release preparation runs shipped-workflow coverage from all six archives. Not part of mainline smoke. |
+| **cross-platform** | main smoke + release preparation | Main: Linux x86-64 glibc/musl + macOS ARM64; release: all six target triples | none | none | Mainline runs release build + quickstart smoke on its three-host subset; release adds native archive smoke for all targets. ARM64 musl uses Bookworm/musl-tools. Archive reproducibility is local/release. |
 | **hardware** | release / maintainer-triggered only | protected refs; never untrusted | Transist Station / hardware | none in CI | Not run on PR or ordinary mainline. |
 | **external-service** | release / maintainer-triggered | protected refs | live external services | yes, isolated | Paid/live APIs excluded from PR and default-branch CI. |
 | **benchmark** | maintainer-triggered | protected refs | none | none | Long-running; not run per PR. |
-| **release** | release CI | protected `v*` tag | none | release signing, isolated | Build matrix, packaging, signing, SBOM, attestation. |
+| **release** | automatic exact-SHA eligibility and preparation | trusted `main` deployment source | GitHub APIs | `release-build` signing only | Six-target matrix, packaging, signing, SBOM, attestation; publication approval in key-free `release-publish`, no rebuild. |

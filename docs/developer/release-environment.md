@@ -20,12 +20,73 @@ preparation. There is one publication approval, after the complete draft is read
 | Administrator bypass | Disabled |
 | Signing secret | `release-build` only |
 
-Both environments and the `release-state` branch must already exist. Candidate
-mode in `check_release_policy.sh` validates the environments, reviewer and
-self-review policy, disabled bypass and immutable tag rules. The legacy policy
-files remain for legacy checker compatibility; they do not widen the candidate
-workflow's main-only deployment policy. Publication has no signing key or OIDC
-write permission.
+Both environments and the `release-state` branch must exist before activation.
+`check_release_policy.sh` validates both environments against `.release_reviewers`
+and `.branch_policies`, plus exact-SHA checks and immutable tag rules. Both checker
+invocations (with or without `--candidate`) enforce this same contract. Publication
+has no signing key or OIDC write permission.
+
+## Reproducible Setup (Step 7 Only)
+
+Step 6 implements and tests setup offline with fake `gh`. Applying live GitHub
+configuration belongs to Step 7. Use Python 3.11+ and authenticated `gh` with
+repository administration, environment/secrets, Actions-variable read and contents
+access. Use an owner/operator session; workflow jobs retain their job-scoped
+`GITHUB_TOKEN` permissions and do not need a PAT.
+
+Read-only inspection is the default; missing resources or policy drift exit nonzero:
+
+```bash
+python3 scripts/ci/setup_release_pipeline.py --repo transist-ai/transist --check
+```
+
+In Step 7, with automatic preparation disabled, an owner may explicitly provision:
+
+```bash
+python3 scripts/ci/setup_release_pipeline.py --repo transist-ai/transist --apply \
+  --signing-key-file /secure/owner-supplied/transist-release.key
+```
+
+The file must already hold the existing production key, be owned by the current
+user, nonempty and owner-only (for example mode `0600`), with no links. Do not
+place it in the checkout, logs or shell variables. Setup checks file metadata and
+streams its open descriptor directly to `gh secret set MINISIGN_SECRET_KEY --env
+release-build`; it never loads key values into Python, command arguments, output,
+environment variables or temporary copies. GitHub secrets cannot be exported.
+Missing secure-source access blocks provisioning when the environment key is
+absent; do not generate a replacement key to work around missing custody.
+
+Setup creates or reconciles the two environments, resolves the committed reviewer
+login to a GitHub user ID, and selects exactly the committed `main` branch policy.
+It creates `release-state` using a parentless commit containing only regular
+`state.json` with the repository ID and an empty candidate map. It never copies
+main's tree, checks out state, or executes branch content. Existing state is
+validated and preserved, never reset. Unreadable or unsafe state blocks apply.
+Concurrent creation fails safely without forcing a ref; rerun to inspect it.
+
+Only after key presence, state and both environments' desired policy are validated
+does setup remove individual obsolete deployment selections from those two
+environments. It does not delete any environment, tag, release, state, ruleset or
+secret. Partial API failures exit nonzero; rerun `--check`, then `--apply` to
+reconcile. Reapplying valid configuration without a key-file option performs no
+writes; supplying a key file explicitly provisions that file again.
+
+Secret listings prove presence only, not key identity. Step 7 must verify signing
+against `transist-release.minisign.pub` before the owner explicitly removes any
+repository-wide or organization-wide signing-key access. Setup never removes old
+secrets or changes `RELEASE_PIPELINE_ENABLED`; it refuses to run with that variable
+set to `true`. A signing secret in `release-publish` blocks setup and requires
+explicit owner remediation. Existing immutable `v*` rules are verified separately:
+
+```bash
+GITHUB_REPOSITORY=transist-ai/transist \
+  bash scripts/ci/check_release_policy.sh --candidate <full-source-sha>
+```
+
+Missing immutable rules, successful exact-SHA gates, permissions or signing
+evidence remain blockers. Setup does not dispatch workflows or publish releases.
+Lifecycle validation in the public test repository uses only synthetic payloads
+and test-only keys. Production activation remains a separate Step 8 operation.
 
 ## v* Tag Protection Ruleset
 
@@ -114,8 +175,7 @@ See [Supported Platforms](../public/reference/supported-platforms.md).
 2. **Review:** the summary job displays candidate SHA/tree, version, the draft's
    actual download URL, manifest digest, preparation results and run link before
    the `release-publish` job requests approval. Download and test the final bytes,
-   then approve that environment deployment. No manual stage/publish dispatch is
-   part of the normal path.
+   then approve that environment deployment.
 3. **Publish:** after approval, revalidate the receipt, source, current eligibility,
    live policies and latest exact-SHA checks. Reserve `ready → publishing` by CAS
    before tag or release effects. Download and authenticate every asset against
@@ -126,12 +186,22 @@ See [Supported Platforms](../public/reference/supported-platforms.md).
    assets and final tag, then record `published`.
 
 Publication never rebuilds, repackages, signs, uploads, deletes or replaces assets.
+The normal operator path is draft review/testing, then one publication approval.
+There is no manual security dispatch or tag creation prerequisite. The version is
+read from `[workspace.package].version`; archive names use the final `v<version>`
+even while the draft has a candidate tag. Receipts remain outside the 29 public
+assets in the data-only state branch.
 The signature-verification key is taken from the exact source checkout. Attestation
 verification binds both source and signer digest to the preparation workflow
 revision on main, requires its workflow directory to match the candidate's, and
 retains the candidate SHA/tree provenance binding inside the verified bytes.
 
 ### Interrupted preparation or publication
+
+A newer fully verified descendant supersedes an older unpublished ready candidate;
+failed preparation cannot supersede it. Superseded drafts remain inspectable and
+are unpublishable. Ordering uses Git ancestry, not completion time; incomparable
+sources are rejected. Once `publishing` is reserved, no candidate can supersede it.
 
 Dispatch **Release Recovery** (`release-recovery.yml`) from **main**, with only
 the exact `candidate_id` from the original summary or durable state. No arbitrary
@@ -272,8 +342,9 @@ and files containing private-key or credential markers, even when a broad
   from main to create a new preparation attempt. Retain incomplete drafts.
 - For interrupted publication: recover only the reserved candidate ID through
   fresh approval. Never clear its reservation or replace individual assets.
-- For a source or generated-artifact defect after the protected tag is
-  created: leave the release unpublished and immutable, bump the patch
-  version, repeat the release-candidate gate, and publish only the new tag.
+- For a source or generated-artifact defect after the protected tag is created:
+  leave that tag and candidate intact. Do not clear a publication reservation;
+  investigate and reconcile its exact candidate before any further publication.
+  Corrected source requires a new patch version and a new fully verified candidate.
 - After publication: withdraw the release and issue a new patch; never
   overwrite artifacts under the same tag.

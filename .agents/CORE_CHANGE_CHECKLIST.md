@@ -101,7 +101,8 @@ bash scripts/ci/check_pr_ready.sh
 
 The hosted `PR Gate / pr-gate` runs the full Linux local gate plus schema/OpenAPI
 and cargo-deny checks, but does not replace the applicable local validation
-while iterating or release-boundary validation before tagging.
+while iterating or release-engineering validation at final integration. Automatic
+hosted release eligibility also runs aggregate readiness on the exact candidate.
 
 Change-type additions:
 

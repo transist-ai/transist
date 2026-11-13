@@ -269,7 +269,7 @@ Trusted contributors must run the applicable local validation after the final
 code change and **before merging to `main`**. The hosted `PR Gate / pr-gate`
 runs the full Linux PR-readiness gate plus schema/OpenAPI and cargo-deny policy
 checks, but it does not replace local validation while iterating or release
-readiness validation before tagging.
+readiness validation at final integration.
 
 For intermediate local development-plan steps, run only the focused tests and
 validation listed by that step. Record their results; do not interpret them as
@@ -320,7 +320,9 @@ quickstart smoke, and E2E suites). `check_release_readiness.sh` runs every
 check in `check_pr_ready.sh` plus supply-chain pins, legal notices,
 full-git-history secret scanning, schema/OpenAPI contracts, release archive
 inventory, admin sign/verify conformance, and release invariants. Run
-`check_release_readiness.sh` before tagging a release.
+`check_release_readiness.sh` at final release-engineering integration. Automatic
+hosted eligibility runs it on the exact source SHA before preparation; local
+invocation remains available for development and diagnosis.
 
 `check_pr_ready.sh` supports flags for faster inner-loop iteration. The
 default (no flags) is the full local gate and is what must pass before merging
@@ -367,20 +369,19 @@ CI is split into three cost/trust tiers:
   quickstart smoke suites on Linux x86-64/glibc, macOS Apple Silicon, and
   Alpine/musl, plus a focused musl runtime-temp regression and required
   coverage-instrumented default-feature tests. Its smoke contract covers that
-  three-host subset. Release staging defines native archive checks for all six
+   three-host subset. Release preparation defines native archive checks for all six
   release targets; workspace tests run in the Linux PR gate, mainline coverage
-  job, and local default- and all-feature release-readiness gates, not anew in
-  hosted Release CD.
+   job, and local/hosted default- and all-feature aggregate release-readiness gates.
 - **Target naming:** release artifacts use Rust target triples. A GitHub runner
   or pinned Debian/Alpine container is validation evidence, not an
   Ubuntu-, Debian-, or Alpine-specific support claim. Candidate target checks
   stay manual and non-blocking until a target is formally promoted.
 - **Security Scan (`Security Scan / security-gate`)** requires the security audit
-  (regressions, cargo-deny, npm audit, and full-history secret scanning) on a weekly
+   (regressions, cargo-deny, npm audit, and full-history secret scanning) on every
   push to `main`, on a weekly schedule, and on demand. CodeQL is public-only: the gate requires success for a
   public repository and exactly `skipped` for a private repository. Private
   success is audit-only evidence. A successful exact-SHA gate is required before
-  release staging; see [Security Policy](SECURITY.md#ci-security-scanning).
+   release preparation; see [Security Policy](SECURITY.md#ci-security-scanning).
 
 Automatic release eligibility requires the exact source SHA to pass `Mainline
 Validation / main-gate` and `Security Scan / security-gate`, then runs aggregate
@@ -389,6 +390,13 @@ one `release-publish` approval revalidates current policy/checks, reserves the
 candidate and publishes the unchanged bytes with an annotated final tag. Recovery
 uses only a candidate ID dispatched from main and requires fresh publication
 approval. See the release environment guide for interrupted-publication handling.
+Reviewers download the draft by release ID and test final-version filenames before
+approval. Newer verified descendants supersede older ready candidates, but cannot
+supersede a publication reservation. Never move a final tag or replace assets.
+Reproducible setup uses `scripts/ci/setup_release_pipeline.py --repo owner/name`
+(read-only by default); live `--apply`, signing-key migration and lifecycle
+validation are separate provisioning work. Setup never activates the pipeline or
+deletes old signing secrets.
 Sandbox-dependent
 tests must fail when the expected platform backend is unavailable; do not skip
 them to make a platform green.
