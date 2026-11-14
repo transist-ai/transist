@@ -760,7 +760,8 @@ def validate(workflow: str, caller: str) -> None:
     environments = re.findall(r"^    environment: (.+)$", workflow, re.M)
     assert environments == ["release-build"]
     signing = workflow.split("  stage-and-sign:\n", 1)[1]
-    assert "MINISIGN_SECRET_KEY" not in workflow.split("  stage-and-sign:\n", 1)[0]
+    assert "MINISIGN_SECRET_KEY" not in workflow.split("\njobs:\n", 1)[1].split("  stage-and-sign:\n", 1)[0]
+    assert "    secrets:\n      MINISIGN_SECRET_KEY:" in workflow.split("    inputs:", 1)[0]
     assert "      attestations: write\n" in signing and "      id-token: write\n" in signing
     assert "gh release " not in workflow and "draft=false" not in workflow
     assert "publish-release:" not in workflow and "release-publish" not in workflow
@@ -797,6 +798,7 @@ def validate(workflow: str, caller: str) -> None:
                         ("release_tag", "needs.eligible.outputs.release_tag")):
         assert f"{name}: ${{{{ {value} }}}}" in prepare
     assert "secrets: inherit" not in caller
+    assert "    secrets:\n      MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}" in prepare
     reconciliation = caller.split("  reconcile:\n", 1)[1].split("  prepare:\n", 1)[0]
     assert "needs: [eligible]" in reconciliation
     assert "if: ${{ needs.eligible.outputs.candidate_state == 'ready' }}" in reconciliation
@@ -812,6 +814,7 @@ validate(release, eligibility)
 # recognizing the happy-path text of the current workflow.
 mutations = [
     (release.replace("ref: ${{ inputs.source_sha }}", "ref: main", 1), eligibility),
+    (release, eligibility.replace("MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}", "OTHER_KEY: ${{ secrets.OTHER_KEY }}")),
     (release.replace("environment: release-build", "environment: release"), eligibility),
     (release.replace("subject-path: downloaded/*.tar.gz", "subject-path: dist/*.tar.gz"), eligibility),
     (release.replace('--attestation-path "$ATTESTATION_PATH"', ""), eligibility),
@@ -850,6 +853,7 @@ def validate(text: str, recovery: str, caller: str) -> None:
     """Guard the single approval and main-only candidate recovery trust edges."""
     summary, publish = text.split("  publish-release:\n", 1)
     assert "environment:" not in summary and "publish_candidate.py summary" in summary
+    assert "      contents: write\n" in summary
     assert "needs: review-summary" in publish
     assert "environment: release-publish" in publish
     assert "group: release-publication-effects" in publish
@@ -877,6 +881,7 @@ caller = Path(".github/workflows/release-eligibility.yml").read_text()
 validate(text, recovery, caller)
 mutations = [
     (text.replace("needs: review-summary", "needs: []"), recovery, caller),
+    (text.replace("      contents: write\n", "      contents: read\n", 1), recovery, caller),
     (text.replace("environment: release-publish", "environment: release-build"), recovery, caller),
     (text.replace("attestations: read", "attestations: write"), recovery, caller),
     (text.replace("ref: ${{ inputs.source_sha }}", "ref: main"), recovery, caller),

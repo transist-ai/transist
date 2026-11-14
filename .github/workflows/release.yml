@@ -2,6 +2,10 @@ name: Release CD
 
 on:
   workflow_call:
+    secrets:
+      MINISIGN_SECRET_KEY:
+        description: "Signing key supplied by the stage-and-sign release-build environment"
+        required: false
     inputs:
       candidate_id:
         description: "Claimed preparation candidate owned by this run and attempt"
@@ -419,6 +423,8 @@ jobs:
     container:
       image: rust:1.88.0-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0
     environment: release-build
+    # Environment secrets take precedence over the explicitly mapped caller
+    # secret. Keep the key in release-build, never at repository scope.
     env:
       RELEASE_TAG: ${{ inputs.release_tag }}
       CANDIDATE_ID: ${{ inputs.candidate_id }}
@@ -462,6 +468,10 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
+          test -n "$MINISIGN_SECRET_KEY" || {
+            echo "release-build MINISIGN_SECRET_KEY is unavailable" >&2
+            exit 1
+          }
           key_path="$(mktemp)"
           trap 'rm -f "$key_path"' EXIT
           printf '%s\n' "$MINISIGN_SECRET_KEY" > "$key_path"
