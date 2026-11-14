@@ -541,7 +541,9 @@ class EligibilityTests(unittest.TestCase):
         self.assertIn("bash scripts/ci/check_release_readiness.sh", workflow)
         self.assertIn("python3 scripts/ci/release_eligibility.py --claim", workflow)
         self.assertIn("candidate_id: ${{ steps.claim.outputs.candidate_id }}", workflow)
-        self.assertNotIn("secrets.", workflow)
+        self.assertNotIn("secrets.", workflow.split("  prepare:\n", 1)[0])
+        self.assertNotIn("secrets.", workflow.split("  publish:\n", 1)[1])
+        self.assertEqual(workflow.count("secrets."), 1)
         readiness = workflow.split("  readiness:", 1)[1].split("  eligible:", 1)[0]
         self.assertNotIn("contents: write", readiness)
         self.assertNotIn("GH_TOKEN", readiness)

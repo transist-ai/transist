@@ -295,6 +295,24 @@ the recorded predecessor's label. It requires no original-run ownership, local
 assets, signing key, or publication approval; it cannot prepare, promote, modify
 assets, create tags, or publish. Errors leave the ready receipt and state intact.
 
+Label updates explicitly preserve the predecessor's original candidate tag and
+source SHA, then verify the saved identity and label. GitHub can rewrite an
+untagged draft's `tag_name` to its `untagged-*` URL slug when a PATCH omits the
+tag. For an already-aliased superseded predecessor, reconciliation downloads all
+29 assets by numeric asset ID and compares their full bytes with its persisted
+receipt before restoring the original tag field. It also checks the exact release
+ID, source SHA, listing stability and current promotion state. A slug or title
+alone never identifies a candidate. Active drafts still require their exact
+original identity; this exception cannot authorize publication.
+
+The reusable signing interface declares and maps only `MINISIGN_SECRET_KEY`,
+without blanket inheritance. Its optional caller mapping may be empty: the
+`stage-and-sign` job binds `release-build`, whose environment secret takes
+precedence. Provision the key there, not at repository scope. Missing delivery
+fails before writing a key file. The review summary needs job-scoped
+`contents: write` to read private draft metadata on GitHub, although its command
+performs only reads and has no signing secret or deployment environment.
+
 `test_release_invariants.sh` uses fixture-backed GitHub API responses to test
 exact SHA and provider identity, pagination, duplicate check runs, latest
 result selection, tag rulesets (including permissive `update`-rule parameters),

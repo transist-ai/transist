@@ -19,6 +19,7 @@ import re
 import subprocess
 import sys
 import tarfile
+import tempfile
 from typing import Any
 from urllib.parse import quote
 
@@ -351,16 +352,67 @@ class Preparation:
         if prior is None:
             return
         old = value["candidates"][prior]
-        draft = self.release(old)
+        draft = self.predecessor_release(old)
         title = "SUPERSEDED — UNPUBLISHABLE — " + old["identity"]["draft_title"]
         marker = "This candidate is superseded and cannot be published."
         body = draft.get("body") or ""
-        if draft.get("name") == title and body.startswith(marker):
+        if (draft.get("name") == title and body.startswith(marker)
+                and draft["tag_name"] == old["identity"]["draft_tag"]):
             return
         if not body.startswith(marker):
             body = marker + "\n\n" + body
+        latest, _ = self.state.api.read()
+        self.state._validate_state(latest)
+        if (latest["candidates"].get(candidate_id) != current
+                or latest["candidates"].get(prior) != old):
+            raise ValueError("promotion changed during predecessor verification")
+        # Omitting tag_name can make GitHub rewrite an untagged draft's tag to
+        # its untagged-* URL slug. Preserve both identity fields explicitly.
         github(f"{self.endpoint}/{old['release_id']}", "PATCH", {
+            "tag_name": old["identity"]["draft_tag"],
+            "target_commitish": old["identity"]["source_sha"],
             "name": title, "body": body, "draft": True, "make_latest": "false"})
+        verified = self.release(old)
+        if verified.get("name") != title or verified.get("body") != body:
+            raise ValueError("superseded label was not retained")
+
+    def predecessor_release(self, record: dict[str, Any]) -> dict[str, Any]:
+        """Read a superseded predecessor; authenticate legacy aliases by full receipt bytes.
+
+        Only label reconciliation uses this exception. Active draft readers and
+        publication still require the original candidate tag. No URL or title
+        supplies authority, and no receipt or lifecycle state is rewritten.
+        """
+        if record["state"] != "superseded":
+            raise ValueError("predecessor is not superseded")
+        rid, ident, receipt = record["release_id"], record["identity"], record["receipt"]
+        rc._validate_receipt(receipt, ident, rid)
+        endpoint = f"{self.endpoint}/{rid}"
+        draft = github(endpoint)
+        if (draft.get("id") != rid or draft.get("draft") is not True
+                or draft.get("target_commitish") != ident["source_sha"]):
+            raise ValueError("superseded draft release identity mismatch")
+        if draft.get("tag_name") == ident["draft_tag"]:
+            return draft
+        if not re.fullmatch(r"untagged-[0-9a-f]+", draft.get("tag_name", "")):
+            raise ValueError("unexpected superseded draft tag")
+        names = assets.expected_assets(ident["final_tag"], INVENTORY)
+        if set(receipt["assets"]) != names:
+            raise ValueError("superseded receipt inventory mismatch")
+        before = assets.validate_listing(self.listing(rid), names)
+        with tempfile.TemporaryDirectory(prefix="superseded-assets-") as temporary:
+            directory = Path(temporary)
+            for name, metadata in before.items():
+                with (directory / name).open("xb") as output:
+                    subprocess.run(["gh", "api", f"{self.endpoint}/assets/{metadata['id']}",
+                                    "-H", "Accept: application/octet-stream"], stdout=output, check=True)
+            assets.verify_downloads(directory, before, receipt["assets"])
+        after = github(endpoint)
+        fields = ("id", "draft", "tag_name", "target_commitish", "name", "body")
+        if (any(after.get(key) != draft.get(key) for key in fields)
+                or assets.validate_listing(self.listing(rid), names) != before):
+            raise ValueError("superseded draft changed during verification")
+        return after
 
     def reconcile(self, candidate_id: str) -> None:
         """Reconcile only the recorded predecessor's label from a new trusted main run.

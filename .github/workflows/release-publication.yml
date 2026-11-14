@@ -20,7 +20,9 @@ jobs:
   review-summary:
     runs-on: ubuntu-24.04
     permissions:
-      contents: read
+      # GitHub requires contents: write even to GET a private draft release.
+      # The summary command is read-only; keep this grant scoped to this job.
+      contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

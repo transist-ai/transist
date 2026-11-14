@@ -111,6 +111,10 @@ class PreparationTests(unittest.TestCase):
             return [entries[:10], entries[10:]] if entries else [[]]
         if method == "PATCH":
             self.remote[rid].update(data)
+            # Hosted GitHub behavior: a label-only PATCH of a draft without a
+            # real tag rewrites tag_name to the generated untagged URL slug.
+            if "tag_name" not in data and self.remote[rid].get("draft") is True:
+                self.remote[rid]["tag_name"] = "untagged-d845540d1daa59d6daa1"
         return copy.deepcopy(self.remote[rid])
 
     def check_output(self, command, **kwargs):
@@ -143,7 +147,7 @@ class PreparationTests(unittest.TestCase):
             blobs[name] = {"id": 100 + len(blobs), "bytes": Path(command[-1]).read_bytes()}
         elif command[:2] == ["gh", "api"]:
             asset_id = int(command[2].rsplit("/", 1)[1])
-            matches = [b for b in self.blobs[42].values() if b["id"] == asset_id]
+            matches = [b for blobs in self.blobs.values() for b in blobs.values() if b["id"] == asset_id]
             self.assertEqual(len(matches), 1)
             kwargs["stdout"].write(matches[0]["bytes"])
         else:
@@ -649,9 +653,159 @@ class PreparationTests(unittest.TestCase):
         patches = [call for call in self.calls if len(call) == 4 and call[1] == "PATCH"]
         self.assertEqual(len(patches), 1)
         self.assertEqual(patches[0][0], "repos/owner/repo/releases/41")
-        self.assertEqual(set(patches[0][2]), {"name", "body", "draft", "make_latest"})
+        self.assertEqual(set(patches[0][2]), {"name", "body", "draft", "make_latest", "tag_name", "target_commitish"})
         self.assertTrue(patches[0][2]["draft"])
         self.assertEqual(self.record()["receipt"]["supersedes"], old["candidate_id"])
+
+    def aliased_predecessor(self) -> dict:
+        """Prepare the observed hosted alias with all 29 receipt-matching blobs."""
+        old, _ = self.old_ready()
+        self.upload_download()
+        self.ready()
+        self.blobs[41] = {name: {"id": 200 + index, "bytes": (self.dist / name).read_bytes()}
+                          for index, name in enumerate(sorted(self.names))}
+        self.remote[41]["tag_name"] = "untagged-d845540d1daa59d6daa1"
+        return old
+
+    def test_legacy_alias_repaired_by_full_bytes_and_duplicate_reconcile_is_noop(self) -> None:
+        old = self.aliased_predecessor()
+        before = self.api.read()
+        blobs = copy.deepcopy(self.blobs)
+        self.calls.clear()
+        self.helper.reconcile(self.ident["candidate_id"])
+        self.helper.reconcile(self.ident["candidate_id"])
+        self.assertEqual(self.remote[41]["tag_name"], old["draft_tag"])
+        self.assertEqual(self.remote[41]["target_commitish"], old["source_sha"])
+        self.assertEqual(self.api.read(), before)
+        self.assertEqual(self.blobs, blobs)
+        downloads = [c for c in self.calls if len(c) == 2 and "stdout" in c[1]]
+        self.assertEqual(len(downloads), 29)
+        writes = [c for c in self.calls if len(c) == 4 and c[1] == "PATCH"]
+        self.assertEqual(len(writes), 1)
+        self.assertEqual(writes[0][0], "repos/owner/repo/releases/41")
+
+    def test_legacy_alias_rejects_identity_inventory_and_same_size_byte_tampering(self) -> None:
+        self.aliased_predecessor()
+        original_remote, original_blobs = copy.deepcopy(self.remote), copy.deepcopy(self.blobs)
+        for mode in ("id", "source", "public", "tag", "missing", "extra", "bytes", "receipt"):
+            with self.subTest(mode=mode):
+                self.remote, self.blobs = copy.deepcopy(original_remote), copy.deepcopy(original_blobs)
+                if mode == "id":
+                    self.remote[41]["id"] = 99
+                elif mode == "source":
+                    self.remote[41]["target_commitish"] = "0" * 40
+                elif mode == "public":
+                    self.remote[41]["draft"] = False
+                elif mode == "tag":
+                    self.remote[41]["tag_name"] = "v1.2.3"
+                elif mode == "missing":
+                    self.blobs[41].pop("packaging-provenance.json")
+                elif mode == "extra":
+                    self.blobs[41]["unexpected"] = {"id": 999, "bytes": b""}
+                elif mode == "bytes":
+                    blob = self.blobs[41]["packaging-provenance.json"]
+                    blob["bytes"] = b"x" * len(blob["bytes"])
+                else:
+                    prior = self.record()["receipt"]["supersedes"]
+                    self.api.value["candidates"][prior]["receipt"]["release_id"] = 99
+                before = self.api.read()
+                self.calls.clear()
+                with self.assertRaises(ValueError):
+                    self.helper.reconcile(self.ident["candidate_id"])
+                self.assertEqual(self.api.read(), before)
+                self.assertFalse(any(len(c) == 4 and c[1] == "PATCH" for c in self.calls))
+
+    def test_active_alias_is_never_accepted(self) -> None:
+        self.aliased_predecessor()
+        self.remote[42]["tag_name"] = "untagged-dc490591e05a99748d45"
+        self.calls.clear()
+        with self.assertRaisesRegex(ValueError, "draft release identity"):
+            self.helper.reconcile(self.ident["candidate_id"])
+        self.assertFalse(any(len(c) == 4 and c[1] == "PATCH" for c in self.calls))
+
+    def test_alias_download_failure_and_listing_or_identity_race_never_patch(self) -> None:
+        self.aliased_predecessor()
+        original_remote, original_blobs = copy.deepcopy(self.remote), copy.deepcopy(self.blobs)
+        for mode in ("download", "listing", "identity"):
+            with self.subTest(mode=mode):
+                self.remote, self.blobs = copy.deepcopy(original_remote), copy.deepcopy(original_blobs)
+                self.calls.clear()
+                original = self.run_command
+
+                def change_during_download(command: list[str], **kwargs) -> subprocess.CompletedProcess:
+                    if mode == "download":
+                        raise subprocess.CalledProcessError(1, command)
+                    result = original(command, **kwargs)
+                    if mode == "listing":
+                        self.blobs[41]["unexpected"] = {"id": 999, "bytes": b""}
+                    else:
+                        self.remote[41]["target_commitish"] = "0" * 40
+                    return result
+
+                before = self.api.read()
+                with patch.object(subprocess, "run", side_effect=change_during_download), \
+                        self.assertRaises((ValueError, subprocess.CalledProcessError)):
+                    self.helper.reconcile(self.ident["candidate_id"])
+                self.assertEqual(self.api.read(), before)
+                self.assertFalse(any(len(c) == 4 and c[1] == "PATCH" for c in self.calls))
+
+    def test_alias_repair_rechecks_ready_state_after_download(self) -> None:
+        self.aliased_predecessor()
+        self.calls.clear()
+        original = self.run_command
+
+        def reserve_during_download(command: list[str], **kwargs) -> subprocess.CompletedProcess:
+            result = original(command, **kwargs)
+            self.record()["state"] = "publishing"
+            return result
+
+        with patch.object(subprocess, "run", side_effect=reserve_during_download), \
+                self.assertRaisesRegex(ValueError, "promotion changed"):
+            self.helper.reconcile(self.ident["candidate_id"])
+        self.assertFalse(any(len(c) == 4 and c[1] == "PATCH" for c in self.calls))
+
+    def test_label_patch_must_retain_identity_and_label_on_fresh_read(self) -> None:
+        self.old_ready()
+        self.upload_download()
+        original = self.github
+        original_draft = copy.deepcopy(self.remote[41])
+
+        for mode, error in (("tag_name", "draft release identity"), ("body", "label was not retained")):
+            with self.subTest(mode=mode):
+                self.remote[41] = copy.deepcopy(original_draft)
+
+                def ignored_field(path: str, method: str = "GET", data: dict | None = None,
+                                  paginate: bool = False) -> dict:
+                    result = original(path, method, data, paginate)
+                    if method == "PATCH":
+                        self.remote[41][mode] = "untagged-d845540d1daa59d6daa1"
+                    return result
+
+                with patch.object(prep, "github", side_effect=ignored_field), \
+                        self.assertRaisesRegex(ValueError, error):
+                    self.ready()
+                self.assertEqual(self.record()["state"], "ready")
+
+    def test_workflows_scope_draft_read_permission_and_signing_secret(self) -> None:
+        publication = (prep.ROOT / ".github/workflows/release-publication.yml").read_text()
+        summary = publication.split("  review-summary:\n", 1)[1].split("  publish-release:\n", 1)[0]
+        self.assertIn("contents: write", summary)
+        self.assertIn("persist-credentials: false", summary)
+        self.assertIn("publish_candidate.py summary", summary)
+        for forbidden in ("environment:", "secrets.", "id-token:", "attestations:"):
+            self.assertNotIn(forbidden, summary)
+        workflow = (prep.ROOT / ".github/workflows/release.yml").read_text()
+        contract = workflow.split("    inputs:", 1)[0]
+        self.assertIn("    secrets:\n      MINISIGN_SECRET_KEY:", contract)
+        self.assertIn("required: false", contract)
+        signer = workflow.split("  stage-and-sign:\n", 1)[1].split("  preparation-failure:\n", 1)[0]
+        self.assertIn("environment: release-build", signer)
+        self.assertIn('test -n "$MINISIGN_SECRET_KEY"', signer)
+        for name in ("release-eligibility.yml", "release-recovery.yml"):
+            caller = (prep.ROOT / ".github/workflows" / name).read_text()
+            self.assertNotIn("secrets: inherit", caller)
+            self.assertIn("uses: ./.github/workflows/release.yml\n    secrets:\n"
+                          "      MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}", caller)
 
     def test_reconcile_rejects_nonready_states_without_mutation(self):
         self.upload_download()
