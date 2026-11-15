@@ -1,154 +1,151 @@
 # Draft-first pipeline validation evidence
 
-## Local implementation
+## Current status
 
-Steps 1–6 of the automated draft-first release pipeline are implemented locally.
-The production pipeline has **not** been activated or validated on hosted runners. See
-[Release Environment Configuration](release-environment.md) for the operator path
-and secure provisioning commands.
+Steps 1–6 are implemented, and Step 7 hosted synthetic lifecycle validation and
+the exact-fix regression are complete. The production rollout in
+[PR #42](https://github.com/transist-ai/transist/pull/42) merged on 2026-11-14 at
+`4482e66cf0632b1fc2f47f5d666232c190e01716`. The first real six-platform
+production draft and its hosted qualification remain **pending**.
 
-The final Step 6 focused checks passed: documentation/skills, 106 candidate tests,
-release invariants (original invocation, no fixture-build flag), supply-chain
-pins, Markdown lint and focused Python lint. Production six-platform compatibility
-is not established by the synthetic archive fixtures.
+The authorized production signing-key verification matched committed public key
+ID `202B06AC561F2B56`. Setup `--apply` passed release-environment,
+signing-key-presence and data-only-state checks. The existing production signing
+secret was preserved. Neither result establishes production hosted signing.
+See [Release Environment Configuration](release-environment.md) for setup and
+review procedures.
 
-## Step 7: initial checkpoint (historical)
+Production `RELEASE_PIPELINE_ENABLED=true` was confirmed after the merge. However,
+the merge API returned HTTP 502 during the rebase operation; a subsequent read
+confirmed the merge, while no Actions run was recorded for its main SHA. At this
+follow-up checkpoint, the Actions workflow registry still lacked the new release
+workflows. This documentation follow-up requires ordinary checked squash merge
+and verification of actual `push` runs on fresh main. A manual dispatch is not
+substitute evidence for that event. No production publication approval is granted
+by this follow-up.
 
-Read-only checks on 2026-11-13 established:
+## Step 7: completed hosted synthetic scenarios
 
-- The authenticated account has admin access to public `transist-ai/transist`
-  (repository ID `1444908011`); its default branch is `main`.
-- `setup_release_pipeline.py --check --repo transist-ai/transist` exited 1:
-  it reported a missing `release-build` signing key. An owner-supplied secure source was
-  required. GitHub secret values cannot be exported; none were requested.
-- The `RELEASE_PIPELINE_ENABLED` variable endpoint returned HTTP 404. Automatic
-  preparation therefore remains disabled by the workflow condition.
-- The designated `transist-ai/transist-release-pipeline-test` repository endpoint
-  returned HTTP 404. No test repository was created or populated.
+The original [hosted harness](https://github.com/transist-ai/transist-release-pipeline-test)
+used synthetic payloads with production validators, real GitHub lifecycle effects,
+signatures, OIDC attestations and designated human deployment approvals.
 
-At that checkpoint, remote pushes and setup mutations were deferred. Subsequent
-authorized setup and hosted harness work supersede those initial blockers as
-recorded below. The configured reviewer must perform hosted approvals; automation
-must not approve or bypass them.
-
-At that checkpoint, all requested hosted scenario outcomes were **not run**: failed eligibility,
-complete private draft, absent pre-approval final tag, supersession, stale approval
-rejection, asset tampering, annotated-tag publication, unchanged public digests,
-interrupted publication recovery, duplicate events and public attestations. There
-were no hosted workflow URLs, candidate IDs, tag targets or before/after digest
-sets to report.
-
-## Hosted synthetic harness follow-up: local production fixes
-
-The separate `transist-ai/transist-release-pipeline-test` harness subsequently
-exercised synthetic assets using production helpers. Its retained `RESULT.md`,
-`SUPERSESSION-RESULT.md`, `B-PUBLICATION-RESULT.md` and `C-READY-RESULT.md` are
-historical evidence, not production release qualification. The local evidence
-directory is `../tmp/release-pipeline-hosted-test/.local/evidence/`.
-
-- Run `43510016968` prepared a draft but its summary GET returned HTTP 403
-  with `contents: read`. Only the summary job now receives `contents: write`;
-  it still runs the read-only summary command without persisted checkout
-  credentials or signing secrets.
-- Run `43509634280` received an empty signing key. The `release-build`
-  environment existed at 21:17:21Z and key metadata at 21:17:24Z, before the
-  failed signing step at 21:20:10Z on 2026-11-13. Both harness revisions bound
-  the signing job to that environment. Commit `f469ff1` changed only the two
-  reusable preparation calls to `secrets: inherit`, and signing then succeeded.
-  The original reusable interface declared no secrets and callers mapped none.
-  This is consistent with a reusable secret-delivery issue, but does not establish
-  GitHub's internal resolution cause or a need to expose every secret. Production declares and
-  maps only `MINISIGN_SECRET_KEY`; the optional call input allows the caller's
-  repository-level value to be absent. The signing job's `release-build`
-  environment supplies the key and takes precedence. Keep repository-level
-  signing secrets absent for new setup; the existing production secret is retained
-  pending separate removal authorization. An empty key fails before creating a
-  key file. The exact narrower mapping subsequently passed the hosted regression
-  below with only an environment secret; this validates the replacement, not the
-  internal cause of the earlier failure.
-- Duplicate eligibility runs `43511955995` and `43511957864` failed predecessor
-  reconciliation after the label PATCH changed A's `tag_name` from its original
-  `candidate-*` identity to `untagged-d845540d1daa59d6daa1`. Label PATCHes now send
-  the original `tag_name` and exact `target_commitish`, then GET and verify both
-  identity and label. An already-aliased predecessor is accepted only in the
-  superseded-label path, by bound numeric release ID, exact source SHA, valid
-  persisted receipt and all 29 downloaded asset bytes. Listing and release
-  identity are reread before repair. Duplicate reconciliation is a no-op after
-  repair; active-candidate and publication identity checks remain strict.
-
-Offline regressions simulate the observed tag rewrite, alias repair, unchanged
-state/receipts/assets, duplicate reconciliation, and rejection of wrong identity,
-inventories and same-size byte tampering. Exact current helper bytes and the
-workflow mapping/permission fixes were exercised in the separate hosted regression
-harness below. The production follow-up remains local pending review.
-
-Focused local validation on the uncommitted fix tree passed: 113 candidate tests,
-the unreduced release-invariant script, supply-chain pins, documentation/skills,
-Actionlint, focused Python correctness lint (`E9,F`) and Markdown lint (183 files,
-zero errors). Logs are in the external project temp folder with prefix
-`release-local-fixes-`. The first invariant invocation timed out during its native
-candidate build; the completed final invocation passed without `--fixture-build`.
-The full aggregate must run unchanged on the final clean follow-up commit; its
-result is separate from these focused checks.
-
-Final follow-up checks passed: 252 tests via discovery of `test_*candidate*.py`,
-documentation/skills validation, supply-chain pins including Actionlint, focused
-Python correctness lint (`E9,F`), and Markdown lint (183 files, zero errors;
-17 linter regression tests). Logs use `release-pipeline-step-7-followup-` in
-`../tmp/`. The subsequent clean-commit aggregate log uses
-`release-pipeline-step-8-followup-readiness.log` and a companion `.exit` file.
-
-## Current setup and exact-fix hosted regression
-
-Local `verify_release_signing_key.sh` verification against the committed public
-key passed for key ID `202B06AC561F2B56`. Authorized production setup `--apply`
-then passed environment, signing-key-presence and data-only-state checks. Evidence:
-`../tmp/release-pipeline-production-key-verification.log` and
-`../tmp/release-pipeline-production-setup-apply.log`. The existing production
-release secret was retained. These results supersede the missing-key/setup
-blocker; they do not establish production hosted signing or activate preparation.
-
-The retained report at
-`../tmp/release-pipeline-hosted-regression/.local/evidence/RESULT.md` records exact
-source hashes in `PRODUCTION-SOURCES.json` and byte-for-byte production helper
-copies. In `transist-ai/transist-release-pipeline-regression-test`, only
-`release-build` held the signing secret; repository secret count was zero.
-
-| Scenario | Hosted run |
+| Scenario | Outcome and hosted evidence |
 | --- | --- |
-| P eligibility: explicit mapping, signing, 29 assets, attestations and summary | `43524662384` |
-| Q missing environment key: fails before key-file creation | `43525225916` |
-| Q recovery: restored environment-only key, explicit mapping, ready and summary | `43525551452` |
-| Repeated completion and reconciliation | `43525976884` |
-| Reproduced legacy alias and repaired via exact production helper | `43526181982` |
-| Repeated reconciliation is idempotent | `43526395869` |
+| Failed eligibility | Intentional [main failure, attempt 2](https://github.com/transist-ai/transist-release-pipeline-test/actions/runs/43509319663/attempts/2) and [security failure, attempt 2](https://github.com/transist-ai/transist-release-pipeline-test/actions/runs/43509319445/attempts/2) left no candidate, release or tag. |
+| Complete private draft, no pre-approval final tag | [A preparation](https://github.com/transist-ai/transist-release-pipeline-test/actions/runs/43510623815) produced 29 assets, seven archive attestations and a ready receipt before human review. |
+| Supersession and stale approval | [B preparation](https://github.com/transist-ai/transist-release-pipeline-test/actions/runs/43511405574) superseded A without changing its assets; A's subsequent human approval correctly failed before publication. |
+| Normal publication | [B publication](https://github.com/transist-ai/transist-release-pipeline-test/actions/runs/43511405574) created an annotated final tag at the exact source SHA and retained all 29 original asset digests. Seven public attestation subjects verified. |
+| Public idempotent recovery | [B recovery](https://github.com/transist-ai/transist-release-pipeline-test/actions/runs/43514262713) required fresh human approval and preserved the receipt, tag object, release ID, asset bytes, IDs and timestamps. |
+| Interrupted publication | [C interruption](https://github.com/transist-ai/transist-release-pipeline-test/actions/runs/43516107824) stopped deterministically after annotated tagging, retaining the reservation and private draft. [Fresh-approved recovery](https://github.com/transist-ai/transist-release-pipeline-test/actions/runs/43521743202) published the original bytes and preserved the original tag object. |
+| Same-name, same-size byte tampering | [D publication attempt](https://github.com/transist-ai/transist-release-pipeline-test/actions/runs/43522556483) rejected a one-byte archive change by digest before final tagging or publication. Its intentionally corrupted private draft and reservation were retained as evidence. |
 
-Run URLs use `https://github.com/transist-ai/transist-release-pipeline-regression-test/actions/runs/`
-followed by the run ID. P release ID is `444830300`; Q release ID is `444834497`.
-P and Q attestations (`67385059`, `67386761`) each cover seven archives and passed
-production signer/source verification. All 29 predecessor asset bytes matched
-the receipt before and after repair. State, receipts and asset identities remained
-unchanged; browser URL slug rotation and download counter changes are recorded.
+Original manifest SHA-256 identities:
 
-All requested **pre-approval regressions passed**. Q remains awaiting the designated
-human reviewer in `release-publish`, with admin bypass disabled. Q publication and
-post-publication validation are **pending**, not passed; no final tags or public
-releases were created in this regression harness. Synthetic assets do not qualify
-production six-platform binaries.
+| Candidate ID | Manifest SHA-256 |
+| --- | --- |
+| `7abfb3cb30b6e632cff1f33d2017501bc7974b2a-43510623815-1` (A) | `96b6f603fc4ccb6b9c2cafb9bd4f37975e24a5e573d1208954591c97bc0b5775` |
+| `01652bfe40d01d1eed7069d513ac4ea1371ce0e8-43511405574-1` (B) | `ab0491a1018b7aa8b79eaa7bedbb90262eb46fe317314fabf38aa41cb14f23a0` |
+| `b7076d257f64fa6606189fae2d527b9d00b5ea6b-43516107824-1` (C) | `1fe9d82b325a2b84a33b3e6098910e13341c84e5734fcbf7d3e9647c59d2bd7b` |
+| `a6fb8819ccb6c7c5217bba563df2c5a4d67925c8-43522556483-1` (D) | `4ad275c3952d0c2e6fabea3f2c663b6f8eb3467731706413d0d4c87f4556506b` |
 
-## Step 8: pending
+The original duplicate completion preserved candidate count, state and assets but
+exposed a predecessor-label reconciliation failure. That finding, signing-secret
+delivery and draft-summary permissions were corrected and validated by the
+separate exact-fix regression below.
 
-The initial full gate at Step 6 commit `64bf1c3` failed at maintainability after
-passing format, Clippy, Rustdoc, 2,227 default-feature tests, 2,241 all-feature
-tests and 222 security regression tests. The identity checker detected hardcoded
-synthetic release versions in a new signed-payload fixture. That fixture now
-derives its version and archive names from `Cargo.toml`; the identity checker
-(18 tests) and candidate suite (106 tests) pass. The checker was not weakened.
+### Hosted findings and implemented fixes
 
-Run the aggregate on the committed follow-up tree and record its outcome alongside
-the origin plan. Logs use the `release-pipeline-step-8-` prefix in the specified
-external temp folder. A passed local gate does not establish hosted production readiness.
+- **Signing delivery:** the first reusable preparation received an empty key.
+  Production now declares/maps only `MINISIGN_SECRET_KEY`; the signing job binds
+  `release-build`, whose environment secret takes precedence. An empty value
+  fails before key-file creation. The regression passed with zero repository
+  secrets and only the environment key. This validates the narrower mapping,
+  without claiming GitHub's internal cause of the original failure.
+- **Draft summary:** draft GET returned HTTP 403 with `contents: read`.
+  Only the summary job receives `contents: write`; it runs a read-only summary
+  command without signing secrets or persisted checkout credentials.
+- **Superseded identity:** a label-only PATCH caused GitHub to rewrite an
+  untagged draft's tag. Label updates now preserve the original tag and exact
+  source explicitly, then reread both. Legacy alias repair is restricted to
+  superseded predecessors and authenticates numeric release ID, exact source,
+  persisted receipt and all 29 downloaded asset bytes before rereading and repair.
+  Active/publication identity checks remain strict.
 
-The full local aggregate and first real six-platform candidate are required before
-completion. Enabling the variable is deferred until review, merge and successful
-Step 7 validation. Stop before approving any production publication.
+## Exact-fix regression: Q publication succeeded
+
+The separate [regression harness](https://github.com/transist-ai/transist-release-pipeline-regression-test)
+copied the production helpers byte-for-byte. Final comparison verified all 236
+copied production input hashes and four workflow-source hashes against integration
+commit `7c0d2cb055a1232a30cc6c76a1229a7b0cd290e0`. The capture manifest's earlier
+base label reflects then-uncommitted fixes; byte hashes establish equivalence.
+
+| Scenario | Hosted evidence |
+| --- | --- |
+| P explicit mapping, signing, 29 assets, attestations and summary | [43524662384](https://github.com/transist-ai/transist-release-pipeline-regression-test/actions/runs/43524662384); canceled only after successful preparation and supersession to free the publication slot. |
+| Q missing environment key | [43525225916](https://github.com/transist-ai/transist-release-pipeline-regression-test/actions/runs/43525225916); expected failure before key-file creation, no release. |
+| Q restored environment-only key, ready summary and approved publication | [43525551452](https://github.com/transist-ai/transist-release-pipeline-regression-test/actions/runs/43525551452); completed **successfully**. |
+| Repeated completion and reconciliation | [43525976884](https://github.com/transist-ai/transist-release-pipeline-regression-test/actions/runs/43525976884); passed. |
+| Reproduced legacy alias and exact-helper repair | [43526181982](https://github.com/transist-ai/transist-release-pipeline-regression-test/actions/runs/43526181982); passed. |
+| Idempotent repeated reconciliation | [43526395869](https://github.com/transist-ai/transist-release-pipeline-regression-test/actions/runs/43526395869); passed. |
+
+P release ID is `444830300`. Q candidate is
+`0b495396f41384da364c3c38fb9d78d2458d03b2-43525551452-1`, public release ID
+`444834497` ([v0.0.3](https://github.com/transist-ai/transist-release-pipeline-regression-test/releases/tag/v0.0.3)).
+Q's manifest SHA-256 is
+`563056243f8231c48d9e499d39e00e0d0d0ebe70b0087ea3703b4feba2cf0798`.
+
+Fresh post-publication downloads matched all 29 receipt-bound sizes and hashes;
+Q's receipt and identity remained identical to the ready snapshot. Annotated tag
+object `2730a9de5a2baa36ee58a8f182cb971ab16a3437` targets exact source
+`0b495396f41384da364c3c38fb9d78d2458d03b2`. All seven public archive subjects passed
+`gh attestation verify` with exact signer workflow, source ref/digest, signer
+digest and hosted-runner restriction
+([Q attestation](https://github.com/transist-ai/transist-release-pipeline-regression-test/attestations/67386761)).
+
+All 29 predecessor assets matched before and after alias repair. State, receipts
+and asset identities remained unchanged; draft browser slug rotation and download
+counter increments were recorded. Human approvals used `release-publish` with
+admin bypass disabled. Earlier reports saying Q publication was pending are
+superseded by this final verification.
+
+## Step 8: local integration evidence and production boundary
+
+The initial Step 6 aggregate exposed hardcoded synthetic versions in a signed
+fixture. The fixture now derives version/archive names from `Cargo.toml`; the
+identity checker was not weakened. Final focused checks passed: 252
+candidate-pattern tests, documentation/skills, supply-chain/Actionlint, Python
+correctness lint and Markdown lint (183 files, zero errors; 17 linter regressions).
+
+The unchanged full release-readiness aggregate passed all 28 host-local checks
+on committed integration SHA `7c0d2cb055a1232a30cc6c76a1229a7b0cd290e0`, exit 0:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 TMPDIR=<project-tmp> bash scripts/ci/check_release_readiness.sh
+```
+
+The first final-integration attempt timed out in the cleanup E2E wait after
+stages 1–26 passed. The isolated cleanup rerun and subsequent entire aggregate
+passed without source changes or timeout weakening. Retained log basenames are
+`release-pipeline-final-cutover-readiness.log`,
+`release-pipeline-final-cutover-cleanup-diagnostic.log` and
+`release-pipeline-final-cutover-readiness-retry.log`, with aggregate exit files.
+This docs follow-up requires its own unchanged aggregate on the final committed
+tree; record that SHA and outcome in its PR before merge.
+
+Both harness snapshots, receipt/digest comparisons, source manifest and local
+aggregate logs are retained in `release-pipeline-both-harnesses-evidence.tar.gz`.
+Its verified SHA-256 is
+`25fa6ada816f3db831b066f0e4a352755231360742a63483130714abec6798b1`.
+The export excludes the harness private-key directory. Private filesystem paths
+and key locations are intentionally omitted here.
+
+Hosted lifecycle completion uses **synthetic archives**, not native six-platform
+builds or production compatibility qualification. C covers a deterministic
+after-tag fail-stop, not every outage boundary; D covers byte corruption, not
+every inventory-tamper alternative. The first real production draft still needs
+exact-SHA mainline/security success, aggregate readiness and native archive
+checks. Stop before production publication approval. To disable automatic
+preparation, set `RELEASE_PIPELINE_ENABLED=false`; preserve durable state,
+receipts and immutable tags/assets. Reserved recovery requires fresh human
+approval rather than rebuilding.
