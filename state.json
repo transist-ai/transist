@@ -15,7 +15,7 @@
         "workflow": "release-eligibility.yml"
       },
       "receipt": null,
-      "release_id": null,
+      "release_id": 445857274,
       "state": "preparing"
     }
   },
