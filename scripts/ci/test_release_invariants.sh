@@ -1180,6 +1180,11 @@ fi
 
 # ---------------------------------------------------------------------------
 echo "--- Test 29: required gates aggregate every required job result ---"
+if python3 scripts/ci/test_candidate_worktree.py; then
+  record_pass "candidate worktree and readiness bytecode regressions pass"
+else
+  record_fail "candidate worktree or readiness bytecode regression failed"
+fi
 if python3 scripts/ci/test_ci_contracts.py; then
   record_pass "focused CI DAG, gate wiring, and actual evaluator contracts pass"
 else

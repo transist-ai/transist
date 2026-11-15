@@ -41,6 +41,8 @@ jobs:
       contents: read
     container:
       image: rust:1.88.0-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0
+      env:
+        PYTHONDONTWRITEBYTECODE: '1'
       options: --cap-add=SYS_ADMIN --cap-add=NET_ADMIN --security-opt apparmor=unconfined --security-opt seccomp=unconfined
     steps:
       - name: Checkout exact candidate
