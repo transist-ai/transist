@@ -14,9 +14,151 @@
         "version": "0.1.2",
         "workflow": "release-eligibility.yml"
       },
-      "receipt": null,
+      "receipt": {
+        "assets": {
+          "build-provenance-aarch64-apple-darwin.json": {
+            "sha256": "ab0afaf3ccf3e1b269fa4e89e078a849fb79199794843afd81f2fc28daf31901",
+            "size": 1152
+          },
+          "build-provenance-aarch64-unknown-linux-gnu.json": {
+            "sha256": "bc550dacceb9e206c5a71698ca09057a1bfa6c61c55f8bf24680891f680cadac",
+            "size": 1200
+          },
+          "build-provenance-aarch64-unknown-linux-musl.json": {
+            "sha256": "dddcde92e4cce5d42764be8dd4cf9d65efbba1ae53a20b94b3e79bc88fc34e8a",
+            "size": 1201
+          },
+          "build-provenance-x86_64-apple-darwin.json": {
+            "sha256": "05766267467b0de9b79b1077e96facb8855fa61f1c7c66f16b5f49eca69e3353",
+            "size": 1148
+          },
+          "build-provenance-x86_64-unknown-linux-gnu.json": {
+            "sha256": "24d96caea4c183827eeeaaf9891d1cb96885e00e43ba001279edbbdd11692fe8",
+            "size": 1193
+          },
+          "build-provenance-x86_64-unknown-linux-musl.json": {
+            "sha256": "2f9503d5a1cf769e79238d1f0396d298af7d68d061982c47d5112e21276fd077",
+            "size": 1228
+          },
+          "packaging-provenance.json": {
+            "sha256": "92adcc4943c0c91ebc92b928272bb43cacd2b0edcd110b704d0f778a420dab54",
+            "size": 502
+          },
+          "release-manifest.txt": {
+            "sha256": "c8d5331f2cb04f6eb59333bb2b4162bdb3d2cc032806027c52631ca18708a5cf",
+            "size": 3082
+          },
+          "release-manifest.txt.minisig": {
+            "sha256": "702012b58aab13adfd3f3a56a03b1012091f48c68892d42669296ccfd55a259a",
+            "size": 315
+          },
+          "transist-release.minisign.pub": {
+            "sha256": "03469b5df5ebff2368e5333f1eaac0e09e10dd201e82929b3763bb0b925c1dcc",
+            "size": 113
+          },
+          "transist-v0.1.2-aarch64-apple-darwin.tar.gz": {
+            "sha256": "a3bd25f447c5e643f793c5b17d1e5110e3c5e92f26b7fe24e25070be6fa9f01a",
+            "size": 14864125
+          },
+          "transist-v0.1.2-aarch64-apple-darwin.tar.gz.minisig": {
+            "sha256": "3b8b39629094cf46aaddc1d77f15e2eedd8a79beddc8ac7f8751d10636d6409f",
+            "size": 338
+          },
+          "transist-v0.1.2-aarch64-apple-darwin.tar.gz.sha256": {
+            "sha256": "33cdb8c6eac6d7244329ca8981e4e6e1575eee68e8680a1c15cc6445d2582efe",
+            "size": 110
+          },
+          "transist-v0.1.2-aarch64-unknown-linux-gnu.tar.gz": {
+            "sha256": "a0da889d775508bfd29123ed848e1db592a57e252d099c25cff1bb40a7a30635",
+            "size": 15469273
+          },
+          "transist-v0.1.2-aarch64-unknown-linux-gnu.tar.gz.minisig": {
+            "sha256": "326e97c91d0947ec504317ea04f5c7e84c18084a0564360cd02f02b94b741d59",
+            "size": 343
+          },
+          "transist-v0.1.2-aarch64-unknown-linux-gnu.tar.gz.sha256": {
+            "sha256": "2be809b5c606b78b24e299cdf7039a65369e2a96acf99531ba5bbfbead592494",
+            "size": 115
+          },
+          "transist-v0.1.2-aarch64-unknown-linux-musl.tar.gz": {
+            "sha256": "7ad20d493ddeac14fde27c4bec65498dfe8053c7165cdde21eb1bd42085548d4",
+            "size": 15407915
+          },
+          "transist-v0.1.2-aarch64-unknown-linux-musl.tar.gz.minisig": {
+            "sha256": "3b215dd210af932b7e40e7cb17034af02749c0ad511f3250429c71a7b9fdbf9c",
+            "size": 344
+          },
+          "transist-v0.1.2-aarch64-unknown-linux-musl.tar.gz.sha256": {
+            "sha256": "01108d30a909cdc91874c9286e73e75566e5ef6fdf0c3acf0142004237d23d57",
+            "size": 116
+          },
+          "transist-v0.1.2-sbom.tar.gz": {
+            "sha256": "53fd2398685883b1d63e2ebea4f1ca6e241f2868d3946fe2eb6204eaa5230704",
+            "size": 30462
+          },
+          "transist-v0.1.2-x86_64-apple-darwin.tar.gz": {
+            "sha256": "ebcbcb98dfaef9bb7ceebb77f96773f6eea50130074b8a05853ad1db2a77f457",
+            "size": 16324866
+          },
+          "transist-v0.1.2-x86_64-apple-darwin.tar.gz.minisig": {
+            "sha256": "122daa21176844e0aeee58227761492c67dcbcee23d0adb09c5b3a4d07068e7a",
+            "size": 337
+          },
+          "transist-v0.1.2-x86_64-apple-darwin.tar.gz.sha256": {
+            "sha256": "c51db5dfe3a891c9305e62bf1168936bf77f109bbdbb040761ff6f13a0e67330",
+            "size": 109
+          },
+          "transist-v0.1.2-x86_64-unknown-linux-gnu.tar.gz": {
+            "sha256": "9f5ce8bc6e32076364344749a225702a9e7532479575995da412b2211839167d",
+            "size": 17028926
+          },
+          "transist-v0.1.2-x86_64-unknown-linux-gnu.tar.gz.minisig": {
+            "sha256": "318890862f2c6f5cbb747171ed635526f04da296bd018923d2710e0bc6be2da8",
+            "size": 342
+          },
+          "transist-v0.1.2-x86_64-unknown-linux-gnu.tar.gz.sha256": {
+            "sha256": "808200ec9236a1584a1219e43c594d4450cf202e045e3068d6622b2a39837d2e",
+            "size": 114
+          },
+          "transist-v0.1.2-x86_64-unknown-linux-musl.tar.gz": {
+            "sha256": "e1c6678d671d0b25300a85e1e1fc6d1e0590bcc0b78004f2d7bdb12d9711a127",
+            "size": 17250834
+          },
+          "transist-v0.1.2-x86_64-unknown-linux-musl.tar.gz.minisig": {
+            "sha256": "e6ad94367a5ffa6cdb3280ff9e3c107daf099bae6ffae4be8d3cb4ee2e0f9997",
+            "size": 343
+          },
+          "transist-v0.1.2-x86_64-unknown-linux-musl.tar.gz.sha256": {
+            "sha256": "c6cd4db677d8dd2799eb05c06dd3cf7ed8a818a14837b0ab1bd4b90d72a337ad",
+            "size": 115
+          }
+        },
+        "attestations": [
+          "{\"bundle_sha256\": \"c29326983da6f73bd3e8d8f0d7c656882202150c4e868ab45a7cc7da326515bd\", \"source_sha\": \"354bc6e7d9830679f2cb8a76a3c1c8024968b811\", \"subjects\": {\"transist-v0.1.2-aarch64-apple-darwin.tar.gz\": {\"sha256\": \"a3bd25f447c5e643f793c5b17d1e5110e3c5e92f26b7fe24e25070be6fa9f01a\"}, \"transist-v0.1.2-aarch64-unknown-linux-gnu.tar.gz\": {\"sha256\": \"a0da889d775508bfd29123ed848e1db592a57e252d099c25cff1bb40a7a30635\"}, \"transist-v0.1.2-aarch64-unknown-linux-musl.tar.gz\": {\"sha256\": \"7ad20d493ddeac14fde27c4bec65498dfe8053c7165cdde21eb1bd42085548d4\"}, \"transist-v0.1.2-sbom.tar.gz\": {\"sha256\": \"53fd2398685883b1d63e2ebea4f1ca6e241f2868d3946fe2eb6204eaa5230704\"}, \"transist-v0.1.2-x86_64-apple-darwin.tar.gz\": {\"sha256\": \"ebcbcb98dfaef9bb7ceebb77f96773f6eea50130074b8a05853ad1db2a77f457\"}, \"transist-v0.1.2-x86_64-unknown-linux-gnu.tar.gz\": {\"sha256\": \"9f5ce8bc6e32076364344749a225702a9e7532479575995da412b2211839167d\"}, \"transist-v0.1.2-x86_64-unknown-linux-musl.tar.gz\": {\"sha256\": \"e1c6678d671d0b25300a85e1e1fc6d1e0590bcc0b78004f2d7bdb12d9711a127\"}}, \"workflow_sha\": \"354bc6e7d9830679f2cb8a76a3c1c8024968b811\"}"
+        ],
+        "check_run_ids": [
+          132699088617,
+          132699218596
+        ],
+        "identity": {
+          "attempt": 2,
+          "candidate_id": "354bc6e7d9830679f2cb8a76a3c1c8024968b811-43677002451-2",
+          "draft_tag": "candidate-354bc6e7d9830679f2cb8a76a3c1c8024968b811-43677002451-2",
+          "draft_title": "v0.1.2 candidate 354bc6e",
+          "final_tag": "v0.1.2",
+          "repository_id": 1444908011,
+          "run_id": 43677002451,
+          "source_sha": "354bc6e7d9830679f2cb8a76a3c1c8024968b811",
+          "tree_sha": "f0fe0334e54f738cbf553fe98e6212313d036528",
+          "version": "0.1.2",
+          "workflow": "release-eligibility.yml"
+        },
+        "manifest_digest": "c8d5331f2cb04f6eb59333bb2b4162bdb3d2cc032806027c52631ca18708a5cf",
+        "release_id": 445857274,
+        "supersedes": null
+      },
       "release_id": 445857274,
-      "state": "preparing"
+      "state": "ready"
     }
   },
   "repository_id": 1444908011
