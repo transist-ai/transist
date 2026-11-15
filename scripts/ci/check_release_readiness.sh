@@ -39,6 +39,9 @@
 
 set -euo pipefail
 
+# Child checks import Python fixtures; bytecode must not dirty the candidate.
+export PYTHONDONTWRITEBYTECODE=1
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 

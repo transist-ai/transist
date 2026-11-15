@@ -4,6 +4,7 @@
 
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -104,6 +105,40 @@ class CandidateWorktree(unittest.TestCase):
         result = self.check()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("PASS", result.stdout)
+
+    def test_readiness_exports_bytecode_guard_before_child_checks(self) -> None:
+        """The native gate disables cache writes before any Python or test command."""
+        gate = SCRIPT.with_name("check_release_readiness.sh").read_text()
+        startup = gate.split('ROOT_DIR=', 1)[0]
+        self.assertEqual(
+            [line for line in startup.splitlines() if line and not line.startswith("#")],
+            ["set -euo pipefail", "export PYTHONDONTWRITEBYTECODE=1"],
+        )
+        self.write("fixture_module.py", "value = 1\n")
+        self.git("add", "fixture_module.py")
+        self.git("commit", "-q", "-m", "Python import fixture")
+        env = self.env.copy()
+        env.pop("PYTHONDONTWRITEBYTECODE", None)
+        result = subprocess.run(
+            ["bash", "-c", startup + "\npython3 -c 'import fixture_module'"],
+            cwd=self.root, env=env, text=True, capture_output=True, timeout=10,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((self.root / "__pycache__").exists())
+        self.assertEqual(self.check().returncode, 0)
+
+    def test_hosted_readiness_containers_disable_bytecode(self) -> None:
+        """Automatic and recovery aggregate invocations inherit container protection."""
+        root = SCRIPT.parents[2]
+        for name in ("release-eligibility.yml", "release-recovery.yml"):
+            with self.subTest(workflow=name):
+                workflow = (root / ".github/workflows" / name).read_text()
+                # Bound the job at the next two-space job key, not nested fields.
+                readiness = re.split(r"\n  [a-z][a-z-]*:\n", workflow.split("  readiness:\n", 1)[1])[0]
+                self.assertIn("      env:\n        PYTHONDONTWRITEBYTECODE: '1'\n", readiness)
+                self.assertLess(readiness.index("PYTHONDONTWRITEBYTECODE:"), readiness.index("    steps:"))
+                self.assertEqual(workflow.count("bash scripts/ci/check_release_readiness.sh"), 1)
+                self.assertIn("run: bash scripts/ci/check_release_readiness.sh", readiness)
 
     def test_each_generated_ignored_tree_passes(self) -> None:
         """Markdown and Redocly each pass alone, and together, as ignored trees."""
