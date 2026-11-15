@@ -1,4 +1,23 @@
 {
-  "repository_id": 1444908011,
-  "candidates": {}
+  "candidates": {
+    "354bc6e7d9830679f2cb8a76a3c1c8024968b811-43677002451-2": {
+      "identity": {
+        "attempt": 2,
+        "candidate_id": "354bc6e7d9830679f2cb8a76a3c1c8024968b811-43677002451-2",
+        "draft_tag": "candidate-354bc6e7d9830679f2cb8a76a3c1c8024968b811-43677002451-2",
+        "draft_title": "v0.1.2 candidate 354bc6e",
+        "final_tag": "v0.1.2",
+        "repository_id": 1444908011,
+        "run_id": 43677002451,
+        "source_sha": "354bc6e7d9830679f2cb8a76a3c1c8024968b811",
+        "tree_sha": "f0fe0334e54f738cbf553fe98e6212313d036528",
+        "version": "0.1.2",
+        "workflow": "release-eligibility.yml"
+      },
+      "receipt": null,
+      "release_id": null,
+      "state": "preparing"
+    }
+  },
+  "repository_id": 1444908011
 }
