@@ -25,6 +25,7 @@ from urllib.parse import quote
 
 import candidate_assets as assets
 import release_candidates as rc
+import release_metadata
 import verify_candidate_policy as policy
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -314,6 +315,17 @@ class Preparation:
         policy.verify_gates(record["identity"]["source_sha"], require_push=True, check_run_ids=checks)
         self.check_snapshot(record, snapshot)
         assets.verify_downloads(directory, listing, digests)
+        self.verify_checkout(record)
+        metadata = release_metadata.render(self.root, self.repository, record["identity"]["version"])
+        # Ready drafts already show the exact final public text. Preserve draft
+        # identity explicitly: GitHub can otherwise rewrite an untagged slug.
+        if any(self.release(record).get(key) != val for key, val in metadata.items()):
+            github(f"{self.endpoint}/{record['release_id']}", "PATCH", {
+                **metadata, "tag_name": record["identity"]["draft_tag"],
+                "target_commitish": record["identity"]["source_sha"],
+                "draft": True, "make_latest": "false"})
+        if any(self.release(record).get(key) != val for key, val in metadata.items()):
+            raise ValueError("ready release metadata was not retained")
         value, _ = self.state.api.read()
         self.state._validate_state(value)
         if record["state"] == "ready":

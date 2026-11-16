@@ -1,5 +1,24 @@
 # Release Environment Configuration
 
+## Public release text
+
+Ready drafts already contain the final public title and release notes. Preparation
+reads the versioned `docs/public/releases/<version>.md` and that version's
+`CHANGELOG.md` heading from the verified candidate checkout. Relative documentation
+links become final-tag-pinned GitHub links. Missing or mismatched notes block
+readiness; preparation placeholders are not public release notes.
+
+The preapproval job checks out the exact candidate and displays this final text
+alongside its verification evidence. Publication rejects draft text that differs
+from those source files, explicitly sets the final title/body, and verifies both
+after publication. A lost-response recovery authenticates the same text before
+recording a newly published effect. Recovery of an already-recorded published
+release preserves later maintainer edits to its title and notes.
+
+Maintainers may correct public title/description errors without changing release
+tags, assets, signatures or receipts. Verify all asset IDs, digests, sizes and
+timestamps remain unchanged after such a metadata-only correction.
+
 This document describes the draft-first release lifecycle and the live rules
 that protect preparation and publication. Automatic eligibility remains disabled
 unless `RELEASE_PIPELINE_ENABLED=true`; provisioning and hosted lifecycle

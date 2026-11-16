@@ -28,11 +28,19 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
+      - name: Checkout exact candidate release notes
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_sha }}
+          path: candidate-source
+          fetch-depth: 0
+          persist-credentials: false
       - name: Show candidate evidence before approval
+        # The notes come from the built candidate, never the orchestration SHA.
         env:
           GH_TOKEN: ${{ github.token }}
           CANDIDATE_ID: ${{ inputs.candidate_id }}
-        run: python3 scripts/ci/publish_candidate.py summary --candidate-id "$CANDIDATE_ID"
+        run: python3 scripts/ci/publish_candidate.py summary --candidate-id "$CANDIDATE_ID" --source-directory candidate-source
 
   publish-release:
     needs: review-summary

@@ -58,6 +58,10 @@ class PreparationTests(unittest.TestCase):
         self.ident = rc.identity(10, "1.2.3", "a" * 40, "f" * 40,
                                  ".github/workflows/release-eligibility.yml", 20, 1)
         (self.root / "Cargo.toml").write_text('[workspace.package]\nversion = "1.2.3"\n')
+        (self.root / "CHANGELOG.md").write_text("## [1.2.3]\n")
+        notes = self.root / "docs/public/releases/1.2.3.md"
+        notes.parent.mkdir(parents=True)
+        notes.write_text(f"# Transist {self.ident['version']}\n\nFixture release fixes.\n")
         self.api = MemoryState()
         self.state = rc.Candidates(self.api, 10)
         self.state.claim(self.ident)
@@ -118,6 +122,8 @@ class PreparationTests(unittest.TestCase):
         return copy.deepcopy(self.remote[rid])
 
     def check_output(self, command, **kwargs):
+        if command[:2] == ["git", "show"]:
+            return (self.root / command[2].removeprefix("HEAD:")).read_text()
         if command[:2] == ["git", "rev-parse"]:
             return (self.ident["source_sha"] if command[2] == "HEAD" else self.ident["tree_sha"]) + "\n"
         self.assertEqual(command[:2], ["gh", "api"])
@@ -520,7 +526,7 @@ class PreparationTests(unittest.TestCase):
         original = self.github
 
         def fail_label(path, method="GET", data=None, paginate=False):
-            if method == "PATCH":
+            if method == "PATCH" and path.endswith("/41"):
                 raise OSError("label endpoint unavailable")
             return original(path, method, data, paginate)
 
@@ -535,7 +541,7 @@ class PreparationTests(unittest.TestCase):
         self.ready(bundle)
         self.assertEqual(self.record()["receipt"], receipt)
         self.assertEqual(self.remote[41]["body"].count("This candidate is superseded"), 1)
-        writes = [c for c in self.calls if len(c) == 4 and c[1] == "PATCH"]
+        writes = [c for c in self.calls if len(c) == 4 and c[1] == "PATCH" and c[0].endswith("/41")]
         self.assertEqual(len(writes), 1)
 
     def test_label_response_loss_is_idempotent(self):
@@ -545,7 +551,7 @@ class PreparationTests(unittest.TestCase):
 
         def lost_response(path, method="GET", data=None, paginate=False):
             value = original(path, method, data, paginate)
-            if method == "PATCH":
+            if method == "PATCH" and path.endswith("/41"):
                 raise OSError("label response lost")
             return value
 
@@ -554,7 +560,7 @@ class PreparationTests(unittest.TestCase):
                 self.ready()
         self.ready()
         self.assertEqual(self.remote[41]["body"].count("This candidate is superseded"), 1)
-        self.assertEqual(len([c for c in self.calls if len(c) == 4 and c[1] == "PATCH"]), 1)
+        self.assertEqual(len([c for c in self.calls if len(c) == 4 and c[1] == "PATCH" and c[0].endswith("/41")]), 1)
 
     def test_historical_missing_draft_is_not_read_or_relabelled(self):
         old, evidence = self.old_ready()
@@ -623,7 +629,7 @@ class PreparationTests(unittest.TestCase):
         original = self.github
 
         def unavailable(path, method="GET", data=None, paginate=False):
-            if method == "PATCH":
+            if method == "PATCH" and path.endswith("/41"):
                 raise OSError("label unavailable")
             return original(path, method, data, paginate)
 
@@ -650,7 +656,7 @@ class PreparationTests(unittest.TestCase):
         self.assertEqual(self.api.read(), (before, revision))
         self.assertEqual(self.blobs, blobs)
         self.assertFalse(self.helper.snapshot_path.exists())
-        patches = [call for call in self.calls if len(call) == 4 and call[1] == "PATCH"]
+        patches = [call for call in self.calls if len(call) == 4 and call[1] == "PATCH" and call[0].endswith("/41")]
         self.assertEqual(len(patches), 1)
         self.assertEqual(patches[0][0], "repos/owner/repo/releases/41")
         self.assertEqual(set(patches[0][2]), {"name", "body", "draft", "make_latest", "tag_name", "target_commitish"})
@@ -777,7 +783,7 @@ class PreparationTests(unittest.TestCase):
                 def ignored_field(path: str, method: str = "GET", data: dict | None = None,
                                   paginate: bool = False) -> dict:
                     result = original(path, method, data, paginate)
-                    if method == "PATCH":
+                    if method == "PATCH" and path.endswith("/41"):
                         self.remote[41][mode] = "untagged-d845540d1daa59d6daa1"
                     return result
 
