@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { micromark } from "micromark";
 import { math, mathHtml } from "micromark-extension-math";
+import { getVersion } from "markdownlint";
 import katex from "katex";
 import { lintMarkdown } from "./lint.mjs";
 
@@ -193,7 +194,7 @@ test("patched KaTeX retains math tokenization and the extension's HTML API", asy
 
 test("CLI exits distinguish success, rule failures, invalid config and pin mismatch", async (t) => {
   const root = await fixture(t, { "README.md": valid });
-  const run = (version = "0.42.0") =>
+  const run = (version = getVersion()) =>
     spawnSync(process.execPath, [runner, version], {
       cwd: root,
       encoding: "utf8",
