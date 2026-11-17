@@ -45,6 +45,32 @@ include changes affecting:
 Maintainers should be able to reject a proposal before implementation work
 begins, reducing wasted contributor effort and review cost.
 
+## Branch History, Squash Merges, And DCO
+
+The importable [ruleset templates](../../.github/rulesets/) mirror the live
+repository rules. They contain editable configuration only, not GitHub-generated
+IDs or timestamps. Changing a template does not apply it to GitHub automatically.
+
+- `main-branch-protection.json` requires PRs, successful `pr-gate` checks against
+  the current base, resolved conversations, and linear history. It blocks deletion
+  and force pushes and allows only squash merges.
+- `linear-pr-branches.json` requires linear history on all other branches without
+  blocking rebase force pushes. Update PR branches by rebasing, not by merging
+  `main` into them. Preserve sign-offs and use an explicitly authorized
+  `--force-with-lease` push for rewritten history.
+- `main-dco-signoff.json` requires a correctly formatted `Signed-off-by` line in
+  commit messages entering `main`. This is a presence check, not cryptographic
+  signing or proof that every contributor's attestation was retained. Inspect the
+  final squash message and preserve all required sign-offs before merging.
+- `v-tag-protection.json` keeps version tags immutable. No template grants bypass
+  permissions.
+
+The [repository settings snapshot](../../.github/repository-settings.json) is
+separate from rulesets: allow only squash merging,
+retain commit details in the default squash message, and require sign-offs for
+web-based commits. When adapting these templates to another repository, require
+that repository's actual CI gates instead of copying the `pr-gate` name blindly.
+
 ## CI Tiers And Their Cost / Security Boundaries
 
 CI is split into several cost/trust tiers. Each tier has a clearly defined
