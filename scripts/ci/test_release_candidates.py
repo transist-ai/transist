@@ -14,6 +14,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import release_candidates as rc
+from test_release_metadata import ReleaseMetadataTests  # noqa: F401
 import candidate_assets
 import release_eligibility as eligibility
 import verify_candidate_policy as policy

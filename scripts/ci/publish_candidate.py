@@ -17,6 +17,7 @@ from typing import Any
 import candidate_assets as assets
 import prepare_candidate as prep
 import release_candidates as rc
+import release_metadata
 import verify_candidate_policy as policy
 import verify_release_refs as refs
 
@@ -54,6 +55,10 @@ class Publication(prep.Preparation):
         record = self.record(candidate_id)
         value = self.release(record)
         ident, receipt = record["identity"], record["receipt"]
+        self.verify_checkout(record)
+        metadata = release_metadata.render(self.root, self.repository, ident["version"])
+        if value["draft"] and any(value.get(k) != v for k, v in metadata.items()):
+            raise ValueError("draft metadata differs from exact-source release notes")
         url = value.get("html_url", "")
         if not re.fullmatch(r"https://github\.com/" + re.escape(self.repository) + r"/releases/[A-Za-z0-9_./+-]+", url):
             raise ValueError("invalid candidate draft URL")
@@ -66,7 +71,8 @@ class Publication(prep.Preparation):
                          f"Preparation: verified 29 assets, signatures, source provenance, seven archive attestations, "
                          f"six native archive smoke jobs and aggregate readiness.\n\n"
                          f"[Preparation run](https://github.com/{self.repository}/actions/runs/{ident['run_id']}/attempts/{ident['attempt']})\n\n"
-                         f"Recorded gate check IDs: `{receipt['check_run_ids']}`. State: `{record['state']}`.\n")
+                          f"Recorded gate check IDs: `{receipt['check_run_ids']}`. State: `{record['state']}`.\n\n"
+                          f"## Final public release text\n\n### {metadata['name']}\n\n{metadata['body']}\n")
 
     def revalidate(self, record: dict[str, Any]) -> None:
         """Recheck receipt and mutable eligibility before new public effects."""
@@ -177,9 +183,16 @@ class Publication(prep.Preparation):
         was_draft = self.release(record)["draft"]
         if was_draft:
             self.revalidate(record)
+            metadata = release_metadata.render(self.root, self.repository, record["identity"]["version"])
+            if any(self.release(record).get(k) != v for k, v in metadata.items()):
+                raise ValueError("draft metadata differs from exact-source release notes")
             self.state.reserve(candidate_id, record["receipt"])
         else:
             self.authenticate_receipt(record)
+            if record["state"] == "publishing":
+                metadata = release_metadata.render(self.root, self.repository, record["identity"]["version"])
+                if any(self.release(record).get(k) != v for k, v in metadata.items()):
+                    raise ValueError("published release metadata mismatch")
         record = self.record(candidate_id, "publishing", "published")
         with tempfile.TemporaryDirectory(prefix="candidate-publication-") as temp:
             listing = self.download_verified(record, Path(temp))
@@ -201,11 +214,15 @@ class Publication(prep.Preparation):
                 # Recheck checks/policies immediately before the irreversible effect.
                 self.revalidate(record)
                 prep.github(f"{self.endpoint}/{record['release_id']}", "PATCH", {
+                    **metadata, "tag_name": record["identity"]["final_tag"],
+                    "target_commitish": record["identity"]["source_sha"],
                     "draft": False, "prerelease": False, "make_latest": "true"})
             self.final_tag(record)
             self.check_assets(record, listing)
             if self.release(record)["draft"] is not False:
                 raise ValueError("release did not become public")
+            if did_publish and any(self.release(record).get(k) != v for k, v in metadata.items()):
+                raise ValueError("published release metadata mismatch")
             if did_publish and prep.github(f"{self.endpoint}/latest").get("id") != record["release_id"]:
                 raise ValueError("published release is not latest")
             self.state.published(candidate_id, record["receipt"])

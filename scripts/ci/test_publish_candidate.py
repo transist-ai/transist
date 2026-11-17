@@ -14,6 +14,7 @@ import prepare_candidate as prep
 import publish_candidate as pub
 import recover_candidate as recovery
 import release_candidates as rc
+import release_metadata
 from test_prepare_candidate import PreparationTests
 
 
@@ -94,10 +95,61 @@ class PublicationTests(unittest.TestCase):
         self.publish()
         self.assertEqual(self.effects, ["tag-object", "tag-ref", "retag", "publish"])
         payload = [data for _, method, data in self.calls if method == "PATCH" and data.get("draft") is False]
-        self.assertEqual(payload, [{"draft": False, "prerelease": False, "make_latest": "true"}])
+        self.assertEqual(payload, [{**release_metadata.render(self.f.root, "owner/repo", "1.2.3"),
+                                   "tag_name": self.ident["final_tag"], "target_commitish": self.ident["source_sha"],
+                                   "draft": False, "prerelease": False, "make_latest": "true"}])
         self.effects.clear()
         self.publish()
         self.assertEqual(self.effects, [])
+
+    def test_ready_draft_summary_and_publication_share_final_text(self):
+        metadata = release_metadata.render(self.f.root, "owner/repo", "1.2.3")
+        for key, value in metadata.items():
+            self.assertEqual(self.f.remote[42][key], value)
+        path = self.f.root / "review.md"
+        with patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": str(path)}):
+            self.helper.summary(self.cid)
+        self.assertIn(metadata["name"], path.read_text())
+        self.assertIn(metadata["body"], path.read_text())
+        self.publish()
+        self.assertEqual({k: self.f.remote[42][k] for k in metadata}, metadata)
+        self.assertNotIn("candidate", self.f.remote[42]["name"])
+        self.assertNotIn("Preparation in progress", self.f.remote[42]["body"])
+
+    def test_draft_metadata_tampering_rejected_before_reservation_or_tag(self):
+        for key in ("name", "body"):
+            original = self.f.remote[42][key]
+            self.f.remote[42][key] = "Unexpected release text"
+            with self.subTest(key=key), self.assertRaisesRegex(ValueError, "draft metadata"):
+                self.helper.publish(self.cid)
+            self.assertEqual(self.f.record()["state"], "ready")
+            self.assertEqual(self.effects, [])
+            self.f.remote[42][key] = original
+
+    def test_recorded_public_recovery_preserves_maintainer_metadata_correction(self):
+        self.publish()
+        self.f.remote[42].update(name="Maintainer-corrected title", body="Corrected release notes")
+        self.effects.clear()
+        self.publish()
+        self.assertEqual(self.effects, [])
+        self.assertEqual(self.f.remote[42]["body"], "Corrected release notes")
+
+    def test_wrong_public_metadata_is_not_recorded_as_published_after_lost_response(self):
+        original = self.github
+
+        def corrupt_text(path, method="GET", data=None, paginate=False):
+            result = original(path, method, data, paginate)
+            if method == "PATCH" and data.get("draft") is False:
+                self.f.remote[42]["body"] = "Preparation in progress"
+            return result
+
+        with patch.object(prep, "github", side_effect=corrupt_text), \
+                self.assertRaisesRegex(ValueError, "published release metadata"):
+            self.helper.publish(self.cid)
+        self.assertEqual(self.f.record()["state"], "publishing")
+        with self.assertRaisesRegex(ValueError, "published release metadata"):
+            self.helper.publish(self.cid)
+        self.assertEqual(self.f.blobs, self.original_bytes)
 
     def test_every_remote_effect_failure_before_and_after_recovers_same_bytes(self):
         for boundary in ("tag-object", "tag-ref", "retag", "publish"):
@@ -472,6 +524,10 @@ class PublicationTests(unittest.TestCase):
 
     def test_workflows_approval_order_permissions_and_candidate_only_recovery(self):
         workflow = Path(".github/workflows/release-publication.yml").read_text()
+        summary = workflow.split("  review-summary:", 1)[1].split("  publish-release:", 1)[0]
+        self.assertIn("ref: ${{ inputs.source_sha }}", summary)
+        self.assertIn("path: candidate-source", summary)
+        self.assertIn('summary --candidate-id "$CANDIDATE_ID" --source-directory candidate-source', summary)
         approved = workflow.split("  publish-release:", 1)[1]
         self.assertIn("needs: review-summary", approved)
         self.assertIn("environment: release-publish", approved)
