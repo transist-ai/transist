@@ -51,6 +51,13 @@ bash scripts/ci/check_release_readiness.sh
 host. Disposable Docker base images generally need it each run for OS packages;
 tool and Cargo caches persist. No production keys or provider credentials are needed.
 
+The hosted PR workflow and local profiles explicitly select Rust `1.88.0` with
+`RUSTUP_TOOLCHAIN` and disable implicit toolchain installation with
+`RUSTUP_AUTO_INSTALL=0`. This prevents plain Cargo commands in audit/schema jobs
+from reconciling the repository toolchain file's optional components. Full PR
+validation still explicitly installs rustfmt/Clippy; coverage installs LLVM tools.
+Do not remove those component setup steps or weaken checks to avoid setup failures.
+
 ## Evidence and Boundaries
 
 - Static, DCO, Markdown and dependency checks precede schema/full builds/coverage.

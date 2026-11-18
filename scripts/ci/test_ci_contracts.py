@@ -159,6 +159,19 @@ def workflow_errors(text: str, kind: str) -> list[str]:
         return errors
     if not text.startswith("name: PR Gate\n"):
         errors.append("PR workflow identity changed")
+    # Plain Cargo commands otherwise reconcile rust-toolchain.toml's optional
+    # components inside audit/schema jobs, even though those jobs do not use them.
+    environment = re.search(r"^env:\n((?:  [^\n]*\n|\n)+)", text, re.M)
+    for setting in ("RUSTUP_TOOLCHAIN: '1.88.0'", "RUSTUP_AUTO_INSTALL: '0'"):
+        if not environment or f"  {setting}\n" not in environment.group(1):
+            errors.append(f"PR workflow missing explicit Rust selection: {setting}")
+    for name, components in {
+        "validate-full": "--component rustfmt --component clippy",
+        "coverage": "--component llvm-tools-preview",
+    }.items():
+        command = f"rustup toolchain install 1.88.0 --profile minimal {components} --no-self-update"
+        if command not in jobs.get(name, ""):
+            errors.append(f"PR job missing explicit Rust components: {name}")
     if "validate-fast" in jobs or "check_pr_ready.sh --fast" in text:
         errors.append("duplicate nonrequired fast validation")
     for name in EXPENSIVE:
@@ -374,6 +387,36 @@ class WorkflowContracts(unittest.TestCase):
         self.assertEqual(workflow_errors(self.pr, "pr"), [])
         self.assertEqual(workflow_errors(self.main, "main"), [])
         self.assertEqual(workflow_errors(self.security, "security"), [])
+
+    def test_pr_rust_selection_mutations(self) -> None:
+        """Pin every PR step before Cargo runs; never rely on implicit installs."""
+        for setting, replacement in (
+            ("RUSTUP_TOOLCHAIN: '1.88.0'", "RUSTUP_TOOLCHAIN: stable"),
+            ("RUSTUP_AUTO_INSTALL: '0'", "RUSTUP_AUTO_INSTALL: '1'"),
+        ):
+            for new in ("", f"  {replacement}\n"):
+                with self.subTest(setting=setting, replacement=new):
+                    old = f"  {setting}\n"
+                    self.assertIn(old, self.pr)
+                    mutated = self.pr.replace(old, new, 1)
+                    self.assertIn(
+                        f"PR workflow missing explicit Rust selection: {setting}",
+                        workflow_errors(mutated, "pr"),
+                    )
+
+    def test_pr_components_remain_explicit(self) -> None:
+        """Disabling implicit installs must not remove lint/coverage prerequisites."""
+        for job, component in (
+            ("validate-full", "rustfmt"),
+            ("validate-full", "clippy"),
+            ("coverage", "llvm-tools-preview"),
+        ):
+            with self.subTest(job=job, component=component):
+                mutated = mutate_job(self.pr, job, f" --component {component}", "")
+                self.assertIn(
+                    f"PR job missing explicit Rust components: {job}",
+                    workflow_errors(mutated, "pr"),
+                )
 
     def test_execution_jobs_require_real_sandbox_dependencies(self) -> None:
         """Reject missing namespaces, backend, or launcher in isolated job bootstrap."""
