@@ -178,6 +178,8 @@ surfaces, it must read [AGENTS.md](AGENTS.md) and
 [.agents/CORE_CHANGE_CHECKLIST.md](.agents/CORE_CHANGE_CHECKLIST.md) before
 proposing the change. Repo-local skills under `.agents/skills/` track the
 current checked-out behavior and should be preferred over general knowledge.
+When preparing or publishing a GitHub PR, use the
+[PR preparation skill](.agents/skills/transist-pr-preparation/SKILL.md).
 
 ## Working Rules
 
