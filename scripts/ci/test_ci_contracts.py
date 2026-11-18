@@ -18,6 +18,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 EVALUATOR = ROOT / "scripts/ci/check_gate_results.sh"
 EARLY = {
+    "pr-description": "PR_DESCRIPTION_RESULT",
     "ci-static": "CI_STATIC_RESULT",
     "commit-signoff": "COMMIT_SIGNOFF_RESULT",
     "markdownlint": "MARKDOWNLINT_RESULT",
@@ -46,7 +47,7 @@ PREFLIGHT_READY = (
 )
 PR_FLAGS = {
     "IS_DRAFT": "${{ github.event.pull_request.draft }}",
-    "IS_DEPENDABOT": "${{ github.actor == 'dependabot[bot]' }}",
+    "IS_DEPENDABOT": "${{ github.event.pull_request.user.login == 'dependabot[bot]' }}",
     "DEPENDENCY_REVIEW_ENABLED": "${{ vars.ENABLE_DEPENDENCY_REVIEW }}",
 }
 
@@ -159,6 +160,16 @@ def workflow_errors(text: str, kind: str) -> list[str]:
         return errors
     if not text.startswith("name: PR Gate\n"):
         errors.append("PR workflow identity changed")
+    if not re.search(r"^    types: \[[^\n]*\bedited\b[^\n]*\]$", text, re.M):
+        errors.append("PR workflow must rerun on description edits")
+    description = jobs.get("pr-description", "")
+    if (
+        "    permissions:\n      pull-requests: read\n    steps:\n" not in description
+        or "actions/checkout@" in description
+        or "github.rest.pulls.get" not in description
+        or "${{" in description.partition("          script: |\n")[2]
+    ):
+        errors.append("description check must read live PR metadata without checkout")
     # Plain Cargo commands otherwise reconcile rust-toolchain.toml's optional
     # components inside audit/schema jobs, even though those jobs do not use them.
     environment = re.search(r"^env:\n((?:  [^\n]*\n|\n)+)", text, re.M)
@@ -204,7 +215,7 @@ def workflow_errors(text: str, kind: str) -> list[str]:
             )
         if job_field(body, "name") != name:
             errors.append(f"required job identity changed: {name}")
-    for name in ("ci-static", "markdownlint", "cargo-deny"):
+    for name in ("pr-description", "ci-static", "markdownlint", "cargo-deny"):
         if job_field(jobs.get(name, ""), "if") != READY:
             errors.append(f"early job must skip drafts: {name}")
         if job_needs(jobs.get(name, "")):
@@ -212,7 +223,7 @@ def workflow_errors(text: str, kind: str) -> list[str]:
     for name, condition in {
         "commit-signoff": (
             "${{ github.event.pull_request.draft == false "
-            "&& github.actor != 'dependabot[bot]' }}"
+            "&& github.event.pull_request.user.login != 'dependabot[bot]' }}"
         ),
         "dependency-review": (
             "${{ vars.ENABLE_DEPENDENCY_REVIEW == 'true' "
@@ -372,6 +383,118 @@ new AsyncFunction('github', 'context', 'core', 'console', input.script)(
                 self.assertEqual(len(failures), int(error not in (None, 404)))
 
 
+class PullRequestDescription(unittest.TestCase):
+    """Execute the hosted description check without calling GitHub."""
+
+    def setUp(self) -> None:
+        workflow = (ROOT / ".github/workflows/pr-ci.yml").read_text(encoding="utf-8")
+        job = dict(JOB.findall(workflow))["pr-description"]
+        self.script = "\n".join(
+            line[12:] for line in job.split("          script: |\n", 1)[1].splitlines()
+        )
+        self.template = (ROOT / ".github/pull_request_template.md").read_text(
+            encoding="utf-8"
+        )
+        self.complete = self.template
+        for heading, response in (
+            ("Summary", "Shorten the template and require it in CI."),
+            ("Validation", "- [x] `check_ci_static.sh` passed."),
+            ("Tests", "Added CI contract regression tests."),
+            ("Docs", "Updated the contributor guide."),
+        ):
+            self.complete = self.complete.replace(
+                f"## {heading}\n", f"## {heading}\n\n{response}\n"
+            )
+        for option in (
+            "Docs / CI / tooling only",
+            "Not affected.",
+            "No user-visible impact.",
+            "No security or trust-boundary impact.",
+        ):
+            self.complete = self.complete.replace(f"- [ ] {option}", f"- [x] {option}")
+
+    def validate(self, body: str | None, **metadata: object) -> str:
+        harness = r"""
+const input = JSON.parse(require('node:fs').readFileSync(0, 'utf8'));
+const context = {
+  actor: 'different-maintainer', repo: {owner: 'fixture', repo: 'repo'},
+  payload: {pull_request: {number: 12, body: 'stale event body'}},
+};
+let requests = 0;
+const github = {rest: {pulls: {get: async ({owner, repo, pull_number}) => {
+  if (++requests !== 1 || owner !== 'fixture' || repo !== 'repo' || pull_number !== 12)
+    throw new Error('Unexpected PR lookup');
+  return {data: input.pr};
+}}}};
+let failure = '';
+const core = {setFailed: (message) => { failure = message; }};
+const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
+new AsyncFunction('github', 'context', 'core', input.script)(github, context, core)
+  .then(() => {
+    if (requests !== 1) throw new Error('Expected a live PR lookup');
+    process.stdout.write(failure);
+  })
+  .catch(error => { console.error(error); process.exitCode = 1; });
+"""
+        pr = {
+            "body": body,
+            "user": {"id": 123, "login": "contributor", "type": "User"},
+            "base": {"repo": {"id": 42}},
+            "head": {"repo": {"id": 42}},
+            **metadata,
+        }
+        result = subprocess.run(
+            ["node", "-e", harness],
+            input=json.dumps({"script": self.script, "pr": pr}),
+            text=True,
+            capture_output=True,
+            check=True,
+            timeout=15,
+        )
+        return result.stdout
+
+    def test_completed_template_and_untouched_prompts(self) -> None:
+        self.assertEqual(self.validate(self.complete.replace("\n", "\r\n")), "")
+        for source in (self.template, None):
+            failure = self.validate(source)
+            self.assertIn(".github/pull_request_template.md", failure)
+            for heading in re.findall(r"^## (.+)$", self.template, re.M):
+                self.assertIn(f"- {heading}:", failure)
+
+    def test_missing_duplicate_and_unfilled_sections(self) -> None:
+        for body, diagnostic in (
+            (self.complete.replace("## Docs", "### Docs"), "Docs: include exactly one"),
+            (
+                self.complete + "\n## Summary\n\nOther text.\n",
+                "Summary: include exactly one",
+            ),
+            (
+                self.complete.replace("- [x] Not affected.", "- [ ] Not affected."),
+                "Kernel Contract Impact: check",
+            ),
+            (
+                self.complete.replace("- [x] `check_ci_static.sh` passed.\n", "")
+                .replace("- [ ] Commits signed off", "- [x] Commits signed off"),
+                "Validation: report checks",
+            ),
+            (
+                self.complete.replace("## Docs", "```md\n## Docs") + "```\n",
+                "Docs: include exactly one",
+            ),
+        ):
+            with self.subTest(diagnostic=diagnostic):
+                self.assertIn(diagnostic, self.validate(body))
+
+    def test_dependabot_exception_uses_authenticated_author_and_repository(self) -> None:
+        bot = {"id": 49699333, "login": "dependabot[bot]", "type": "Bot"}
+        self.assertEqual(self.validate(None, user=bot), "")
+        self.assertIn("Summary:", self.validate(None, user={**bot, "id": 999}))
+        self.assertIn(
+            "Summary:", self.validate(None, user=bot, head={"repo": {"id": 7}})
+        )
+        self.assertIn("Summary:", self.validate(None, user=bot, head={"repo": None}))
+
+
 class WorkflowContracts(unittest.TestCase):
     """Check current workflows and prove weakened DAG/result wiring is caught."""
 
@@ -387,6 +510,16 @@ class WorkflowContracts(unittest.TestCase):
         self.assertEqual(workflow_errors(self.pr, "pr"), [])
         self.assertEqual(workflow_errors(self.main, "main"), [])
         self.assertEqual(workflow_errors(self.security, "security"), [])
+
+    def test_description_check_cannot_lose_edit_trigger_or_live_lookup(self) -> None:
+        self.assertIn(
+            "PR workflow must rerun on description edits",
+            workflow_errors(self.pr.replace(", edited]", "]"), "pr"),
+        )
+        self.assertIn(
+            "description check must read live PR metadata without checkout",
+            workflow_errors(self.pr.replace("github.rest.pulls.get", "fake.lookup"), "pr"),
+        )
 
     def test_pr_rust_selection_mutations(self) -> None:
         """Pin every PR step before Cargo runs; never rely on implicit installs."""

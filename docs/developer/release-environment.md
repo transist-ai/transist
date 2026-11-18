@@ -285,6 +285,17 @@ matches the committed public key's key ID. A mismatch prevents all signing.
 
 ## Local And Hosted Regression Gates
 
+For release-pipeline PRs, confirm that:
+
+- Normal publication is draft download and testing, then one `release-publish`
+  approval, without manual stage dispatch or a pre-created final tag.
+- Supersession, reserved-publication recovery, and immutable-tag failures do not
+  replace assets; publication recovery requires fresh approval.
+- Committed reviewer and main-only deployment policies match the policy tests.
+- Setup defaults to read-only checks. Live apply, owner-supplied key migration,
+  and activation require separate authorization and evidence. Setup never
+  exports secrets, enables the pipeline implicitly, or deletes old secrets.
+
 For focused pipeline development (plan Steps 1–7), run
 `bash scripts/ci/test_release_invariants.sh --fixture-build`. This explicit
 test-only mode replaces the isolated candidate dry-run's native build with
