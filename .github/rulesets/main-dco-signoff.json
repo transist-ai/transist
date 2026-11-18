@@ -1,0 +1,25 @@
+{
+  "name": "main-dco-signoff",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "include": [
+        "refs/heads/main"
+      ],
+      "exclude": []
+    }
+  },
+  "rules": [
+    {
+      "type": "commit_message_pattern",
+      "parameters": {
+        "name": "Require a DCO Signed-off-by line",
+        "negate": false,
+        "operator": "regex",
+        "pattern": "(?m)^Signed-off-by: [^<>\\r\\n]+ <[^<>\\s]+@[^<>\\s]+>\\r?\\n?$"
+      }
+    }
+  ],
+  "bypass_actors": []
+}

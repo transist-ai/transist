@@ -18,6 +18,10 @@ env:
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
   RUST_BACKTRACE: short
+  # Select the installed toolchain without reconciling rust-toolchain.toml's
+  # optional components in audit/schema jobs. Provision needed components below.
+  RUSTUP_TOOLCHAIN: '1.88.0'
+  RUSTUP_AUTO_INSTALL: '0'
   # The installer and binary-only cache must resolve the same path in containers.
   # Cache keys also hash this workflow so its actual image digest is bound.
   CI_TOOL_ROOT: /tmp/transist-ci-tools

@@ -159,6 +159,19 @@ def workflow_errors(text: str, kind: str) -> list[str]:
         return errors
     if not text.startswith("name: PR Gate\n"):
         errors.append("PR workflow identity changed")
+    # Plain Cargo commands otherwise reconcile rust-toolchain.toml's optional
+    # components inside audit/schema jobs, even though those jobs do not use them.
+    environment = re.search(r"^env:\n((?:  [^\n]*\n|\n)+)", text, re.M)
+    for setting in ("RUSTUP_TOOLCHAIN: '1.88.0'", "RUSTUP_AUTO_INSTALL: '0'"):
+        if not environment or f"  {setting}\n" not in environment.group(1):
+            errors.append(f"PR workflow missing explicit Rust selection: {setting}")
+    for name, components in {
+        "validate-full": "--component rustfmt --component clippy",
+        "coverage": "--component llvm-tools-preview",
+    }.items():
+        command = f"rustup toolchain install 1.88.0 --profile minimal {components} --no-self-update"
+        if command not in jobs.get(name, ""):
+            errors.append(f"PR job missing explicit Rust components: {name}")
     if "validate-fast" in jobs or "check_pr_ready.sh --fast" in text:
         errors.append("duplicate nonrequired fast validation")
     for name in EXPENSIVE:
@@ -374,6 +387,36 @@ class WorkflowContracts(unittest.TestCase):
         self.assertEqual(workflow_errors(self.pr, "pr"), [])
         self.assertEqual(workflow_errors(self.main, "main"), [])
         self.assertEqual(workflow_errors(self.security, "security"), [])
+
+    def test_pr_rust_selection_mutations(self) -> None:
+        """Pin every PR step before Cargo runs; never rely on implicit installs."""
+        for setting, replacement in (
+            ("RUSTUP_TOOLCHAIN: '1.88.0'", "RUSTUP_TOOLCHAIN: stable"),
+            ("RUSTUP_AUTO_INSTALL: '0'", "RUSTUP_AUTO_INSTALL: '1'"),
+        ):
+            for new in ("", f"  {replacement}\n"):
+                with self.subTest(setting=setting, replacement=new):
+                    old = f"  {setting}\n"
+                    self.assertIn(old, self.pr)
+                    mutated = self.pr.replace(old, new, 1)
+                    self.assertIn(
+                        f"PR workflow missing explicit Rust selection: {setting}",
+                        workflow_errors(mutated, "pr"),
+                    )
+
+    def test_pr_components_remain_explicit(self) -> None:
+        """Disabling implicit installs must not remove lint/coverage prerequisites."""
+        for job, component in (
+            ("validate-full", "rustfmt"),
+            ("validate-full", "clippy"),
+            ("coverage", "llvm-tools-preview"),
+        ):
+            with self.subTest(job=job, component=component):
+                mutated = mutate_job(self.pr, job, f" --component {component}", "")
+                self.assertIn(
+                    f"PR job missing explicit Rust components: {job}",
+                    workflow_errors(mutated, "pr"),
+                )
 
     def test_execution_jobs_require_real_sandbox_dependencies(self) -> None:
         """Reject missing namespaces, backend, or launcher in isolated job bootstrap."""
@@ -695,6 +738,131 @@ class GateResults(unittest.TestCase):
     def test_invalid_mode_fails_before_draft_exception(self) -> None:
         """An invalid invocation must not silently turn into a passing PR gate."""
         self.assertEqual(self.evaluate("invalid", {"IS_DRAFT": "true"}).returncode, 2)
+
+
+class RulesetTemplates(unittest.TestCase):
+    """Keep importable GitHub rules aligned with the repository's governance."""
+
+    def test_repository_settings_keep_squash_only_and_web_signoffs(self) -> None:
+        """The standalone settings snapshot contains only reviewed PATCH fields."""
+        settings = json.loads(
+            (ROOT / ".github/repository-settings.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            settings,
+            {
+                "allow_merge_commit": False,
+                "allow_squash_merge": True,
+                "allow_rebase_merge": False,
+                "allow_auto_merge": False,
+                "allow_update_branch": True,
+                "delete_branch_on_merge": False,
+                "web_commit_signoff_required": True,
+                "squash_merge_commit_title": "COMMIT_OR_PR_TITLE",
+                "squash_merge_commit_message": "COMMIT_MESSAGES",
+            },
+        )
+
+    def load(self, name: str) -> dict:
+        """Read a ruleset template and enforce common import-safe fields."""
+        document = json.loads(
+            (ROOT / ".github/rulesets" / f"{name}.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(document["name"], name)
+        self.assertEqual(document["enforcement"], "active")
+        self.assertEqual(document["bypass_actors"], [])
+        self.assertEqual(
+            set(document),
+            {"name", "target", "enforcement", "conditions", "rules", "bypass_actors"},
+        )
+        return document
+
+    def test_main_retains_strict_checks_and_squash_only_merges(self) -> None:
+        """Main remains protected without permitting history rewrites or merge commits."""
+        document = self.load("main-branch-protection")
+        self.assertEqual(document["target"], "branch")
+        self.assertEqual(
+            document["conditions"]["ref_name"],
+            {"include": ["~DEFAULT_BRANCH"], "exclude": []},
+        )
+        rules = {rule["type"]: rule for rule in document["rules"]}
+        self.assertEqual(
+            set(rules),
+            {
+                "deletion",
+                "non_fast_forward",
+                "pull_request",
+                "required_status_checks",
+                "required_linear_history",
+            },
+        )
+        review = rules["pull_request"]["parameters"]
+        self.assertEqual(review["allowed_merge_methods"], ["squash"])
+        self.assertTrue(review["dismiss_stale_reviews_on_push"])
+        self.assertTrue(review["required_review_thread_resolution"])
+        checks = rules["required_status_checks"]["parameters"]
+        self.assertTrue(checks["strict_required_status_checks_policy"])
+        self.assertFalse(checks["do_not_enforce_on_create"])
+        self.assertEqual(
+            checks["required_status_checks"],
+            [{"context": "pr-gate", "integration_id": 15368}],
+        )
+
+    def test_pr_branches_reject_merge_commits_but_allow_rebases(self) -> None:
+        """Non-main branches require linear history without blocking force pushes."""
+        document = self.load("linear-pr-branches")
+        self.assertEqual(document["target"], "branch")
+        self.assertEqual(
+            document["conditions"]["ref_name"],
+            {"include": ["~ALL"], "exclude": ["~DEFAULT_BRANCH", "refs/heads/main"]},
+        )
+        self.assertEqual(document["rules"], [{"type": "required_linear_history"}])
+
+    def test_dco_presence_and_malformed_lines(self) -> None:
+        """The native rule checks DCO-line presence, not cryptographic signatures."""
+        document = self.load("main-dco-signoff")
+        self.assertEqual(document["target"], "branch")
+        self.assertEqual(
+            document["conditions"]["ref_name"],
+            {"include": ["refs/heads/main"], "exclude": []},
+        )
+        self.assertEqual(len(document["rules"]), 1)
+        rule = document["rules"][0]
+        self.assertEqual(rule["type"], "commit_message_pattern")
+        self.assertEqual(rule["parameters"]["operator"], "regex")
+        self.assertFalse(rule["parameters"]["negate"])
+        pattern = re.compile(rule["parameters"]["pattern"])
+        for signer in (
+            "Test <test@example.org>",
+            "dependabot[bot] <support@github.com>",
+        ):
+            for ending in ("", "\n", "\r\n"):
+                with self.subTest(signer=signer, ending=ending):
+                    self.assertRegex(
+                        f"Change\n\nSigned-off-by: {signer}{ending}", pattern
+                    )
+        for line in (
+            "",
+            "signed-off-by: Test <test@example.org>",
+            "Signed-off-by: Test <invalid>",
+            "* Signed-off-by: Test <test@example.org>",
+            "Signed-off-by: Test <test@example.org> trailing text",
+        ):
+            with self.subTest(line=line):
+                self.assertNotRegex(f"Change\n\n{line}\n", pattern)
+
+    def test_version_tags_remain_immutable(self) -> None:
+        """Release tag updates, deletion and non-fast-forward pushes remain blocked."""
+        document = self.load("v-tag-protection")
+        self.assertEqual(document["target"], "tag")
+        self.assertEqual(
+            document["conditions"]["ref_name"],
+            {"include": ["refs/tags/v*"], "exclude": []},
+        )
+        self.assertEqual(
+            document["rules"],
+            [{"type": "deletion"}, {"type": "non_fast_forward"}, {"type": "update"}],
+        )
 
 
 if __name__ == "__main__":
