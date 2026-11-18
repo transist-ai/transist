@@ -65,12 +65,11 @@ impl SchemaCache {
     ) -> Result<()> {
         crate::record_validation_work(crate::ValidationWork::InputValidation);
         let root = self.compile(dir, relative, kind)?;
-        if let Err(mut errors) = root.validate(instance) {
-            let error = errors.next().expect("nonempty validation errors");
+        if let Err(error) = root.validate(instance) {
             bail!(
                 "{kind} schema validation failed at instance path '{}' and schema path '{}'",
-                error.instance_path,
-                error.schema_path
+                error.instance_path(),
+                error.evaluation_path()
             );
         }
         Ok(())
@@ -293,16 +292,13 @@ fn validate_action_instance(
     }
     let documents = load_schema_documents(plugin_dir, relative_schema, schema_kind)?;
     let root = compile_documents(plugin_dir, &documents, schema_kind)?;
-    let Some(mut errors) = root.validate(instance).err() else {
+    let Err(error) = root.validate(instance) else {
         return Ok(());
     };
-    let error = errors
-        .next()
-        .expect("jsonschema returned an empty error iterator");
     bail!(
         "{schema_kind} schema validation failed at instance path '{}' and schema path '{}'",
-        error.instance_path,
-        error.schema_path
+        error.instance_path(),
+        error.evaluation_path()
     );
 }
 
@@ -332,20 +328,19 @@ fn compile_documents(
             )
         })?,
     };
-    let mut options = jsonschema::options();
-    options
+    let options = jsonschema::options()
         .with_draft(Draft::Draft202012)
         .with_retriever(retriever);
 
-    let root_schema = compile_one(&mut options, &root.1, schema_kind, &root.0)?;
+    let root_schema = compile_one(&options, &root.1, schema_kind, &root.0)?;
     for (relative_path, document) in documents.iter().skip(1) {
-        compile_one(&mut options, document, schema_kind, relative_path)?;
+        compile_one(&options, document, schema_kind, relative_path)?;
     }
     Ok(root_schema)
 }
 
 fn compile_one(
-    options: &mut jsonschema::ValidationOptions,
+    options: &jsonschema::ValidationOptions<'_>,
     document: &Value,
     schema_kind: &str,
     relative_path: &str,
@@ -353,7 +348,7 @@ fn compile_one(
     options.build(document).map_err(|error| {
         anyhow::anyhow!(
             "invalid {schema_kind} JSON Schema '{relative_path}' at schema path '{}'",
-            error.schema_path
+            error.schema_path()
         )
     })
 }
@@ -521,6 +516,20 @@ fn collect_external_references(
     Ok(())
 }
 
+fn has_forbidden_package_path_component(path: &str) -> bool {
+    // Check encoded dots before URI normalization can treat them as parent segments.
+    path.split('/').any(|segment| {
+        [".%2e", "%2e.", "%2e%2e"]
+            .iter()
+            .any(|parent| segment.eq_ignore_ascii_case(parent))
+    }) || Path::new(path).components().any(|component| {
+        matches!(
+            component,
+            Component::ParentDir | Component::RootDir | Component::Prefix(_)
+        )
+    })
+}
+
 fn resolve_reference_path(
     document_path: &str,
     reference: &str,
@@ -539,13 +548,7 @@ fn resolve_reference_path(
             "{schema_kind} schema reference '{reference}' in '{document_path}' must be a relative package path"
         );
     }
-    let path = Path::new(path_part);
-    if path.components().any(|component| {
-        matches!(
-            component,
-            Component::ParentDir | Component::RootDir | Component::Prefix(_)
-        )
-    }) {
+    if has_forbidden_package_path_component(path_part) {
         bail!(
             "{schema_kind} schema reference '{reference}' in '{document_path}' contains a forbidden path component"
         );
@@ -553,7 +556,7 @@ fn resolve_reference_path(
     let resolved = Path::new(document_path)
         .parent()
         .unwrap_or_else(|| Path::new(""))
-        .join(path);
+        .join(path_part);
     Ok(resolved)
 }
 
@@ -565,16 +568,10 @@ fn validate_relative_path(relative: &str, schema_kind: &str) -> Result<PathBuf> 
     {
         bail!("{schema_kind} schema path '{relative}' must be a relative package path");
     }
-    let path = Path::new(relative);
-    if path.components().any(|component| {
-        matches!(
-            component,
-            Component::ParentDir | Component::RootDir | Component::Prefix(_)
-        )
-    }) {
+    if has_forbidden_package_path_component(relative) {
         bail!("{schema_kind} schema path '{relative}' contains a forbidden path component");
     }
-    Ok(path.to_path_buf())
+    Ok(PathBuf::from(relative))
 }
 
 fn package_file(plugin_root: &Path, relative_path: &Path, schema_kind: &str) -> Result<PathBuf> {
@@ -699,13 +696,7 @@ fn resolve_local_id(base: &Url, id: &str, schema_kind: &str) -> Result<Url> {
         bail!("{schema_kind} schema $id '{id}' must be a relative package identifier");
     }
     let path_part = id.split_once('#').map(|(path, _)| path).unwrap_or(id);
-    let path = Path::new(path_part);
-    if path.components().any(|component| {
-        matches!(
-            component,
-            Component::ParentDir | Component::RootDir | Component::Prefix(_)
-        )
-    }) {
+    if has_forbidden_package_path_component(path_part) {
         bail!("{schema_kind} schema $id '{id}' contains a forbidden path component");
     }
     let resolved = base
@@ -729,7 +720,10 @@ struct PackageSchemaRetriever {
 impl Retrieve for PackageSchemaRetriever {
     /// Loads a normalized schema only from the canonical plugin package root.
     /// Other schemes, authorities, and paths escaping that root are rejected.
-    fn retrieve(&self, uri: &Uri<&str>) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+    fn retrieve(
+        &self,
+        uri: &Uri<String>,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let url = Url::parse(uri.as_str())?;
         if url.scheme() != PACKAGE_SCHEMA_SCHEME || url.host_str().is_some() {
             return Err(anyhow::anyhow!(
@@ -757,6 +751,121 @@ impl Retrieve for PackageSchemaRetriever {
 #[cfg(test)]
 mod reuse_tests {
     use super::*;
+
+    #[test]
+    fn package_validation_jsonschema_compatibility_fixtures() {
+        use serde_json::json;
+
+        let dir = tempfile::tempdir_in("/tmp").unwrap();
+        fs::create_dir(dir.path().join("schemas")).unwrap();
+        fs::write(
+            dir.path().join("schemas/value.json"),
+            json!({"type": "integer"}).to_string(),
+        )
+        .unwrap();
+
+        type Case = (&'static str, Value, bool);
+        type Fixture<'a> = (&'static str, Value, &'a [Case]);
+
+        // Shared acceptance outcomes for jsonschema 0.24.3 and 0.61.2, not diagnostics.
+        let fixtures: [Fixture<'_>; 6] = [
+            (
+                "bounds",
+                json!({"type": "number", "minimum": -1, "exclusiveMaximum": 2.5}),
+                &[
+                    ("inclusive lower endpoint", json!(-1), true),
+                    ("below lower endpoint", json!(-1.25), false),
+                    ("below upper endpoint", json!(2.25), true),
+                    ("exclusive upper endpoint", json!(2.5), false),
+                ],
+            ),
+            (
+                "numeric-equality",
+                json!({"type": "integer", "const": 2}),
+                &[
+                    ("integer equals itself", json!(2), true),
+                    ("integral float equals integer", json!(2.0), true),
+                    ("different integer", json!(3), false),
+                ],
+            ),
+            (
+                "pattern",
+                // Avoid dot/line-terminator semantics, which differ between versions.
+                json!({"type": "string", "pattern": "^[A-Z]{2}-[0-9]{3}$"}),
+                &[
+                    ("matching code", json!("AB-123"), true),
+                    ("wrong case", json!("Ab-123"), false),
+                    ("extra digit", json!("AB-1234"), false),
+                ],
+            ),
+            (
+                "format-default",
+                json!({"type": "string", "format": "email"}),
+                &[
+                    ("well-formed email", json!("person@example.test"), true),
+                    ("format is only an annotation", json!("not an email"), true),
+                    ("type is still asserted", json!(7), false),
+                ],
+            ),
+            (
+                "unevaluated-properties",
+                json!({
+                    "type": "object",
+                    "properties": {"kind": {"enum": ["a", "b"]}},
+                    "required": ["kind"],
+                    "allOf": [{"properties": {"label": {"type": "string"}}}],
+                    "if": {"properties": {"kind": {"const": "a"}}},
+                    "then": {"properties": {"a": {"type": "integer"}}},
+                    "else": {"properties": {"b": {"type": "integer"}}},
+                    "unevaluatedProperties": false
+                }),
+                &[
+                    (
+                        "then and allOf",
+                        json!({"kind": "a", "label": "ok", "a": 1}),
+                        true,
+                    ),
+                    (
+                        "else and allOf",
+                        json!({"kind": "b", "label": "ok", "b": 1}),
+                        true,
+                    ),
+                    (
+                        "inactive branch",
+                        json!({"kind": "a", "a": 1, "b": 2}),
+                        false,
+                    ),
+                    (
+                        "unclaimed property",
+                        json!({"kind": "b", "b": 1, "extra": 2}),
+                        false,
+                    ),
+                ],
+            ),
+            (
+                "reference-base",
+                // The on-disk schema location, not the declared $id, supplies the base.
+                json!({"$id": "alias/input.json", "$ref": "./value.json"}),
+                &[
+                    ("package sibling accepts integer", json!(7), true),
+                    ("package sibling rejects string", json!("seven"), false),
+                ],
+            ),
+        ];
+
+        let mut cache = SchemaCache::default();
+        for (fixture, schema, cases) in fixtures {
+            let relative = format!("schemas/{fixture}.json");
+            fs::write(dir.path().join(&relative), schema.to_string()).unwrap();
+            cache
+                .compile(dir.path(), &relative, "input")
+                .unwrap_or_else(|error| panic!("{fixture}: failed to compile fixture: {error:#}"));
+            for (case, instance, expected) in cases {
+                let result = cache.validate(dir.path(), &relative, "input", instance);
+                assert_eq!(result.is_ok(), *expected, "{fixture}/{case}: {result:?}");
+            }
+        }
+    }
 
     #[test]
     fn normalization_rejects_dynamic_refs_only_at_schema_locations() {
@@ -966,7 +1075,7 @@ mod reuse_tests {
             "file:///tmp/schema.json",
             "transist-plugin://other/schema.json",
         ] {
-            let uri = Uri::parse(reference).unwrap();
+            let uri = Uri::parse(reference.to_owned()).unwrap();
             let error = retriever.retrieve(&uri).unwrap_err();
             assert!(error.to_string().contains("outside the plugin package"));
         }
@@ -986,9 +1095,327 @@ mod reuse_tests {
         let retriever = PackageSchemaRetriever {
             plugin_dir: fs::canonicalize(dir.path()).unwrap(),
         };
-        let uri = Uri::parse("transist-plugin:///linked.json").unwrap();
+        let uri = Uri::parse("transist-plugin:///linked.json".to_owned()).unwrap();
         let error = retriever.retrieve(&uri).unwrap_err();
         assert!(error.to_string().contains("escapes the plugin package"));
+    }
+
+    #[test]
+    fn local_references_validate_transitive_pointers_anchors_and_recursive_values() {
+        use serde_json::json;
+
+        let dir = tempfile::tempdir_in("/tmp").unwrap();
+        fs::create_dir(dir.path().join("schemas")).unwrap();
+        for (name, schema) in [
+            (
+                "input.json",
+                json!({
+                    "type": "object",
+                    "properties": {
+                        "code": {"$ref": "group.json#code"},
+                        "label": {"$ref": "group.json#label"},
+                        "tree": {"$ref": "node.json#node"}
+                    },
+                    "required": ["code", "label", "tree"]
+                }),
+            ),
+            (
+                "group.json",
+                json!({
+                    "$defs": {
+                        "code": {"$anchor": "code", "$ref": "leaf.json#/$defs/code"},
+                        "label": {"$anchor": "label", "type": "string", "minLength": 2}
+                    }
+                }),
+            ),
+            (
+                "leaf.json",
+                json!({"$defs": {"code": {"type": "integer", "minimum": 1}}}),
+            ),
+            (
+                "node.json",
+                json!({
+                    "$defs": {"node": {
+                        "$anchor": "node",
+                        "type": "object",
+                        "properties": {
+                            "value": {"type": "integer"},
+                            "children": {"type": "array", "items": {"$ref": "#node"}}
+                        },
+                        "required": ["value"]
+                    }}
+                }),
+            ),
+        ] {
+            fs::write(dir.path().join("schemas").join(name), schema.to_string()).unwrap();
+        }
+
+        let valid = json!({
+            "code": 1, "label": "ok",
+            "tree": {"value": 1, "children": [{"value": 2, "children": [{"value": 3}]}]}
+        });
+        let invalid = [
+            json!({"code": 0, "label": "ok", "tree": {"value": 1}}),
+            json!({"code": 1, "label": "x", "tree": {"value": 1}}),
+            json!({"code": 1, "label": "ok", "tree": {"value": 1, "children": [{"value": "bad"}]}}),
+        ];
+        let mut cache = SchemaCache::default();
+        cache
+            .validate(dir.path(), "schemas/input.json", "input", &valid)
+            .unwrap();
+        validate_action_instance(dir.path(), "schemas/input.json", "input", &valid).unwrap();
+        for instance in invalid {
+            assert!(
+                cache
+                    .validate(dir.path(), "schemas/input.json", "input", &instance)
+                    .is_err()
+            );
+            assert!(
+                validate_action_instance(dir.path(), "schemas/input.json", "input", &instance)
+                    .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn local_and_external_json_pointer_escapes_resolve() {
+        use serde_json::json;
+
+        let dir = tempfile::tempdir_in("/tmp").unwrap();
+        fs::write(
+            dir.path().join("input.json"),
+            json!({
+                "$defs": {"a/b": {"type": "string"}},
+                "type": "object",
+                "properties": {
+                    "local": {"$ref": "#/$defs/a~1b"},
+                    "external": {"$ref": "defs.json#/$defs/a~0b"}
+                },
+                "required": ["local", "external"]
+            })
+            .to_string(),
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join("defs.json"),
+            json!({"$defs": {"a~b": {"type": "integer"}}}).to_string(),
+        )
+        .unwrap();
+        let mut cache = SchemaCache::default();
+        let valid = json!({"local": "ok", "external": 1});
+        let invalid = [
+            json!({"local": 1, "external": 1}),
+            json!({"local": "ok", "external": "bad"}),
+        ];
+        cache
+            .validate(dir.path(), "input.json", "input", &valid)
+            .unwrap();
+        validate_action_instance(dir.path(), "input.json", "input", &valid).unwrap();
+        for instance in invalid {
+            assert!(
+                cache
+                    .validate(dir.path(), "input.json", "input", &instance)
+                    .is_err()
+            );
+            assert!(
+                validate_action_instance(dir.path(), "input.json", "input", &instance).is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn referenced_validation_diagnostics_are_identical_with_and_without_cache() {
+        use serde_json::json;
+
+        let dir = tempfile::tempdir_in("/tmp").unwrap();
+        fs::write(
+            dir.path().join("input.json"),
+            json!({
+                "type": "object",
+                "properties": {"payload": {"$ref": "middle.json#payload"}}
+            })
+            .to_string(),
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join("middle.json"),
+            json!({
+                "$defs": {"payload": {"$anchor": "payload", "$ref": "leaf.json#/$defs/value"}}
+            })
+            .to_string(),
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join("leaf.json"),
+            json!({
+                "$defs": {"value": {"type": "integer"}}
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let sentinel = "schema-diagnostic-secret-sentinel";
+        let instance = json!({"payload": sentinel});
+        let expected = "input schema validation failed at instance path '/payload' and schema path '/properties/payload/$ref/$ref/type'";
+        let mut cache = SchemaCache::default();
+        for error in [
+            validate_action_instance(dir.path(), "input.json", "input", &instance).unwrap_err(),
+            cache
+                .validate(dir.path(), "input.json", "input", &instance)
+                .unwrap_err(),
+            cache
+                .validate(dir.path(), "input.json", "input", &instance)
+                .unwrap_err(),
+        ] {
+            let rendered = format!("{error:#}");
+            assert_eq!(rendered, expected);
+            assert!(!rendered.contains(sentinel));
+        }
+        assert_eq!(cache.roots.len(), 1);
+    }
+
+    #[test]
+    fn schema_references_reject_external_absolute_and_traversal_paths() {
+        use serde_json::json;
+
+        let parent = tempfile::tempdir_in("/tmp").unwrap();
+        let dir = parent.path().join("plugin");
+        fs::create_dir_all(dir.join("schemas")).unwrap();
+        fs::write(parent.path().join("outside.json"), "true").unwrap();
+        for (reference, expected) in [
+            ("https://example.com/schema.json", "relative package path"),
+            ("http://localhost/schema.json", "relative package path"),
+            ("file:///tmp/schema.json", "relative package path"),
+            (
+                "transist-plugin://foreign/schema.json",
+                "relative package path",
+            ),
+            ("//foreign/schema.json", "relative package path"),
+            ("/tmp/schema.json", "relative package path"),
+            ("..\\outside.json", "relative package path"),
+            ("../../outside.json", "forbidden path component"),
+            ("nested/../../../outside.json", "forbidden path component"),
+            ("%2e%2e/%2E%2E/outside.json", "forbidden path component"),
+            (
+                "nested/%2e%2e/%2e%2e/%2e%2e/outside.json",
+                "forbidden path component",
+            ),
+        ] {
+            fs::write(
+                dir.join("schemas/input.json"),
+                json!({"$ref": reference}).to_string(),
+            )
+            .unwrap();
+            let error = validate_action_instance(&dir, "schemas/input.json", "input", &json!({}))
+                .unwrap_err();
+            let rendered = format!("{error:#}");
+            assert!(rendered.contains(expected), "{reference}: {rendered}");
+        }
+    }
+
+    #[test]
+    fn encoded_traversal_is_rejected_when_literal_and_normalized_targets_exist() {
+        let dir = tempfile::tempdir_in("/tmp").unwrap();
+        fs::create_dir_all(dir.path().join("schemas/%2e%2e")).unwrap();
+        fs::write(
+            dir.path().join("schemas/input.json"),
+            r#"{"$ref":"%2e%2e/target.json"}"#,
+        )
+        .unwrap();
+        fs::write(dir.path().join("schemas/%2e%2e/target.json"), "true").unwrap();
+        fs::write(dir.path().join("target.json"), "true").unwrap();
+
+        let mut cache = SchemaCache::default();
+        assert!(
+            validate_action_instance(
+                dir.path(),
+                "schemas/input.json",
+                "input",
+                &serde_json::json!({}),
+            )
+            .is_err(),
+            "percent-encoded traversal must not resolve to either target"
+        );
+        assert!(
+            cache
+                .validate(
+                    dir.path(),
+                    "schemas/input.json",
+                    "input",
+                    &serde_json::json!({})
+                )
+                .is_err(),
+            "cached validation must not accept percent-encoded traversal"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn transitive_schema_reference_rejects_symlink_escape() {
+        let parent = tempfile::tempdir_in("/tmp").unwrap();
+        let dir = parent.path().join("plugin");
+        fs::create_dir(&dir).unwrap();
+        fs::write(parent.path().join("outside.json"), "true").unwrap();
+        std::os::unix::fs::symlink(parent.path().join("outside.json"), dir.join("linked.json"))
+            .unwrap();
+        fs::write(dir.join("input.json"), r#"{"$ref":"middle.json"}"#).unwrap();
+        fs::write(dir.join("middle.json"), r#"{"$ref":"linked.json"}"#).unwrap();
+        let error = validate_action_instance(&dir, "input.json", "input", &serde_json::json!({}))
+            .unwrap_err();
+        assert!(
+            format!("{error:#}").contains("input schema 'linked.json' escapes the plugin package")
+        );
+    }
+
+    #[test]
+    fn schema_references_reject_malformed_missing_and_unresolved_targets() {
+        use serde_json::json;
+
+        let dir = tempfile::tempdir_in("/tmp").unwrap();
+        fs::write(dir.path().join("broken.json"), "{invalid json").unwrap();
+        fs::write(
+            dir.path().join("valid.json"),
+            r#"{"$defs":{"value":{"type":"string"}}}"#,
+        )
+        .unwrap();
+        for (root, expected) in [
+            (json!({"$ref": 1}), "$ref must be a string"),
+            (
+                json!({"$ref": "broken.json"}),
+                "invalid JSON in input schema 'broken.json'",
+            ),
+            (
+                json!({"$ref": "missing.json"}),
+                "failed resolving input schema 'missing.json'",
+            ),
+            (
+                json!({"$ref": "valid.json#/$defs/missing"}),
+                "invalid input JSON Schema",
+            ),
+            (
+                json!({"$ref": "valid.json#missing"}),
+                "invalid input JSON Schema",
+            ),
+            (
+                json!({"$ref": "#/%ZZ"}),
+                "invalid schema reference fragment encoding",
+            ),
+            (
+                json!({"$ref": "#/%FF"}),
+                "invalid schema reference fragment UTF-8",
+            ),
+            (json!({"type": "not-a-type"}), "invalid input JSON Schema"),
+        ] {
+            fs::write(dir.path().join("input.json"), root.to_string()).unwrap();
+            let mut cache = SchemaCache::default();
+            for result in [
+                validate_action_instance(dir.path(), "input.json", "input", &json!({})),
+                cache.validate(dir.path(), "input.json", "input", &json!({})),
+            ] {
+                let error = result.unwrap_err();
+                let rendered = format!("{error:#}");
+                assert!(rendered.contains(expected), "{root}: {rendered}");
+            }
+        }
     }
 
     #[test]

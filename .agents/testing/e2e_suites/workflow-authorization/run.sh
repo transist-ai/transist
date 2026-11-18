@@ -253,8 +253,10 @@ echo "OK: workflow versions and input-bound authorizations use distinct exact gr
 
 "$TRANSIST_BIN" --home "$TRANSIST_HOME" plugins install --path "${staged}/broken-plugin/plugin.yaml" --trusted-execution >/dev/null
 "$TRANSIST_BIN" --home "$TRANSIST_HOME" workflows install --package "$boundary_package" --approve >/dev/null
-jq -e '.entries["validation_boundary@v1"].definition_validation.validator_revision == 2' \
-  "${TRANSIST_HOME}/registry/workflow-install-index.json" >/dev/null
+jq -e '.entries["validation_boundary@v1"].definition_validation.validator_revision == 3' \
+  "${TRANSIST_HOME}/registry/workflow-install-index.json" >/dev/null || {
+  echo "FAIL: expected validator revision 3 for newly installed validation_boundary@v1"; exit 1;
+}
 "$TRANSIST_BIN" --home "$TRANSIST_HOME" workflows authorize validation_boundary@v1 --approve >/dev/null
 validation_report="$("$TRANSIST_BIN" --home "$TRANSIST_HOME" workflows check validation_boundary@v1 --format json)"
 jq -e '.evaluation_mode == "validation" and .validation_status == "passed" and .status == "not_ready" and .run_created == false' <<< "$validation_report" >/dev/null

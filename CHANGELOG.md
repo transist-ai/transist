@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Upgrade Rust JSON Schema validation to `jsonschema` 0.61.2. Installed workflow
+  receipts from the previous validator revision are revalidated without rewriting
+  the install index during checks.
+- Reject percent-encoded parent-directory segments in plugin schema paths and
+  references. Use package-relative paths without parent traversal instead.
+
 ## [0.1.2] — Evidence and Handshake Diagnostics
 
 - Report process stdout closure before the APP handshake response as a transport

@@ -292,8 +292,9 @@ schema prevents installation before any action can run.
 - Schema paths and transitive `$ref` targets must be regular files inside the
   canonical plugin package root.
 - `$ref` may use JSON Pointer fragments and relative package paths only.
-  Remote URLs, absolute or `file:` URLs, parent traversal, and symlink escapes
-  are rejected without network access.
+  Remote URLs, absolute or `file:` URLs, parent traversal (including
+  percent-encoded parent segments), and symlink escapes are rejected without
+  network access.
 - `$dynamicRef` is unsupported and rejected before full or partial validation;
   use static package-local `$ref` instead. Property names and literal `enum` or
   `const` values containing `$dynamicRef` remain ordinary data.

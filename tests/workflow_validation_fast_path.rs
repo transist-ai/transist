@@ -227,7 +227,7 @@ fn reuse_receipt_survives_context_and_idempotent_install_uninstall() {
     let fixture = installed_fixture();
     let index = receipt_index(&fixture);
     let receipt = &index["entries"]["fast.demo@v1"]["definition_validation"];
-    assert_eq!(receipt["validator_revision"], 2);
+    assert_eq!(receipt["validator_revision"], 3);
     assert_eq!(receipt["recipe_sha256"].as_str().unwrap().len(), 64);
     assert_eq!(
         receipt["plugin_package_digests"].as_object().unwrap().len(),
@@ -279,7 +279,7 @@ fn reuse_legacy_fallback_is_read_only_and_reinstall_upgrades() {
         .unwrap();
     assert_eq!(
         receipt_index(&fixture)["entries"]["fast.demo@v1"]["definition_validation"]["validator_revision"],
-        2
+        3
     );
 }
 
@@ -291,6 +291,50 @@ fn reuse_older_revision_fallback_is_read_only() {
     write_receipt_index(&fixture, &index);
     assert!(fixture.validation(BTreeMap::new()).is_validation_passed());
     assert_eq!(receipt_index(&fixture), index);
+}
+
+#[test]
+fn reuse_revision_two_revalidates_without_writes_until_reinstall() {
+    use transist_plugins::ValidationWork as Work;
+
+    let fixture = installed_fixture();
+    let mut index = receipt_index(&fixture);
+    index["entries"]["fast.demo@v1"]["definition_validation"]["validator_revision"] = 2.into();
+    write_receipt_index(&fixture, &index);
+    let before = snapshot(&fixture.home);
+    let (report, counts) = transist_plugins::capture_validation_work(|| {
+        fixture
+            .context
+            .workflow_validation_report("fast.demo@v1", BTreeMap::new(), false, false)
+            .unwrap()
+    });
+    assert!(report.is_validation_passed(), "{report:#?}");
+    assert_eq!(
+        counts.get(&Work::ContractValidation),
+        Some(&1),
+        "{counts:?}"
+    );
+    assert_eq!(counts.get(&Work::PackageLoad), Some(&1), "{counts:?}");
+    assert_eq!(counts.get(&Work::PackageHash), Some(&1), "{counts:?}");
+    assert_eq!(counts.get(&Work::SchemaCompilation), Some(&2), "{counts:?}");
+    assert_eq!(snapshot(&fixture.home), before);
+
+    fixture
+        .context
+        .install_flow_file_with_trust(&fixture.root.join("workflow.yaml"), false)
+        .unwrap();
+    assert_eq!(
+        receipt_index(&fixture)["entries"]["fast.demo@v1"]["definition_validation"]["validator_revision"],
+        3
+    );
+    let (report, counts) = transist_plugins::capture_validation_work(|| {
+        fixture
+            .context
+            .workflow_validation_report("fast.demo@v1", BTreeMap::new(), false, false)
+            .unwrap()
+    });
+    assert!(report.is_validation_passed(), "{report:#?}");
+    assert_repeat_work(&counts, 2);
 }
 
 #[test]
@@ -506,7 +550,7 @@ fn reuse_upgrade_and_new_receipts_follow_ownership_rollback() {
             .unwrap();
         assert_eq!(
             receipt_index(&fixture)["entries"]["fast.demo@v1"]["definition_validation"]["validator_revision"],
-            2
+            3
         );
         ownership.rollback(&fixture.home).unwrap();
         ownership.rollback(&fixture.home).unwrap();
@@ -930,7 +974,7 @@ fn repeat_matching_receipts_all_adapters_have_zero_probes_and_bounded_work() {
             .unwrap();
         assert_eq!(
             receipt_index(&fixture)["entries"]["fast.demo@v1"]["definition_validation"]["validator_revision"],
-            2
+            3
         );
         let before = snapshot(&fixture.home);
         for _ in 0..10 {

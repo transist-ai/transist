@@ -24,7 +24,10 @@ struct RepoSchemaRetriever {
 
 impl Retrieve for RepoSchemaRetriever {
     /// Maps canonical repository schema URIs to local files without network I/O.
-    fn retrieve(&self, uri: &Uri<&str>) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+    fn retrieve(
+        &self,
+        uri: &Uri<String>,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let url = Url::parse(uri.as_str())?;
         if url.scheme() != "https" || url.host_str() != Some("transist.dev") {
             return Err(anyhow::anyhow!("unsupported schema URL '{url}'").into());
@@ -53,19 +56,19 @@ fn repo_root() -> PathBuf {
 
 fn compile_repo_schema(path: &Path) -> Validator {
     let document = load_json(path);
-    let mut options = jsonschema::options();
-    options
+    jsonschema::options()
         .with_draft(Draft::Draft202012)
         .with_retriever(RepoSchemaRetriever {
             repo_root: repo_root(),
-        });
-    options.build(&document).unwrap_or_else(|err| {
-        panic!(
-            "failed compiling schema '{}' at schema path '{}'",
-            path.display(),
-            err.schema_path
-        )
-    })
+        })
+        .build(&document)
+        .unwrap_or_else(|err| {
+            panic!(
+                "failed compiling schema '{}' at schema path '{}'",
+                path.display(),
+                err.schema_path()
+            )
+        })
 }
 
 fn schema_dir() -> PathBuf {
@@ -88,13 +91,13 @@ fn collect_json_files(dir: &Path, out: &mut Vec<PathBuf>) {
 }
 
 /// Validates `instance` against `schema`, panicking with a readable error list
-/// on failure. `Validator::validate` returns an iterator that does not
-/// implement `Debug`, so the failures must be collected and formatted manually.
+/// on failure.
 fn assert_valid(schema: &Validator, instance: &Value, label: &str) {
-    if let Some(errors) = schema.validate(instance).err() {
-        let messages: Vec<String> = errors
-            .map(|err| format!("at '{}': {}", err.instance_path, err))
-            .collect();
+    let messages: Vec<String> = schema
+        .iter_errors(instance)
+        .map(|err| format!("at '{}': {}", err.instance_path(), err))
+        .collect();
+    if !messages.is_empty() {
         panic!("{label}:\n{}", messages.join("\n"));
     }
 }
@@ -504,14 +507,11 @@ cleanup:
 
     let workflow_json: serde_json::Value =
         yaml_serde::from_str(workflow_yaml).expect("yaml to json");
-    let result = schema.validate(&workflow_json);
-    assert!(
-        result.is_ok(),
-        "schema errors: {:?}",
-        result
-            .err()
-            .map(|errs| errs.map(|e| e.to_string()).collect::<Vec<_>>())
-    );
+    let errors = schema
+        .iter_errors(&workflow_json)
+        .map(|error| error.to_string())
+        .collect::<Vec<_>>();
+    assert!(errors.is_empty(), "schema errors: {errors:?}");
 
     let flow = transist_compiler::load_flow(&workflow_path).expect("load flow");
     transist_compiler::validate_flow_in_home(&home_dir, &flow).expect("rust validate");
@@ -650,10 +650,10 @@ steps:
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("schemas/workflow.schema.json"),
     );
     let custom_json: serde_json::Value = yaml_serde::from_str(custom_yaml).expect("yaml to json");
-    let schema_err = schema
-        .validate(&custom_json)
-        .expect_err("schema should reject custom");
-    let schema_errors: Vec<String> = schema_err.map(|e| e.to_string()).collect();
+    let schema_errors: Vec<String> = schema
+        .iter_errors(&custom_json)
+        .map(|error| error.to_string())
+        .collect();
     assert!(
         schema_errors
             .iter()
@@ -760,14 +760,11 @@ capabilities:
 "#;
     let manifest_json: serde_json::Value =
         yaml_serde::from_str(manifest_yaml).expect("yaml to json");
-    let result = schema.validate(&manifest_json);
-    assert!(
-        result.is_ok(),
-        "schema errors: {:?}",
-        result
-            .err()
-            .map(|errs| errs.map(|e| e.to_string()).collect::<Vec<_>>())
-    );
+    let errors = schema
+        .iter_errors(&manifest_json)
+        .map(|error| error.to_string())
+        .collect::<Vec<_>>();
+    assert!(errors.is_empty(), "schema errors: {errors:?}");
 
     let manifest_path = tmp.path().join("plugin.yaml");
     write_file(&manifest_path, manifest_yaml);

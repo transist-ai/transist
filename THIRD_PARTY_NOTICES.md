@@ -1719,6 +1719,7 @@ Used by:
 Used by:
 
 - `bytecount 0.6.9`
+- `unicode-general-category 1.1.0`
 - `winapi 0.3.9`
 
 ```text
@@ -3871,7 +3872,7 @@ Used by:
 - `find-msvc-tools 0.1.11`
 - `flate2 1.1.9`
 - `form_urlencoded 1.2.2`
-- `fraction 0.15.4`
+- `fraction 0.17.0`
 - `hashbrown 0.17.1`
 - `heck 0.5.0`
 - `httparse 1.10.1`
@@ -3881,8 +3882,8 @@ Used by:
 - `indexmap 2.14.0`
 - `itertools 0.13.0`
 - `js-sys 0.3.104`
-- `lazy_static 1.5.0`
 - `linux-raw-sys 0.12.1`
+- `lock_api 0.4.14`
 - `log 0.4.33`
 - `num-bigint 0.4.8`
 - `num-complex 0.4.6`
@@ -3892,6 +3893,8 @@ Used by:
 - `num-traits 0.2.19`
 - `num 0.4.3`
 - `once_cell 1.21.4`
+- `parking_lot 0.12.5`
+- `parking_lot_core 0.9.12`
 - `percent-encoding 2.3.2`
 - `rayon-core 1.13.0`
 - `rayon 1.12.0`
@@ -3902,6 +3905,7 @@ Used by:
 - `rustc_version 0.4.1`
 - `rustix 1.1.4`
 - `rustls 0.23.46`
+- `scopeguard 1.2.0`
 - `smallvec 1.15.2`
 - `socket2 0.6.5`
 - `stable_deref_trait 1.2.1`
@@ -4130,8 +4134,8 @@ limitations under the License.
 
 Used by:
 
-- `bit-set 0.5.3`
-- `bit-vec 0.6.3`
+- `bit-set 0.8.0`
+- `bit-vec 0.8.0`
 
 ```text
                               Apache License
@@ -5182,6 +5186,7 @@ limitations under the License.
 
 Used by:
 
+- `allocator-api2 0.2.21`
 - `anes 0.1.6`
 - `anyhow 1.0.104`
 - `fiat-crypto 0.3.0`
@@ -5196,7 +5201,7 @@ Used by:
 - `quote 1.0.47`
 - `r-efi 5.3.0`
 - `r-efi 6.0.0`
-- `rand 0.10.2`
+- `rand 0.10.4`
 - `rcgen 0.14.10`
 - `ref-cast-impl 1.0.27`
 - `ref-cast 1.0.27`
@@ -5652,6 +5657,38 @@ THE SOFTWARE.
 
 Used by:
 
+- `redox_syscall 0.5.18`
+
+```text
+Copyright (c) 2017 Redox OS Developers
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+```
+
+## MIT License
+
+Used by:
+
 - `bytes 1.12.1`
 
 ```text
@@ -5957,6 +5994,35 @@ THE SOFTWARE.
 
 Used by:
 
+- `micromap 0.3.0`
+
+```text
+Copyright (c) 2023-2026 Yegor Bugayenko
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+```
+
+## MIT License
+
+Used by:
+
 - `synstructure 0.13.2`
 
 ```text
@@ -6036,12 +6102,76 @@ SOFTWARE.
 
 Used by:
 
+- `strum 0.28.0`
+- `strum_macros 0.28.0`
+
+```text
+MIT License
+
+Copyright (c) 2019 Peter Glotfelty
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+```
+
+## MIT License
+
+Used by:
+
 - `email_address 0.2.9`
 
 ```text
 MIT License
 
 Copyright (c) 2019 Simon Johnston
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+```
+
+## MIT License
+
+Used by:
+
+- `jsonschema 0.61.2`
+- `referencing 0.61.2`
+
+```text
+MIT License
+
+Copyright (c) 2020-2026 Dmitry Dygalo
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -6128,7 +6258,7 @@ SOFTWARE.
 
 Used by:
 
-- `fluent-uri 0.3.2`
+- `fluent-uri 0.4.1`
 
 ```text
 MIT License
@@ -6158,11 +6288,11 @@ SOFTWARE.
 
 Used by:
 
-- `jsonschema 0.24.3`
+- `jsonschema-regex 0.61.2`
+- `jsonschema-value 0.61.2`
 - `plotters-backend 0.3.7`
 - `plotters-svg 0.3.7`
 - `plotters 0.3.7`
-- `referencing 0.24.3`
 - `uuid-simd 0.8.0`
 - `vsimd 0.8.0`
 
@@ -6289,7 +6419,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- `fancy-regex 0.13.0`
+- `fancy-regex 0.20.2`
 
 ```text
 The MIT License
@@ -6361,6 +6491,38 @@ The MIT License (MIT)
 Copyright (c) 2015 Danny Guo
 Copyright (c) 2016 Titus Wormer <tituswormer@gmail.com>
 Copyright (c) 2018 Akash Kurdekar
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+```
+
+## MIT License
+
+Used by:
+
+- `data-encoding 2.11.1`
+
+```text
+The MIT License (MIT)
+
+Copyright (c) 2015-2020 Julien Cretin
+Copyright (c) 2017-2020 Google Inc.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

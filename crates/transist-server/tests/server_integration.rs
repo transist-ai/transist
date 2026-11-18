@@ -2096,20 +2096,18 @@ async fn assert_contract_http_response(
     if response_is_json {
         let payload: Value = serde_json::from_slice(&body)
             .unwrap_or_else(|error| panic!("decode {method} {path} JSON response: {error}"));
-        if let Err(errors) = validator.validate(&payload) {
-            panic!(
-                "{method} {path} payload violates its OpenAPI response schema: {:?}",
-                errors.collect::<Vec<_>>()
-            );
-        }
+        let errors = validator.iter_errors(&payload).collect::<Vec<_>>();
+        assert!(
+            errors.is_empty(),
+            "{method} {path} payload violates its OpenAPI response schema: {errors:?}"
+        );
     } else {
-        let text = String::from_utf8_lossy(&body);
-        if let Err(errors) = validator.validate(&Value::String(text.into_owned())) {
-            panic!(
-                "{method} {path} content violates its OpenAPI response schema: {:?}",
-                errors.collect::<Vec<_>>()
-            );
-        }
+        let text = Value::String(String::from_utf8_lossy(&body).into_owned());
+        let errors = validator.iter_errors(&text).collect::<Vec<_>>();
+        assert!(
+            errors.is_empty(),
+            "{method} {path} content violates its OpenAPI response schema: {errors:?}"
+        );
     }
 }
 
