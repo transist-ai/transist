@@ -780,7 +780,7 @@ fn benchmark_workflow_validation_fast_path(c: &mut Criterion) {
     .expect("index JSON");
     assert_eq!(
         index["entries"][WORKFLOW_REF]["definition_validation"]["validator_revision"],
-        2
+        3
     );
     assert_eq!(
         index["entries"][WORKFLOW_REF]["definition_validation"]["plugin_package_digests"]

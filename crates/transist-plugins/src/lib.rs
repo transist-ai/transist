@@ -357,6 +357,71 @@ capabilities:
     }
 
     #[test]
+    fn action_schema_discovers_and_requires_transitive_package_references() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        write_fixture(tmp.path());
+        fs::write(
+            tmp.path().join("schemas/input.json"),
+            r#"{"type":"object","properties":{"code":{"$ref":"shared.json#code"}},"required":["code"]}"#,
+        )
+        .unwrap();
+        fs::write(
+            tmp.path().join("schemas/shared.json"),
+            r#"{"$defs":{"code":{"$anchor":"code","$ref":"leaf.json#/$defs/code"}}}"#,
+        )
+        .unwrap();
+        fs::write(
+            tmp.path().join("schemas/leaf.json"),
+            r#"{"$defs":{"code":{"type":"integer","minimum":1}}}"#,
+        )
+        .unwrap();
+        fs::write(
+            tmp.path().join("schemas/output.json"),
+            r#"{"$ref":"shared.json#code"}"#,
+        )
+        .unwrap();
+        let manifest_path = tmp.path().join("plugin.yaml");
+        let manifest = fs::read_to_string(&manifest_path).unwrap().replace(
+            "    - schemas/output.json\n",
+            "    - schemas/output.json\n    - schemas/shared.json\n",
+        );
+        fs::write(&manifest_path, &manifest).unwrap();
+        let error = load_manifest(tmp.path()).expect_err("transitive schema must be selected");
+        assert!(
+            format!("{error:#}").contains(
+                "schema reference 'schemas/leaf.json' is missing from plugin package.files"
+            )
+        );
+
+        fs::write(
+            &manifest_path,
+            manifest.replace(
+                "    - schemas/shared.json\n",
+                "    - schemas/shared.json\n    - schemas/leaf.json\n",
+            ),
+        )
+        .unwrap();
+        let manifest = load_manifest(tmp.path()).expect("complete package");
+        let action = &manifest.actions[0];
+        assert_eq!(
+            crate::schema::action_schema_paths(tmp.path(), action).unwrap(),
+            vec![
+                "schemas/input.json",
+                "schemas/leaf.json",
+                "schemas/output.json",
+                "schemas/shared.json",
+            ]
+        );
+        validate_action_schemas(tmp.path(), action).unwrap();
+        validate_action_input(tmp.path(), action, &serde_json::json!({"code": 2})).unwrap();
+        validate_action_output(tmp.path(), action, &serde_json::json!(2)).unwrap();
+        assert!(
+            validate_action_input(tmp.path(), action, &serde_json::json!({"code": 0})).is_err()
+        );
+        assert!(validate_action_output(tmp.path(), action, &serde_json::json!(0)).is_err());
+    }
+
+    #[test]
     fn action_schema_rejects_remote_and_parent_refs() {
         for reference in [
             "https://example.com/schema.json",

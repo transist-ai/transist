@@ -6,6 +6,9 @@ use install_index::DefinitionValidation;
 use std::sync::Arc;
 use transist_plugins::ValidatedPluginCatalog;
 
+// Bump when validation rules change so older receipts cannot attest to the new rules.
+const VALIDATOR_REVISION: u32 = 3;
+
 fn pins(recipe: &Recipe) -> Result<BTreeMap<String, String>> {
     let mut pins = BTreeMap::new();
     let mut failure = None;
@@ -54,7 +57,7 @@ pub(super) fn receipt(home: &Path, recipe: &Recipe, path: &Path) -> Result<Defin
     let catalog = ValidatedPluginCatalog::new(home.to_path_buf(), BTreeMap::new());
     verify_pins(&catalog, &digests)?;
     Ok(DefinitionValidation {
-        validator_revision: 2,
+        validator_revision: VALIDATOR_REVISION,
         recipe_sha256: recipe_sha256(path)?,
         plugin_package_digests: digests,
     })
@@ -98,7 +101,7 @@ pub(super) fn catalog(
             if receipt.recipe_sha256 != digest || receipt.plugin_package_digests != pinned {
                 bail!("definition_validation_mismatch: receipt differs from installed recipe");
             }
-            if receipt.validator_revision == 2 {
+            if receipt.validator_revision == VALIDATOR_REVISION {
                 receipts = receipt.plugin_package_digests;
             }
         }

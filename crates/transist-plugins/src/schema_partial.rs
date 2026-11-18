@@ -109,8 +109,7 @@ impl Context<'_> {
                 object.remove("$id");
             }
             crate::record_validation_work(crate::ValidationWork::SchemaCompilation);
-            let mut options = jsonschema::options();
-            options
+            let options = jsonschema::options()
                 .with_draft(Draft::Draft202012)
                 .with_retriever(PackageSchemaRetriever {
                     plugin_dir: std::fs::canonicalize(self.directory)?,
@@ -118,7 +117,7 @@ impl Context<'_> {
             let compiled = options.build(&fragment).map_err(|error| {
                 anyhow::anyhow!(
                     "invalid partial input schema at schema path '{}'",
-                    error.schema_path
+                    error.schema_path()
                 )
             })?;
             self.cache.validators.insert(key.clone(), compiled);
@@ -134,11 +133,10 @@ impl Context<'_> {
         instance: &Value,
         path: &str,
     ) -> Result<Assessment> {
-        if let Err(mut errors) = self.validator(schema, document)?.validate(instance) {
-            let error = errors.next().expect("nonempty schema errors");
+        if let Err(error) = self.validator(schema, document)?.validate(instance) {
             return Ok(Assessment::Invalid {
-                instance_path: format!("{path}{}", error.instance_path),
-                schema_path: format!("{document}#{schema_path}{}", error.schema_path),
+                instance_path: format!("{path}{}", error.instance_path()),
+                schema_path: format!("{document}#{schema_path}{}", error.evaluation_path()),
             });
         }
         Ok(Assessment::Valid)
@@ -724,6 +722,144 @@ fn anchor<'a>(value: &'a Value, name: &str, path: &str) -> Option<(&'a Value, St
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn baseline_action() -> crate::manifest::ActionDescriptor {
+        serde_json::from_value(json!({
+            "name": "test",
+            "input_schema": "input.json",
+            "output_schema": "input.json"
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn partial_baseline_matches_full_and_defers_unresolved_input() {
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            temp.path().join("input.json"),
+            json!({
+                "type": "object",
+                "required": ["value"],
+                "properties": {"value": {"type": "integer"}}
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let action = baseline_action();
+        let mut cache = super::super::SchemaCache::default();
+        let deferred = ["/value".into()];
+
+        for _ in 0..2 {
+            for (instance, expected) in [
+                (json!({"value": 42}), true),
+                (json!({"value": "not an integer"}), false),
+                (json!({}), false),
+            ] {
+                assert_eq!(
+                    cache
+                        .validate(temp.path(), "input.json", "input", &instance)
+                        .is_ok(),
+                    expected
+                );
+                assert_eq!(
+                    cache
+                        .validate_partial(temp.path(), "input.json", &instance, &[])
+                        .is_ok(),
+                    expected
+                );
+                assert_eq!(
+                    super::super::validate_action_input(temp.path(), &action, &instance).is_ok(),
+                    expected
+                );
+                assert_eq!(
+                    super::super::validate_action_input_partial(
+                        temp.path(),
+                        &action,
+                        &instance,
+                        &[]
+                    )
+                    .is_ok(),
+                    expected
+                );
+            }
+
+            let unresolved = json!({"value": "{{steps.produce.out.value}}"});
+            assert!(
+                cache
+                    .validate(temp.path(), "input.json", "input", &unresolved)
+                    .is_err()
+            );
+            assert!(
+                super::super::validate_action_input(temp.path(), &action, &unresolved).is_err()
+            );
+            assert!(
+                cache
+                    .validate_partial(temp.path(), "input.json", &unresolved, &deferred)
+                    .is_ok()
+            );
+            assert!(
+                super::super::validate_action_input_partial(
+                    temp.path(),
+                    &action,
+                    &unresolved,
+                    &deferred,
+                )
+                .is_ok()
+            );
+        }
+    }
+
+    #[test]
+    fn partial_baseline_referenced_failure_composes_paths_and_redacts_values() {
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            temp.path().join("input.json"),
+            json!({"properties": {"payload": {"$ref": "rules.json#/$defs/payload"}}}).to_string(),
+        )
+        .unwrap();
+        std::fs::write(
+            temp.path().join("rules.json"),
+            json!({"$defs": {"payload": {"properties": {
+                "deferred": {"type": "integer"},
+                "records/list": {"type": "array", "items": {"type": "integer"}}
+            }}}})
+            .to_string(),
+        )
+        .unwrap();
+        let action = baseline_action();
+        let mut cache = super::super::SchemaCache::default();
+        let deferred = ["/payload/deferred".into()];
+        let unresolved = "{{steps.produce.out.value}}";
+        let sentinel = "known-private-sentinel";
+        let instance = json!({"payload": {"deferred": unresolved, "records/list": [sentinel]}});
+        let materialized = json!({"payload": {"deferred": 42, "records/list": [sentinel]}});
+        let expected = "input schema validation failed at instance path '/payload/records~1list/0' and schema path 'rules.json#/$defs/payload/properties/records~1list/items/type'";
+
+        for _ in 0..2 {
+            for result in [
+                cache.validate_partial(temp.path(), "input.json", &instance, &deferred),
+                super::super::validate_action_input_partial(
+                    temp.path(),
+                    &action,
+                    &instance,
+                    &deferred,
+                ),
+            ] {
+                let error = result.unwrap_err().to_string();
+                assert_eq!(error, expected);
+                assert!(!error.contains(unresolved));
+                assert!(!error.contains(sentinel));
+            }
+            for result in [
+                cache.validate(temp.path(), "input.json", "input", &materialized),
+                super::super::validate_action_input(temp.path(), &action, &materialized),
+            ] {
+                let error = result.unwrap_err().to_string();
+                assert!(error.contains("instance path '/payload/records~1list/0'"));
+                assert!(!error.contains(sentinel));
+            }
+        }
+    }
 
     #[test]
     fn review2_partial_unevaluated_properties_reject_permanent_extras() {

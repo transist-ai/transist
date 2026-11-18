@@ -450,11 +450,12 @@ pub fn validate_snapshot_contract(snapshot: &InspectionSnapshotEnvelope) -> Resu
         .context("failed serializing inspection snapshot for schema validation")?;
     let validator = jsonschema::Validator::new(&schema)
         .map_err(|error| anyhow!("failed compiling inspection snapshot JSON schema: {error}"))?;
-    if let Err(errors) = validator.validate(&instance) {
-        let messages = errors
-            .take(5)
-            .map(|error| error.to_string())
-            .collect::<Vec<_>>();
+    let messages = validator
+        .iter_errors(&instance)
+        .take(5)
+        .map(|error| error.to_string())
+        .collect::<Vec<_>>();
+    if !messages.is_empty() {
         bail!(
             "inspection snapshot schema validation failed: {}",
             messages.join("; ")
@@ -1967,11 +1968,12 @@ mod tests {
         let value: serde_json::Value =
             serde_json::from_str(&raw).expect("parse inspection snapshot example fixture");
         let validator = inspection_snapshot_schema_validator();
-        if let Err(errors) = validator.validate(&value) {
-            let messages = errors
-                .take(5)
-                .map(|error| error.to_string())
-                .collect::<Vec<_>>();
+        let messages = validator
+            .iter_errors(&value)
+            .take(5)
+            .map(|error| error.to_string())
+            .collect::<Vec<_>>();
+        if !messages.is_empty() {
             panic!(
                 "inspection snapshot example fixture failed schema validation: {}",
                 messages.join("; ")
@@ -2029,6 +2031,57 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn validate_snapshot_contract_limits_schema_diagnostics_to_five() {
+        let mut snapshot = snapshot_with_failure_message("exit code 1");
+        validate_snapshot_contract(&snapshot).expect("valid snapshot fixture");
+
+        snapshot.runs[0].artifacts = (0..6)
+            .map(|index| InspectionSnapshotBlobMetadata {
+                run_id: snapshot.root_run_id.clone(),
+                family: format!("invalid-family-{index}"),
+                step_id: "compile".to_string(),
+                execution: 1,
+                relative_path: format!("artifact-{index}"),
+                name: format!("artifact-{index}"),
+                bytes: 0,
+                created_at_ms: None,
+                descriptor: None,
+            })
+            .collect();
+        snapshot.validate().expect("Rust invariants must pass");
+
+        let instance = serde_json::to_value(&snapshot).expect("serialize snapshot");
+        let validator = inspection_snapshot_schema_validator();
+        let errors = validator
+            .iter_errors(&instance)
+            .map(|error| (error.instance_path().to_string(), error.to_string()))
+            .collect::<Vec<_>>();
+        let paths = errors
+            .iter()
+            .map(|(path, _)| path.clone())
+            .collect::<BTreeSet<_>>();
+        let expected_paths = (0..6)
+            .map(|index| format!("/runs/0/artifacts/{index}/family"))
+            .collect::<BTreeSet<_>>();
+        assert_eq!(errors.len(), 6);
+        assert_eq!(paths, expected_paths);
+
+        let error = validate_snapshot_contract(&snapshot)
+            .expect_err("schema violations must fail contract validation")
+            .to_string();
+        let diagnostic = error
+            .strip_prefix("inspection snapshot schema validation failed: ")
+            .expect("schema diagnostic prefix");
+        let expected = errors
+            .iter()
+            .take(5)
+            .map(|(_, message)| message.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(diagnostic, expected.join("; "));
+        assert_eq!(diagnostic.split("; ").count(), 5);
     }
 
     #[test]
@@ -2099,8 +2152,11 @@ mod tests {
             }]
         });
 
-        if let Err(errors) = validator.validate(&value) {
-            let messages = errors.map(|error| error.to_string()).collect::<Vec<_>>();
+        let messages = validator
+            .iter_errors(&value)
+            .map(|error| error.to_string())
+            .collect::<Vec<_>>();
+        if !messages.is_empty() {
             panic!(
                 "inspection snapshot gate schema rejected valid v1 gate fields: {}",
                 messages.join("; ")
@@ -2162,18 +2218,15 @@ mod tests {
         });
         value["runs"][0]["gates"][0]["unexpected"] = serde_json::json!(true);
 
-        let errors = validator
-            .validate(&value)
-            .expect_err("unknown gate key should fail schema validation")
-            .collect::<Vec<_>>();
+        let errors = validator.iter_errors(&value).collect::<Vec<_>>();
         assert!(
             errors
                 .iter()
-                .any(|error| error.instance_path.to_string() == "/runs/0/gates/0"),
+                .any(|error| error.instance_path().to_string() == "/runs/0/gates/0"),
             "expected gate validation error at /runs/0/gates/0, got {:?}",
             errors
                 .iter()
-                .map(|error| error.instance_path.to_string())
+                .map(|error| error.instance_path().to_string())
                 .collect::<Vec<_>>()
         );
     }
