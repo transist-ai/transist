@@ -40,6 +40,7 @@ if [[ "${IS_DRAFT:-false}" == true ]]; then
   exit 0
 fi
 
+require_success pr-description "${PR_DESCRIPTION_RESULT:-}"
 require_success ci-static "${CI_STATIC_RESULT:-}"
 if [[ "${IS_DEPENDABOT:-false}" != true || "${COMMIT_SIGNOFF_RESULT:-}" != skipped ]]; then
   require_success commit-signoff "${COMMIT_SIGNOFF_RESULT:-}"

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Transist PR Preparation"
+  short_description: "Prepare a Transist PR with the repository template and validation evidence."
+  default_prompt: "Use $transist-pr-preparation to review PR scope, fill the current repository template, and publish with gh only when authorized."

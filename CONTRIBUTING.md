@@ -178,6 +178,8 @@ surfaces, it must read [AGENTS.md](AGENTS.md) and
 [.agents/CORE_CHANGE_CHECKLIST.md](.agents/CORE_CHANGE_CHECKLIST.md) before
 proposing the change. Repo-local skills under `.agents/skills/` track the
 current checked-out behavior and should be preferred over general knowledge.
+When preparing or publishing a GitHub PR, use the
+[PR preparation skill](.agents/skills/transist-pr-preparation/SKILL.md).
 
 ## Working Rules
 
@@ -357,9 +359,9 @@ CI is split into three cost/trust tiers:
 - **PR CI (`PR Gate / pr-gate`)** runs the full `check_pr_ready.sh` gate on a
   Linux glibc runner, plus schema/OpenAPI contract checks and full
   `cargo deny check`, Markdown lint, and coverage, for ready trusted-contributor
-  PRs. Cheap static, sign-off, Markdown, dependency-policy and optional dependency
-  review checks must succeed before full validation, schema tests, and coverage
-  start. There is no additional hosted `validate-fast` job; local `--fast` remains.
+  PRs. Cheap description, static, sign-off, Markdown, dependency-policy, and optional
+  dependency review checks must succeed before full validation, schema tests, and
+  coverage start. There is no additional hosted `validate-fast` job; local `--fast` remains.
   Draft PRs skip validation. A fork or non-collaborator PR may queue read-only
   validation before `pr-guard.yml` closes it, or on a later `synchronize`
   event if it remains open. These jobs receive no repository secrets; repository
@@ -427,8 +429,8 @@ encoding, and keygen helpers in `src/` and `crates/`.
   the change affects examples, commands, public behavior, contracts, or
   executable workflow definitions. Report what you ran and any limitations.
 - **Code changes**: run `bash scripts/ci/check_pr_ready.sh`.
-- **Dependency, trust, secret, or local-only changes**: run
-  `bash scripts/ci/check_pr_ready.sh` and
+- **Dependency, trust, secret, local-only, release-executable, or third-party
+  notice changes**: run `bash scripts/ci/check_pr_ready.sh` and
   `bash scripts/ci/run_security_regression_suite.sh` (below).
 - **Kernel or public-contract changes**: run `bash scripts/ci/check_pr_ready.sh`,
   `bash scripts/ci/run_security_regression_suite.sh` (below), and the matching
@@ -449,8 +451,8 @@ touches trust, local-only, or secret-scoping behavior, also run:
 bash scripts/ci/run_security_regression_suite.sh
 ```
 
-Changes to workflow actions, CI tools, release executables, or third-party
-notices must also pass the supply-chain and license checks:
+Changes to dependencies, workflow actions, CI tools, release executables, or
+third-party notices must also pass the supply-chain and license checks:
 
 ```bash
 bash scripts/ci/check_supply_chain_pins.sh
@@ -543,9 +545,18 @@ with an Issue rather than a pull request.
 
 Trusted contributors and maintainers opening a pull request should:
 
-- Use the repository pull request template at
-  `.github/pull_request_template.md`.
-- Call out compatibility and product-surface impact.
+- Use the [pull request template](.github/pull_request_template.md). Keep all
+  eight headings, check the applicable options, and fill in Summary, Validation,
+  Tests, and Docs. Explain explicitly when a section does not apply. A DCO
+  checkbox alone is not a Validation response.
+- `PR Gate / pr-gate` requires the description check on ready PRs targeting
+  `main`. Edit the description to re-trigger CI; no new commit is needed. Only
+  verified same-repository Dependabot PRs are exempt from this description check.
+- Call out compatibility and product-surface impact. Add a migration note for
+  breaking or behavior-changing updates in a pre-1.0 minor release.
+- If protected execution, recovery, replay, artifact, evidence, or adapter/plugin
+  behavior changes, add and link a core-change record following the
+  [core-change checklist](.agents/CORE_CHANGE_CHECKLIST.md).
 - Prefer small, reviewable changes.
 - Update [Compatibility and Stability](docs/public/reference/compatibility-and-stability.md)
   when a change alters a documented public contract.

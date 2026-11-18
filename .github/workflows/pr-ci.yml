@@ -2,7 +2,7 @@ name: PR Gate
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, edited]
     branches:
       - main
 
@@ -31,10 +31,89 @@ defaults:
     shell: bash
 
 jobs:
+  pr-description:
+    name: pr-description
+    if: ${{ github.event.pull_request.draft == false }}
+    runs-on: ubuntu-24.04
+    permissions:
+      pull-requests: read
+    steps:
+      - name: Validate current PR description
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const {data: pr} = await github.rest.pulls.get({
+              ...context.repo,
+              pull_number: context.payload.pull_request.number,
+            });
+            // Use the live body, not the original event snapshot on workflow reruns.
+            if (pr.user?.id === 49699333 && pr.user.login === 'dependabot[bot]' &&
+                pr.user.type === 'Bot' && Number.isSafeInteger(pr.base.repo.id) &&
+                pr.head.repo?.id === pr.base.repo.id) {
+              return;
+            }
+
+            const sections = new Map();
+            let section;
+            let fence;
+            for (const line of (pr.body ?? '').replace(/<!--[\s\S]*?(?:-->|$)/g, '').split(/\r?\n/)) {
+              const marker = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+              if (fence && marker?.[1][0] === fence[0] &&
+                  marker[1].length >= fence.length && !marker[2].trim()) {
+                fence = undefined;
+              } else if (!fence && marker) {
+                fence = marker[1];
+              } else {
+                const heading = !fence && line.match(/^ {0,3}(#{1,2})[ \t]+(.+?)\s*$/);
+                if (heading?.[1] === '#') {
+                  section = undefined;
+                } else if (heading) {
+                  section = [];
+                  const name = heading[2];
+                  if (!sections.has(name)) sections.set(name, []);
+                  sections.get(name).push(section);
+                } else if (section) {
+                  section.push({line, fenced: Boolean(fence)});
+                }
+              }
+            }
+
+            const rules = [
+              ['Summary', 'add a response'],
+              ['Change Classification', 'check an option'],
+              ['Kernel Contract Impact', 'check an option'],
+              ['Backward Compatibility', 'check an option'],
+              ['Security And Trust Boundary', 'check an option'],
+              ['Validation', 'report checks and results (or why they were not run)'],
+              ['Tests', 'add a response'],
+              ['Docs', 'add a response'],
+            ];
+            const checked = /^ {0,3}[-*+]\s+\[[xX]\]\s+\S/;
+            const unchecked = /^ {0,3}[-*+]\s+\[ \](?:\s|$)/;
+            const dco = /^ {0,3}[-*+]\s+\[[xX]\]\s+Commits signed off\b/i;
+            const problems = [];
+            for (const [name, guidance] of rules) {
+              const blocks = sections.get(name) ?? [];
+              if (blocks.length !== 1) {
+                problems.push(`${name}: include exactly one "## ${name}" heading`);
+                continue;
+              }
+              const complete = blocks[0].some(({line, fenced}) => {
+                if (guidance === 'check an option') return !fenced && checked.test(line);
+                return !unchecked.test(line) && !dco.test(line) &&
+                  !/^ {0,3}#{1,6}(?:\s|$)/.test(line) && /[\p{L}\p{N}]/u.test(line);
+              });
+              if (!complete) problems.push(`${name}: ${guidance}`);
+            }
+            if (problems.length) {
+              core.setFailed('Edit the PR description using .github/pull_request_template.md:\n' +
+                problems.map(problem => `- ${problem}`).join('\n'));
+            }
+
   commit-signoff:
     name: Commit Sign-off
     runs-on: ubuntu-24.04
-    if: ${{ github.event.pull_request.draft == false && github.actor != 'dependabot[bot]' }}
+    if: ${{ github.event.pull_request.draft == false && github.event.pull_request.user.login != 'dependabot[bot]' }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -67,6 +146,7 @@ jobs:
     name: preflight-gate
     if: ${{ always() }}
     needs:
+      - pr-description
       - ci-static
       - commit-signoff
       - markdownlint
@@ -81,7 +161,8 @@ jobs:
       - name: Require all preflight checks
         env:
           IS_DRAFT: ${{ github.event.pull_request.draft }}
-          IS_DEPENDABOT: ${{ github.actor == 'dependabot[bot]' }}
+          IS_DEPENDABOT: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
+          PR_DESCRIPTION_RESULT: ${{ needs.pr-description.result }}
           DEPENDENCY_REVIEW_ENABLED: ${{ vars.ENABLE_DEPENDENCY_REVIEW }}
           CI_STATIC_RESULT: ${{ needs.ci-static.result }}
           COMMIT_SIGNOFF_RESULT: ${{ needs.commit-signoff.result }}
@@ -285,6 +366,7 @@ jobs:
     name: pr-gate
     if: ${{ always() }}
     needs:
+      - pr-description
       - ci-static
       - preflight-gate
       - commit-signoff
@@ -303,7 +385,8 @@ jobs:
       - name: Require all PR checks
         env:
           IS_DRAFT: ${{ github.event.pull_request.draft }}
-          IS_DEPENDABOT: ${{ github.actor == 'dependabot[bot]' }}
+          IS_DEPENDABOT: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
+          PR_DESCRIPTION_RESULT: ${{ needs.pr-description.result }}
           CI_STATIC_RESULT: ${{ needs.ci-static.result }}
           PREFLIGHT_RESULT: ${{ needs.preflight-gate.result }}
           COMMIT_SIGNOFF_RESULT: ${{ needs.commit-signoff.result }}
