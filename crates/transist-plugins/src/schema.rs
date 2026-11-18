@@ -764,8 +764,11 @@ mod reuse_tests {
         )
         .unwrap();
 
+        type Case = (&'static str, Value, bool);
+        type Fixture<'a> = (&'static str, Value, &'a [Case]);
+
         // Shared acceptance outcomes for jsonschema 0.24.3 and 0.61.2, not diagnostics.
-        let fixtures: [(&str, Value, &[(&str, Value, bool)]); 6] = [
+        let fixtures: [Fixture<'_>; 6] = [
             (
                 "bounds",
                 json!({"type": "number", "minimum": -1, "exclusiveMaximum": 2.5}),
