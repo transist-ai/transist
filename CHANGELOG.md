@@ -2,11 +2,16 @@
 
 ## [Unreleased]
 
+## [0.1.3] — Schema Validation and Path Safety
+
 - Upgrade Rust JSON Schema validation to `jsonschema` 0.61.2. Installed workflow
   receipts from the previous validator revision are revalidated without rewriting
   the install index during checks.
 - Reject percent-encoded parent-directory segments in plugin schema paths and
   references. Use package-relative paths without parent traversal instead.
+
+Runtime, admin, and server use `0.1.3`; bundled packages and exact catalog pins
+remain `0.1.0`. See the [release notes](docs/public/releases/0.1.3.md).
 
 ## [0.1.2] — Evidence and Handshake Diagnostics
 
