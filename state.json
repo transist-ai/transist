@@ -175,7 +175,7 @@
         "workflow": "release-eligibility.yml"
       },
       "receipt": null,
-      "release_id": null,
+      "release_id": 451198864,
       "state": "preparing"
     }
   },
