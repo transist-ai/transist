@@ -3871,7 +3871,7 @@ Used by:
 - `fastrand 2.5.0`
 - `find-msvc-tools 0.1.11`
 - `flate2 1.1.9`
-- `form_urlencoded 1.2.2`
+- `form_urlencoded 1.2.3`
 - `fraction 0.17.0`
 - `hashbrown 0.17.1`
 - `heck 0.5.0`
@@ -3911,7 +3911,7 @@ Used by:
 - `stable_deref_trait 1.2.1`
 - `tempfile 3.27.0`
 - `tinytemplate 1.2.1`
-- `url 2.5.8`
+- `url 2.5.9`
 - `uuid 1.26.1`
 - `version_check 0.9.5`
 - `wasi 0.11.1+wasi-snapshot-preview1`
