@@ -26,6 +26,6 @@ bash scripts/ci/check_supply_chain_pins.sh
 python3 scripts/ci/test_ci_contracts.py
 python3 scripts/ci/test_ci_caches.py
 python3 scripts/ci/test_candidate_worktree.py
-python3 scripts/ci/test_commit_signoffs.py
+python3 scripts/ci/test_main_dco.py
 python3 scripts/ci/test_ci_local.py
 echo "CI static checks passed."

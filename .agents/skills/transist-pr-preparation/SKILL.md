@@ -19,14 +19,22 @@ authorize committing, pushing, or publishing it.
    already has a PR before opening another one.
 3. Run the applicable checks from `CONTRIBUTING.md` after the final change.
    Record the commands and outcomes, including skips, failures, and timeouts.
-   When committing is authorized, use `git commit -s` and verify each commit's
-   DCO sign-off before pushing.
+   Feature-branch sign-offs are not required by the target DCO policy, but active
+   checks may still require them until rollout. Committing and pushing require
+   separate authorization.
 4. Fill `.github/pull_request_template.md` as described in the
    [PR body and publishing reference](references/pr-body-and-publishing.md).
    If validation is pending, prepare or open a draft and explain what remains.
 5. When authorized to push and open or update the PR, use `gh` and verify the
    published URL, head, base, and draft status. Report CI status separately
-   from local validation.
+   from local validation. Opening or preparing a PR does not authorize merging.
+
+After cutover, the human merger checks the final GitHub squash message for at
+least one genuine `Signed-off-by: Name <email>` trailer, preserves genuine
+trailers, and adds their own only if needed and they can attest under the DCO.
+Never invent a trailer or sign for someone else; bot-authored PRs follow the same
+rule. The planned `main-dco` check runs after merge, not as a PR gate. Existing
+checks and rules remain authoritative until rollout is complete.
 
 ## Hard Rules
 

@@ -232,7 +232,6 @@ class Runner(unittest.TestCase):
                     "base refs",
                     "prerequisites",
                     "static",
-                    "DCO",
                     "markdown",
                     "cargo deny",
                     "isolation",
@@ -242,13 +241,14 @@ class Runner(unittest.TestCase):
                 ],
             )
             self.assertEqual(calls[-1], ["bash", "scripts/ci/check_pr_ready.sh"])
-            self.assertEqual(calls[1][-2:], ["main", "HEAD"])
+            self.assertFalse(
+                any("check_commit_signoffs.sh" in arg for call in calls for arg in call)
+            )
 
     def test_cheap_failure_prevents_compile_and_summary_records_failure(self) -> None:
         """Every cheap check is a barrier: failure prevents all subsequent expensive work."""
         for failed in (
             "check_ci_static.sh",
-            "check_commit_signoffs.sh",
             "check_markdown.sh",
             "deny",
         ):

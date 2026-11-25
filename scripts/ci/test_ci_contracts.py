@@ -20,7 +20,7 @@ EVALUATOR = ROOT / "scripts/ci/check_gate_results.sh"
 EARLY = {
     "pr-description": "PR_DESCRIPTION_RESULT",
     "ci-static": "CI_STATIC_RESULT",
-    "commit-signoff": "COMMIT_SIGNOFF_RESULT",
+
     "markdownlint": "MARKDOWNLINT_RESULT",
     "cargo-deny": "CARGO_DENY_RESULT",
     "dependency-review": "DEPENDENCY_REVIEW_RESULT",
@@ -47,7 +47,7 @@ PREFLIGHT_READY = (
 )
 PR_FLAGS = {
     "IS_DRAFT": "${{ github.event.pull_request.draft }}",
-    "IS_DEPENDABOT": "${{ github.event.pull_request.user.login == 'dependabot[bot]' }}",
+
     "DEPENDENCY_REVIEW_ENABLED": "${{ vars.ENABLE_DEPENDENCY_REVIEW }}",
 }
 
@@ -158,6 +158,10 @@ def workflow_errors(text: str, kind: str) -> list[str]:
         return errors
     if kind == "main":
         return errors
+    if "commit-signoff" in jobs or any(
+        binding in text for binding in ("COMMIT_SIGNOFF_RESULT", "IS_DEPENDABOT")
+    ):
+        errors.append("PR workflow must not enforce per-commit sign-off")
     if not text.startswith("name: PR Gate\n"):
         errors.append("PR workflow identity changed")
     if not re.search(r"^    types: \[[^\n]*\bedited\b[^\n]*\]$", text, re.M):
@@ -221,10 +225,7 @@ def workflow_errors(text: str, kind: str) -> list[str]:
         if job_needs(jobs.get(name, "")):
             errors.append(f"early job must run independently: {name}")
     for name, condition in {
-        "commit-signoff": (
-            "${{ github.event.pull_request.draft == false "
-            "&& github.event.pull_request.user.login != 'dependabot[bot]' }}"
-        ),
+
         "dependency-review": (
             "${{ vars.ENABLE_DEPENDENCY_REVIEW == 'true' "
             "&& github.event.pull_request.draft == false }}"
@@ -236,9 +237,7 @@ def workflow_errors(text: str, kind: str) -> list[str]:
             errors.append(f"early job must run independently: {name}")
     commands = {
         "ci-static": "bash scripts/ci/check_ci_static.sh",
-        "commit-signoff": (
-            'bash scripts/ci/check_commit_signoffs.sh "$BASE_SHA" "$HEAD_SHA"'
-        ),
+
         "validate-full": "bash scripts/ci/check_pr_ready.sh",
         "schema-api-contracts": "bash scripts/ci/check_schema_api_contracts.sh",
         "coverage": "bash scripts/ci/run_coverage.sh coverage",
@@ -744,7 +743,7 @@ class GateResults(unittest.TestCase):
         env = {
             "PATH": os.defpath,
             "IS_DRAFT": "false",
-            "IS_DEPENDABOT": "false",
+
             "DEPENDENCY_REVIEW_ENABLED": "true",
         }
         env.update({variable: "success" for variable in bindings.values()})
@@ -778,45 +777,27 @@ class GateResults(unittest.TestCase):
                         self.assertIn("did not succeed", outcome.stderr)
 
     def test_pr_skip_exceptions(self) -> None:
-        """Only the two exact skipped exceptions pass for ready PRs."""
+        """Only disabled dependency review may be skipped for ready PRs."""
         for mode in ("preflight", "pr"):
-            for result in ("success", "skipped", "failure", "cancelled", "", None):
-                for flag, variable in (
-                    ("IS_DEPENDABOT", "COMMIT_SIGNOFF_RESULT"),
-                    ("DEPENDENCY_REVIEW_ENABLED", "DEPENDENCY_REVIEW_RESULT"),
-                ):
-                    with self.subTest(mode=mode, flag=flag, result=result):
-                        value = "true" if flag == "IS_DEPENDABOT" else "false"
-                        outcome = self.evaluate(mode, {flag: value, variable: result})
+            for enabled in ("false", ""):
+                for result in ("success", "skipped", "failure", "cancelled", "", None):
+                    with self.subTest(mode=mode, enabled=enabled, result=result):
+                        outcome = self.evaluate(mode, {
+                            "DEPENDENCY_REVIEW_ENABLED": enabled,
+                            "DEPENDENCY_REVIEW_RESULT": result,
+                        })
                         self.assertEqual(
                             outcome.returncode == 0,
                             result in ("success", "skipped"),
                             outcome.stderr,
                         )
-            outcome = self.evaluate(
-                mode,
-                {
-                    "IS_DEPENDABOT": "true",
-                    "COMMIT_SIGNOFF_RESULT": "skipped",
-                    "DEPENDENCY_REVIEW_ENABLED": "",
-                    "DEPENDENCY_REVIEW_RESULT": "skipped",
-                },
-            )
-            self.assertEqual(outcome.returncode, 0, outcome.stderr)
 
     def test_accepted_ancestor_skips_keep_expensive_jobs_eligible(self) -> None:
         """Accepted skips pass preflight without an implicit success() blocker."""
         workflow = (ROOT / ".github/workflows/pr-ci.yml").read_text(encoding="utf-8")
         jobs = {match.group(1): match.group(2) for match in JOB.finditer(workflow)}
         for skipped_inputs in (
-            {"IS_DEPENDABOT": "true", "COMMIT_SIGNOFF_RESULT": "skipped"},
             {
-                "DEPENDENCY_REVIEW_ENABLED": "false",
-                "DEPENDENCY_REVIEW_RESULT": "skipped",
-            },
-            {
-                "IS_DEPENDABOT": "true",
-                "COMMIT_SIGNOFF_RESULT": "skipped",
                 "DEPENDENCY_REVIEW_ENABLED": "false",
                 "DEPENDENCY_REVIEW_RESULT": "skipped",
             },

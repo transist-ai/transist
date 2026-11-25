@@ -47,6 +47,10 @@ begins, reducing wasted contributor effort and review cost.
 
 ## Branch History, Squash Merges, And DCO
 
+The DCO rollout described below may not yet be reflected in all CI, ruleset, and
+settings files or live settings. Until cutover, follow the active checks and
+rules; snapshots do not establish live settings.
+
 The importable [ruleset templates](../../.github/rulesets/) mirror the live
 repository rules. They contain editable configuration only, not GitHub-generated
 IDs or timestamps. Changing a template does not apply it to GitHub automatically.
@@ -58,18 +62,30 @@ IDs or timestamps. Changing a template does not apply it to GitHub automatically
   blocking rebase force pushes. Update PR branches by rebasing, not by merging
   `main` into them. Preserve sign-offs and use an explicitly authorized
   `--force-with-lease` push for rewritten history.
-- `main-dco-signoff.json` requires a correctly formatted `Signed-off-by` line in
-  commit messages entering `main`. This is a presence check, not cryptographic
-  signing or proof that every contributor's attestation was retained. Inspect the
-  final squash message and preserve all required sign-offs before merging.
+- `main-dco-signoff.json` describes the existing sign-off ruleset; the rollout
+  disables it only after the new post-merge check passes on the rollout merge.
 - `v-tag-protection.json` keeps version tags immutable. No template grants bypass
   permissions.
 
 The [repository settings snapshot](../../.github/repository-settings.json) is
 separate from rulesets: allow only squash merging,
 retain commit details in the default squash message, and require sign-offs for
-web-based commits. When adapting these templates to another repository, require
-that repository's actual CI gates instead of copying the `pr-gate` name blindly.
+web-based commits until the rollout changes the live setting and snapshot. When
+adapting these templates to another repository, require that repository's actual
+CI gates instead of copying the `pr-gate` name blindly.
+
+After cutover, every new squash commit on `main` needs at least one genuine
+`Signed-off-by: Name <email>` DCO trailer. Feature-branch commits and PR bodies
+need no sign-off. In GitHub's normal **Squash and merge** dialog, the human
+merger preserves genuine trailers and adds their own if none is valid and they
+can attest under the [DCO](https://developercertificate.org/). Never invent a
+trailer or sign for someone else; bot-authored PRs follow the same rule.
+
+The planned `main-dco` push check validates trailer format and presence, not
+identity or rights. It runs after landing, so it is not a merge block or a release
+gate. It checks new commits in the push range, not pre-rollout history or tags.
+If it fails, stop further merges and notify a maintainer with the SHA and run URL;
+do not force-push `main` or treat a later sign-off as a repair.
 
 ## CI Tiers And Their Cost / Security Boundaries
 
@@ -78,7 +94,7 @@ purpose, and expensive or privileged validation runs only in trusted contexts.
 
 | Tier | Workflow | Trigger | What runs | Runner / boundary |
 |---|---|---|---|---|
-| **1. PR CI** | `pr-ci.yml` | `pull_request` (opened, synchronize, reopened, ready_for_review, edited) on `main`; validation jobs require ready-for-review state | PR description, CI static contracts, DCO, Markdown lint, cargo-deny and optional dependency review feed `preflight-gate`; only then run full `check_pr_ready.sh`, schema/OpenAPI and coverage | Linux glibc containers and a clean Linux runner, `contents: read`. Draft validation jobs are skipped. `validate-full` retains release build, archive reproducibility, quickstart smoke, E2E and shipped-workflow coverage. Duplicate hosted `validate-fast` is removed. |
+| **1. PR CI** | `pr-ci.yml` | `pull_request` (opened, synchronize, reopened, ready_for_review, edited) on `main`; validation jobs require ready-for-review state | PR description, CI static contracts, Markdown lint, cargo-deny and optional dependency review feed `preflight-gate`; only then run full `check_pr_ready.sh`, schema/OpenAPI and coverage | Linux glibc containers and a clean Linux runner, `contents: read`. Draft validation jobs are skipped. `validate-full` retains release build, archive reproducibility, quickstart smoke, E2E and shipped-workflow coverage. Duplicate hosted `validate-fast` is removed. |
 | **2. Default-branch CI** | `main-ci.yml` | `push` to `main` + input-free `workflow_dispatch` | Linux x86-64/glibc + macOS Apple Silicon + Alpine/musl release build and quickstart smoke, focused musl runtime-temp regression, plus coverage-instrumented default-feature tests | Trusted `main` context, low merge volume. No full PR-readiness, clippy, E2E harness, static, or security gate. Coverage is required by `main-gate`. |
 | **3. Release CI** | `release-eligibility.yml` → `release.yml` → `release-publication.yml` | Completed mainline/security push runs on `main`, behind `RELEASE_PIPELINE_ENABLED=true` | Latest exact-SHA gates and secret-free aggregate readiness, then six-target preparation, signing, SBOM, downloaded verification and attestation. One approval reserves and publishes unchanged assets, creating the final annotated tag. | Trusted source-repository `main`; signing in `release-build`, approval in `release-publish`. Recovery dispatch accepts only a candidate ID on main. |
 | **Security Scan** | `security.yml` | push to `main` + weekly `schedule` + `workflow_dispatch` + reusable `workflow_call` | Always-required security audit: regressions, cargo-deny, npm audit, full-history secret scan. Public-only CodeQL. | Gate requires audit success and CodeQL success when public, exactly skipped when private (audit-only evidence). Trusted contexts only; no PR trigger. Release CD consumes an existing exact-SHA result and does not call this workflow. |

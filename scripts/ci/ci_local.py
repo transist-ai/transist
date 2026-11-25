@@ -336,7 +336,6 @@ def run_native(root: Path, base: str, stages: Stages, *, install: bool = False) 
     stages.run("prerequisites", lambda: native_prerequisites(root))
     commands = [
         ("static", ["bash", "scripts/ci/check_ci_static.sh"]),
-        ("DCO", ["bash", "scripts/ci/check_commit_signoffs.sh", base, "HEAD"]),
         ("markdown", ["bash", "scripts/ci/check_markdown.sh"]),
         ("cargo deny", ["cargo", "deny", "check"]),
     ]

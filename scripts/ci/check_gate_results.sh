@@ -3,8 +3,8 @@
 # Evaluate GitHub job-result environment bindings without running any checks.
 # Usage: bash scripts/ci/check_gate_results.sh preflight|pr|main
 # Missing, empty, failed, cancelled, and unexpected results fail closed. Only
-# draft PRs, Dependabot sign-off skips, and disabled dependency-review skips
-# receive the existing PR exceptions. Exit 0 means the selected gate passed.
+# draft PRs and disabled dependency-review skips receive the existing PR
+# exceptions. Exit 0 means the selected gate passed.
 set -euo pipefail
 
 if [[ "$#" -ne 1 ]]; then
@@ -42,9 +42,7 @@ fi
 
 require_success pr-description "${PR_DESCRIPTION_RESULT:-}"
 require_success ci-static "${CI_STATIC_RESULT:-}"
-if [[ "${IS_DEPENDABOT:-false}" != true || "${COMMIT_SIGNOFF_RESULT:-}" != skipped ]]; then
-  require_success commit-signoff "${COMMIT_SIGNOFF_RESULT:-}"
-fi
+
 if [[ "${DEPENDENCY_REVIEW_ENABLED:-}" == true || "${DEPENDENCY_REVIEW_RESULT:-}" != skipped ]]; then
   require_success dependency-review "${DEPENDENCY_REVIEW_RESULT:-}"
 fi

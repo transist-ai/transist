@@ -110,22 +110,6 @@ jobs:
                 problems.map(problem => `- ${problem}`).join('\n'));
             }
 
-  commit-signoff:
-    name: Commit Sign-off
-    runs-on: ubuntu-24.04
-    if: ${{ github.event.pull_request.draft == false && github.event.pull_request.user.login != 'dependabot[bot]' }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
-      - name: Verify commit sign-offs
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: bash scripts/ci/check_commit_signoffs.sh "$BASE_SHA" "$HEAD_SHA"
-
   ci-static:
     name: ci-static
     if: ${{ github.event.pull_request.draft == false }}
@@ -148,7 +132,6 @@ jobs:
     needs:
       - pr-description
       - ci-static
-      - commit-signoff
       - markdownlint
       - cargo-deny
       - dependency-review
@@ -161,11 +144,9 @@ jobs:
       - name: Require all preflight checks
         env:
           IS_DRAFT: ${{ github.event.pull_request.draft }}
-          IS_DEPENDABOT: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
           PR_DESCRIPTION_RESULT: ${{ needs.pr-description.result }}
           DEPENDENCY_REVIEW_ENABLED: ${{ vars.ENABLE_DEPENDENCY_REVIEW }}
           CI_STATIC_RESULT: ${{ needs.ci-static.result }}
-          COMMIT_SIGNOFF_RESULT: ${{ needs.commit-signoff.result }}
           MARKDOWNLINT_RESULT: ${{ needs.markdownlint.result }}
           CARGO_DENY_RESULT: ${{ needs.cargo-deny.result }}
           DEPENDENCY_REVIEW_RESULT: ${{ needs.dependency-review.result }}
@@ -369,7 +350,6 @@ jobs:
       - pr-description
       - ci-static
       - preflight-gate
-      - commit-signoff
       - validate-full
       - schema-api-contracts
       - cargo-deny
@@ -385,11 +365,9 @@ jobs:
       - name: Require all PR checks
         env:
           IS_DRAFT: ${{ github.event.pull_request.draft }}
-          IS_DEPENDABOT: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
           PR_DESCRIPTION_RESULT: ${{ needs.pr-description.result }}
           CI_STATIC_RESULT: ${{ needs.ci-static.result }}
           PREFLIGHT_RESULT: ${{ needs.preflight-gate.result }}
-          COMMIT_SIGNOFF_RESULT: ${{ needs.commit-signoff.result }}
           DEPENDENCY_REVIEW_ENABLED: ${{ vars.ENABLE_DEPENDENCY_REVIEW }}
           DEPENDENCY_REVIEW_RESULT: ${{ needs.dependency-review.result }}
           VALIDATE_RESULT: ${{ needs.validate-full.result }}

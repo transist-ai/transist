@@ -6,7 +6,8 @@ link the relevant issue if there is one, and check the applicable classification
 and impact options. Add any required core-change record, compatibility notes, or
 trust-boundary impact. Fill in Validation, Tests, and Docs with actual evidence
 or explain why they do not apply. Template comments do not count as responses,
-and the DCO checkbox alone does not count as a validation result.
+and a legacy DCO checkbox alone does not count as a validation result. The target
+policy does not require a PR-body attestation.
 
 Use the completed file as the body instead of `gh pr create --fill`. For
 example, after pushing the intended head branch and confirming it has no PR:

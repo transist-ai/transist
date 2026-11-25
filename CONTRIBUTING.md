@@ -54,9 +54,9 @@ rights by default.
 ### Trusted contributor
 
 An invited collaborator who may open upstream implementation pull requests in
-approved areas and is responsible for the required local validation and DCO
-sign-off. Trusted-contributor status does not grant merge, release, governance,
-or licensing authority.
+approved areas and is responsible for required local validation and compliance
+with the DCO policy. Trusted-contributor status does not grant merge, release,
+governance, or licensing authority.
 
 ### Maintainer
 
@@ -109,13 +109,19 @@ submit it under the DCO, and you agree it may be distributed under the project
 license, [MPL-2.0](LICENSE). The full DCO text is published at
 <https://developercertificate.org/>.
 
-Every commit must include a `Signed-off-by:` line:
+The target policy requires at least one genuine `Signed-off-by: Name <email>`
+DCO trailer on each new squash commit to `main`, not on each feature-branch
+commit or in the PR body. During GitHub's normal **Squash and merge**, the human
+merger must inspect the final message, preserve genuine trailers, and add their
+own trailer if none is valid and they can attest under the DCO. Never invent a
+sign-off or sign for someone else; this also applies to bot-authored PRs.
 
-```bash
-git commit -s
-```
+After rollout, this is a manual merge requirement backed by post-merge CI: a
+missing trailer fails CI after landing, not before merge. Existing history and
+tags are not rewritten. Until the rollout is complete, existing branch checks and
+rules may still require per-commit sign-offs; follow the active checks.
 
-Trusted-contributor or maintainer status does not replace DCO sign-off or the
+Trusted-contributor or maintainer status does not replace the DCO or the
 project's licensing requirements.
 
 ## Where Contributions Fit
@@ -286,8 +292,9 @@ base ref; the runner never fetches):
 bash scripts/ci/check_ci_local.sh --profile pr --base origin/main
 ```
 
-This adds CI syntax/contracts, DCO, Markdown lint, dependency policy,
-schema/OpenAPI checks, and coverage to the existing PR-readiness gate. First-time
+This adds CI syntax/contracts, Markdown lint, dependency policy,
+schema/OpenAPI checks, and coverage to the existing PR-readiness gate. Depending
+on rollout state, the local profile may also check branch sign-offs. First-time
 tool installation is explicit: add `--bootstrap`. See
 [Local CI Preflight](docs/developer/local-ci-preflight.md) for pinned Docker
 Debian/Alpine profiles, prerequisites, cache cleanup, and hosted-only limitations.
@@ -359,7 +366,7 @@ CI is split into three cost/trust tiers:
 - **PR CI (`PR Gate / pr-gate`)** runs the full `check_pr_ready.sh` gate on a
   Linux glibc runner, plus schema/OpenAPI contract checks and full
   `cargo deny check`, Markdown lint, and coverage, for ready trusted-contributor
-  PRs. Cheap description, static, sign-off, Markdown, dependency-policy, and optional
+  PRs. Cheap description, static, Markdown, dependency-policy, and optional
   dependency review checks must succeed before full validation, schema tests, and
   coverage start. There is no additional hosted `validate-fast` job; local `--fast` remains.
   Draft PRs skip validation. A fork or non-collaborator PR may queue read-only
@@ -547,7 +554,7 @@ Trusted contributors and maintainers opening a pull request should:
 
 - Use the [pull request template](.github/pull_request_template.md). Keep all
   eight headings, check the applicable options, and fill in Summary, Validation,
-  Tests, and Docs. Explain explicitly when a section does not apply. A DCO
+  Tests, and Docs. Explain explicitly when a section does not apply. A legacy DCO
   checkbox alone is not a Validation response.
 - `PR Gate / pr-gate` requires the description check on ready PRs targeting
   `main`. Edit the description to re-trigger CI; no new commit is needed. Only
