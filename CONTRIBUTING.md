@@ -109,17 +109,16 @@ submit it under the DCO, and you agree it may be distributed under the project
 license, [MPL-2.0](LICENSE). The full DCO text is published at
 <https://developercertificate.org/>.
 
-The target policy requires at least one genuine `Signed-off-by: Name <email>`
+The policy requires at least one genuine `Signed-off-by: Name <email>`
 DCO trailer on each new squash commit to `main`, not on each feature-branch
 commit or in the PR body. During GitHub's normal **Squash and merge**, the human
 merger must inspect the final message, preserve genuine trailers, and add their
 own trailer if none is valid and they can attest under the DCO. Never invent a
 sign-off or sign for someone else; this also applies to bot-authored PRs.
 
-After rollout, this is a manual merge requirement backed by post-merge CI: a
-missing trailer fails CI after landing, not before merge. Existing history and
-tags are not rewritten. Until the rollout is complete, existing branch checks and
-rules may still require per-commit sign-offs; follow the active checks.
+This is a manual merge requirement backed by post-merge CI: a missing trailer
+fails CI after landing, not before merge. Existing history and tags are not
+rewritten.
 
 Trusted-contributor or maintainer status does not replace the DCO or the
 project's licensing requirements.

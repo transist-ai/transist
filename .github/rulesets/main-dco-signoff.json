@@ -1,7 +1,7 @@
 {
   "name": "main-dco-signoff",
   "target": "branch",
-  "enforcement": "active",
+  "enforcement": "disabled",
   "conditions": {
     "ref_name": {
       "include": [

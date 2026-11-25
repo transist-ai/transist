@@ -857,7 +857,7 @@ class GateResults(unittest.TestCase):
 class RulesetTemplates(unittest.TestCase):
     """Keep importable GitHub rules aligned with the repository's governance."""
 
-    def test_repository_settings_keep_squash_only_and_web_signoffs(self) -> None:
+    def test_repository_settings_keep_squash_only_without_web_signoffs(self) -> None:
         """The standalone settings snapshot contains only reviewed PATCH fields."""
         settings = json.loads(
             (ROOT / ".github/repository-settings.json").read_text(encoding="utf-8")
@@ -871,19 +871,19 @@ class RulesetTemplates(unittest.TestCase):
                 "allow_auto_merge": False,
                 "allow_update_branch": True,
                 "delete_branch_on_merge": False,
-                "web_commit_signoff_required": True,
+                "web_commit_signoff_required": False,
                 "squash_merge_commit_title": "COMMIT_OR_PR_TITLE",
                 "squash_merge_commit_message": "COMMIT_MESSAGES",
             },
         )
 
-    def load(self, name: str) -> dict:
+    def load(self, name: str, *, enforcement: str = "active") -> dict:
         """Read a ruleset template and enforce common import-safe fields."""
         document = json.loads(
             (ROOT / ".github/rulesets" / f"{name}.json").read_text(encoding="utf-8")
         )
         self.assertEqual(document["name"], name)
-        self.assertEqual(document["enforcement"], "active")
+        self.assertEqual(document["enforcement"], enforcement)
         self.assertEqual(document["bypass_actors"], [])
         self.assertEqual(
             set(document),
@@ -932,9 +932,9 @@ class RulesetTemplates(unittest.TestCase):
         )
         self.assertEqual(document["rules"], [{"type": "required_linear_history"}])
 
-    def test_dco_presence_and_malformed_lines(self) -> None:
-        """The native rule checks DCO-line presence, not cryptographic signatures."""
-        document = self.load("main-dco-signoff")
+    def test_legacy_dco_ruleset_is_disabled(self) -> None:
+        """The disabled ruleset retains its original trailer check for rollback."""
+        document = self.load("main-dco-signoff", enforcement="disabled")
         self.assertEqual(document["target"], "branch")
         self.assertEqual(
             document["conditions"]["ref_name"],

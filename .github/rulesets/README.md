@@ -15,17 +15,17 @@ repository-level PATCH fields, not a ruleset wrapper.
   literal `main`, without blocking rebase force pushes. Rebase PR branches instead
   of merging `main` into them. Publish rewritten history only after authorization,
   using `--force-with-lease`; never force-push `main`.
-- `main-dco-signoff` requires a correctly formatted `Signed-off-by` line on commits
-  entering literal `main`. This verifies line presence, not cryptographic
-  signatures or preservation of every contributor's attestation. Review the final
-  squash message and retain all required sign-offs.
+- The legacy `main-dco-signoff` ruleset is disabled. The merger checks the final
+  squash message for a genuine `Signed-off-by:` trailer. The
+  [`Main DCO` workflow](../workflows/main-dco.yml) checks new commits after they
+  land on `main`; it does not block merges.
 - `v-tag-protection` prevents updating, deleting, or force-updating existing `v*`
   tags. It does not block tag creation. No ruleset grants bypass permissions.
 
 Repository settings allow only squash merging, retain commit details in the
-default squash message, and require web-based commit sign-offs. Those settings
-are separate from branch rules. Companion repositories use their actual CI gate
-names; do not copy `pr-gate` into a repository that does not produce it.
+default squash message, and do not require web-based commit sign-offs. Those
+settings are separate from branch rules. Use each companion repository's actual
+CI gate names; do not copy `pr-gate` into a repository that does not produce it.
 
 ## Refresh snapshots
 
