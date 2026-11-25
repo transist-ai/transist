@@ -47,10 +47,6 @@ begins, reducing wasted contributor effort and review cost.
 
 ## Branch History, Squash Merges, And DCO
 
-The DCO rollout described below may not yet be reflected in all CI, ruleset, and
-settings files or live settings. Until cutover, follow the active checks and
-rules; snapshots do not establish live settings.
-
 The importable [ruleset templates](../../.github/rulesets/) mirror the live
 repository rules. They contain editable configuration only, not GitHub-generated
 IDs or timestamps. Changing a template does not apply it to GitHub automatically.
@@ -62,26 +58,24 @@ IDs or timestamps. Changing a template does not apply it to GitHub automatically
   blocking rebase force pushes. Update PR branches by rebasing, not by merging
   `main` into them. Preserve sign-offs and use an explicitly authorized
   `--force-with-lease` push for rewritten history.
-- `main-dco-signoff.json` describes the existing sign-off ruleset; the rollout
-  disables it only after the new post-merge check passes on the rollout merge.
+- `main-dco-signoff.json` records the disabled legacy commit-message ruleset.
 - `v-tag-protection.json` keeps version tags immutable. No template grants bypass
   permissions.
 
 The [repository settings snapshot](../../.github/repository-settings.json) is
-separate from rulesets: allow only squash merging,
-retain commit details in the default squash message, and require sign-offs for
-web-based commits until the rollout changes the live setting and snapshot. When
-adapting these templates to another repository, require that repository's actual
-CI gates instead of copying the `pr-gate` name blindly.
+separate from rulesets. It records squash-only merging, commit details in the
+default squash message, and no required web-based commit sign-offs. When adapting
+these templates to another repository, use its actual CI gates rather than
+copying the `pr-gate` name.
 
-After cutover, every new squash commit on `main` needs at least one genuine
+Every new squash commit on `main` needs at least one genuine
 `Signed-off-by: Name <email>` DCO trailer. Feature-branch commits and PR bodies
 need no sign-off. In GitHub's normal **Squash and merge** dialog, the human
 merger preserves genuine trailers and adds their own if none is valid and they
 can attest under the [DCO](https://developercertificate.org/). Never invent a
 trailer or sign for someone else; bot-authored PRs follow the same rule.
 
-The planned `main-dco` push check validates trailer format and presence, not
+The `main-dco` push check validates trailer format and presence, not
 identity or rights. It runs after landing, so it is not a merge block or a release
 gate. It checks new commits in the push range, not pre-rollout history or tags.
 If it fails, stop further merges and notify a maintainer with the SHA and run URL;
