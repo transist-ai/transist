@@ -60,8 +60,12 @@ Do not remove those component setup steps or weaken checks to avoid setup failur
 
 ## Evidence and Boundaries
 
-- Static, DCO, Markdown and dependency checks precede schema/full builds/coverage.
-- DCO checks committed `BASE..HEAD`; source checks include dirty working bytes.
+- Static, Markdown and dependency checks precede schema/full builds/coverage.
+  Before the local runner's DCO rollout, its DCO stage checks committed
+  `BASE..HEAD`; source checks include dirty working bytes.
+- After cutover, local PR profiles do not require branch-commit sign-offs. The
+  human merger checks the final squash trailer; post-merge `main-dco` checks new
+  `main` commits and is not a pre-merge gate.
 - Docker uses workflow digest pins, read-only filtered source, sanitized Git
   history, and separate cache volumes. It does not mount the real checkout,
   runtime homes, Docker socket, host credentials or host environment wholesale.

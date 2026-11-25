@@ -43,8 +43,6 @@ evidence, or adapter/plugin behavior changed, link the core-change record. -->
 CONTRIBUTING.md#validation. Failed or skipped applicable checks require
 maintainer approval before merge. -->
 
-- [ ] Commits signed off (`git commit -s`).
-
 ## Tests
 
 <!-- List tests added or updated, or explain why none were needed. -->
