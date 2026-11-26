@@ -160,6 +160,24 @@
       "release_id": 445857274,
       "state": "published"
     },
+    "9b078ae7744708c464ae3b0ad3f0b2745c44037c-45897174353-2": {
+      "identity": {
+        "attempt": 2,
+        "candidate_id": "9b078ae7744708c464ae3b0ad3f0b2745c44037c-45897174353-2",
+        "draft_tag": "candidate-9b078ae7744708c464ae3b0ad3f0b2745c44037c-45897174353-2",
+        "draft_title": "v0.1.4 candidate 9b078ae",
+        "final_tag": "v0.1.4",
+        "repository_id": 1444908011,
+        "run_id": 45897174353,
+        "source_sha": "9b078ae7744708c464ae3b0ad3f0b2745c44037c",
+        "tree_sha": "e913d4349382b6bc25cbe8a3f89d01f11b7a750f",
+        "version": "0.1.4",
+        "workflow": "release-eligibility.yml"
+      },
+      "receipt": null,
+      "release_id": null,
+      "state": "preparing"
+    },
     "bf990bf00938065b3473d3b0f0dd81cd37aa5791-44494259173-1": {
       "identity": {
         "attempt": 1,
