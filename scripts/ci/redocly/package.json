@@ -1,7 +1,7 @@
 {
   "name": "transist-ci-redocly",
   "private": true,
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Pinned Redocly CLI for OpenAPI semantic validation. The lockfile is the supply-chain integrity source.",
   "license": "MIT",
   "dependencies": {
