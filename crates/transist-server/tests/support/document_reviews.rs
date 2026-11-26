@@ -105,6 +105,15 @@ struct PlainRuns {
 
 impl PlainRuns {
     fn new(extra: &str, steps: &str, start: bool) -> Self {
+        Self::with_child(
+            extra,
+            steps,
+            "  - id: finish\n    control: control.noop\n",
+            start,
+        )
+    }
+
+    fn with_child(extra: &str, steps: &str, child_steps: &str, start: bool) -> Self {
         let temp = test_tempdir();
         let root = fs::canonicalize(temp.path()).unwrap();
         let workspace = root.join("workspace");
@@ -113,7 +122,11 @@ impl PlainRuns {
         transist::init_home_dir_with_mode(&home, transist::RuntimeOperatingMode::Standalone)
             .unwrap();
         let ctx = transist::TransistContext::with_home(&workspace, &home);
-        fs::write(root.join("child.yaml"), "schema: transist.module.v1\nid: child\nversion: 0.1.0\nsteps:\n  - id: finish\n    control: control.noop\n").unwrap();
+        fs::write(
+            root.join("child.yaml"),
+            format!("schema: transist.module.v1\nid: child\nversion: 0.1.0\nsteps:\n{child_steps}"),
+        )
+        .unwrap();
         let workflow = root.join("workflow.yaml");
         fs::write(&workflow, format!("schema: transist.flow.v1\nid: inspection.review3\nversion: 0.1.0\nworkspace: {{path: '{}', access: read_only}}\n{extra}steps:\n{steps}", workspace.display())).unwrap();
         ctx.compile_flow_file(&workflow).unwrap();
@@ -419,9 +432,22 @@ async fn document_reviews_metadata_content_members_and_gate_html_are_exact_and_r
     let html = read_text(f.request("GET", "/inspect/runs/review-run?tab=gates").await).await;
     assert!(html.contains("Reviewed documents (2)"));
     assert!(!html.contains(&f.home.display().to_string()));
+    let step = "/inspect/runs/review-run/steps/review";
+    assert!(html.contains(&format!("href=\"{step}?execution=1#needs-review\"")));
+    let step_html = read_text(f.request("GET", step).await).await;
+    assert!(step_html.contains("Needs review"));
     for revision in &f.revisions {
         let id = revision["revision_id"].as_str().unwrap();
         let base = format!("/api/v1/runs/review-run/documents/{id}");
+        let preview = format!("/inspect/runs/review-run/documents/{id}");
+        assert!(step_html.contains(&format!("href=\"{preview}\"")));
+        let response = f.request("GET", &preview).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers()["content-type"],
+            "text/html; charset=utf-8"
+        );
+        let preview_html = read_text(response).await;
         let response = f.request("GET", &base).await;
         let (parts, body) = response.into_parts();
         let bytes = to_bytes(body, usize::MAX).await.unwrap();
@@ -448,11 +474,18 @@ async fn document_reviews_metadata_content_members_and_gate_html_are_exact_and_r
         let bytes = read_body(content).await;
         if revision["kind"] == "file" {
             assert_eq!(bytes, b"exact review bytes");
+            assert!(preview_html.contains(">exact review bytes</pre>"));
         } else {
             let manifest: Value = serde_json::from_slice(&bytes).unwrap();
             assert_eq!(manifest["files"]["sub/member.txt"]["size_bytes"], 6);
             let member = &metadata["members"][0];
             assert_eq!(member["relative_path"], "sub/member.txt");
+            let member_id = member["member_id"].as_str().unwrap();
+            let member_preview = format!("{preview}?member_id={member_id}");
+            assert!(preview_html.contains(&format!("href=\"{member_preview}\"")));
+            let response = f.request("GET", &member_preview).await;
+            assert_eq!(response.status(), StatusCode::OK);
+            assert!(read_text(response).await.contains(">member</pre>"));
             let link = member["content"].as_str().unwrap();
             assert!(link.contains("?member_id="));
             assert!(!link.contains("member.txt"));
@@ -487,6 +520,12 @@ async fn document_reviews_metadata_content_members_and_gate_html_are_exact_and_r
                 .status(),
             StatusCode::NOT_FOUND
         );
+        assert_eq!(
+            f.request("GET", &format!("/inspect/runs/other-run/documents/{id}"))
+                .await
+                .status(),
+            StatusCode::NOT_FOUND
+        );
     }
     assert_eq!(
         f.request("GET", "/api/v1/runs/review-run/documents/not-an-id")
@@ -496,6 +535,67 @@ async fn document_reviews_metadata_content_members_and_gate_html_are_exact_and_r
     );
     assert_eq!(snapshot_tree(&f.home), before);
     assert_eq!(snapshot_tree(&f.workspace), workspace_before);
+}
+
+#[tokio::test]
+async fn document_reviews_child_gate_preview_uses_owning_run_and_escapes_text() {
+    let f = tokio::task::spawn_blocking(|| {
+        PlainRuns::with_child(
+            "modules: {child: {path: child.yaml}}\ndocuments: {notes: {kind: file, max_bytes: 64, initial: '<b>review</b>'}}\n",
+            "  - id: child\n    module: child\n",
+            "  - id: review\n    control: control.gate.manual\n    with: {review_documents: [notes]}\n",
+            true,
+        )
+    })
+    .await
+    .unwrap();
+    let before = snapshot_tree(&f.home);
+    let root = read_json(f.get("/api/v1/runs/plain-run").await).await;
+    let child_id = root["actionable_run_id"].as_str().unwrap();
+    let gates = read_json(f.get(&format!("/api/v1/runs/{child_id}/gates")).await).await;
+    let id = gates["data"][0]["review_documents"][0]["revision"]["revision_id"]
+        .as_str()
+        .unwrap();
+    let step = format!("/inspect/runs/{child_id}/steps/review");
+    let preview = format!("/inspect/runs/{child_id}/documents/{id}");
+
+    let owner_url = format!("/inspect/runs/{child_id}");
+    let wrapper = read_text(f.get("/inspect/runs/plain-run/steps/child").await).await;
+    assert!(wrapper.contains("Awaiting review"));
+    assert!(wrapper.contains(&format!(
+        "href=\"{owner_url}#needs-review\">review · Iteration 1"
+    )));
+    let root_html = read_text(f.get("/inspect/runs/plain-run").await).await;
+    assert!(root_html.contains("Suggested next commands"));
+    for action in ["approve", "request-changes", "reject"] {
+        assert!(root_html.contains(&format!("transist runs gate {action} --actor")));
+    }
+    assert_eq!(root_html.matches("-- plain-run</code>").count(), 3);
+    assert!(!root_html.contains("id=\"needs-review\""));
+    assert!(root_html.contains(&format!("href=\"{owner_url}#needs-review\">Review gate")));
+    let child_html = read_text(f.get(&owner_url).await).await;
+    assert_eq!(child_html.matches("-- plain-run</code>").count(), 3);
+    assert!(
+        child_html.find("id=\"needs-review\"").unwrap()
+            < child_html.find("aria-label=\"Run tabs\"").unwrap()
+    );
+    assert!(child_html.contains(&format!("href=\"{step}?execution=1#needs-review\"")));
+    assert!(child_html.contains(&format!("href=\"{preview}\"")));
+    let root_gates = read_text(f.get("/inspect/runs/plain-run?tab=gates").await).await;
+    assert!(root_gates.contains(&format!("href=\"{owner_url}?tab=gates\"")));
+    assert!(root_gates.contains(&format!("href=\"{preview}\"")));
+    let html = read_text(f.get(&step).await).await;
+    assert!(html.contains(&format!("href=\"{preview}\"")));
+    assert!(!html.contains("?tab=workflow-files"));
+    let response = f.get(&preview).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let html = read_text(response).await;
+    let escaped = askama::filters::escape("<b>review</b>", askama::filters::Html)
+        .unwrap()
+        .to_string();
+    assert!(html.contains(&format!(">{escaped}</pre>")));
+    assert!(!html.contains("<b>review</b>"));
+    assert_eq!(snapshot_tree(&f.home), before);
 }
 
 #[tokio::test]
@@ -570,6 +670,9 @@ async fn document_reviews_decision_history_exposes_the_exact_typed_request() {
         json!(f.revisions)
     );
     assert_eq!(decision, &gates["data"][0]["decision_history"][0]);
+    let html = read_text(f.request("GET", "/inspect/runs/review-run?tab=gates").await).await;
+    assert!(html.contains("Decision history (1)"));
+    assert!(html.contains("offline fixture"));
     assert_contract_http_response(
         &load_openapi_contract(),
         "GET",

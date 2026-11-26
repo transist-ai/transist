@@ -40,6 +40,18 @@ If working from a source checkout instead of an installed binary, substitute `ca
 5. Interpret metric families, label constraints, histogram behavior, and usage data only from what the runtime actually exports.
 6. Finish with the chosen surface, findings, and any gaps that still require CLI or filesystem inspection.
 
+## Nested gate navigation
+
+- Match the CLI/TUI: suggested `transist runs gate approve`, `request-changes`,
+  and `reject` commands for the current blocked gate use the **root run ID**.
+  Omit the gate ID in these suggestions so the CLI resolves the current gate.
+- Review links serve a different purpose: link directly to **Needs review** on
+  the run that owns the gate, even when it is a nested run. Do not duplicate the
+  review panel on an ancestor page or require a child run ID in the command just
+  because the review link points there.
+- The server only displays commands; the operator chooses and runs one after
+  reviewing the pinned output.
+
 ## Hard Rules
 
 - Metrics are single-instance and local-first.

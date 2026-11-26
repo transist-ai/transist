@@ -26,9 +26,9 @@
 </ul>
 {% endif %}
 
-<nav class="tabs" aria-label="Workflow tabs">
+<nav id="workflow-tabs" class="tabs" aria-label="Workflow tabs">
   {% for t in tabs %}
-  <a href="{{ t.href }}"{% if t.active %} class="active" aria-current="page"{% endif %}>{{ t.label }}</a>
+  <a href="{{ t.href }}#workflow-tabs"{% if t.active %} class="active" aria-current="page"{% endif %}>{{ t.label }}</a>
   {% endfor %}
 </nav>
 

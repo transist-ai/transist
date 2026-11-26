@@ -10,13 +10,17 @@ use askama::Template;
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{Html, IntoResponse, Response};
 
+mod child_outline;
 mod helpers;
+mod review;
 mod run_detail;
 mod runs_list;
 mod step_detail;
 mod step_outputs;
 mod workflows;
 
+use child_outline::ChildOutline;
+pub(crate) use review::document_preview;
 pub(crate) use run_detail::{
     artifact_detail, evidence_detail, run_detail, run_failures, workflow_file_detail,
 };
@@ -208,7 +212,9 @@ pub(crate) struct OperatorSummary {
     pub current_step_id: Option<String>,
     pub blocked_gate_count: usize,
     pub expected_user_action: Option<String>,
+    pub review_url: Option<String>,
     pub recommended_next_action: String,
+    pub suggested_commands: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -248,7 +254,10 @@ pub(crate) struct EventRow {
 
 #[derive(Debug)]
 pub(crate) struct GateRow {
-    pub review_documents: Vec<transist::InspectionDocument>,
+    pub owner: LinkRef,
+    pub review_url: Option<String>,
+    pub decision_history: Vec<crate::domain::api_models::GateDecisionSummary>,
+    pub review_documents: Vec<review::ReviewDocument>,
     pub gate_id: String,
     pub status: String,
     pub step_id: String,
@@ -365,16 +374,6 @@ pub(crate) struct WorkflowFileRow {
 }
 
 #[derive(Debug)]
-pub(crate) struct ChildRunRow {
-    pub run_id: String,
-    pub status: String,
-    pub workflow_label: String,
-    pub artifact_count: usize,
-    pub evidence_count: usize,
-    pub depth: usize,
-}
-
-#[derive(Debug)]
 pub(crate) struct OverviewMetrics {
     pub step_executions: u32,
     pub artifacts: usize,
@@ -402,9 +401,11 @@ pub(crate) struct OverviewView {
 pub(crate) struct RunDetailTemplate {
     pub headline: RunHeadline,
     pub status_banner: Option<RunStatusBanner>,
+    pub review_panel: Option<review::ReviewPanel>,
     pub operator_summary: OperatorSummary,
     pub tab: String,
     pub iteration_scope: &'static str,
+    pub current_execution: Option<u32>,
     pub selected_iteration: Option<u32>,
     pub available_iterations: Vec<u32>,
     pub tabs: Vec<TabLink>,
@@ -416,7 +417,7 @@ pub(crate) struct RunDetailTemplate {
     pub artifacts: Vec<BlobRow>,
     pub evidence: Vec<BlobRow>,
     pub workflow_files: Vec<WorkflowFileRow>,
-    pub children: Vec<ChildRunRow>,
+    child_outline: Option<ChildOutline>,
 }
 
 #[derive(Debug)]
@@ -443,6 +444,8 @@ pub(crate) struct ChildRunOverview {
     pub finished_at: Option<String>,
     pub artifact_count: usize,
     pub evidence_count: usize,
+    pub next_step: Option<LinkRef>,
+    pub review_required: bool,
     /// Serialised step-counts JSON for the child run (collapsed in a
     /// `<details>` block so it doesn't dominate the page).
     pub step_counts_json: String,
@@ -483,6 +486,7 @@ pub(crate) struct StepDetailTemplateData {
     /// be loaded (e.g. not yet created).
     pub child_run_overview: Option<ChildRunOverview>,
     pub gate_guidance: Option<GateGuidanceView>,
+    pub review_panel: Option<review::ReviewPanel>,
     /// Preflight blockers that mention this step. Populated when the run
     /// failed during preflight (before this step ever ran), so operators see
     /// the failure context inline instead of bouncing back to the run page.
@@ -496,6 +500,7 @@ pub(crate) struct StepDetailTemplateData {
     pub artifacts: Vec<BlobRow>,
     pub evidence: Vec<BlobRow>,
     pub workflow_files: Vec<WorkflowFileRow>,
+    pub has_direct_blob_history: bool,
 }
 
 /// A single labelled field surfaced into the step detail key/value grid.

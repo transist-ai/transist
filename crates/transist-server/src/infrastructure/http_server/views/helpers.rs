@@ -2,16 +2,17 @@
 //! Server-rendered HTML handlers for the `/inspect` UI. These reuse the same
 //! application services that back the JSON `/api/v1/...` surface.
 
+use super::child_outline::ChildOutline;
 use super::{
-    BlobDetailTemplate, BlobDetailTemplateData, BlobKind, BlobRow, ChildRunOverview, ChildRunRow,
-    EventRow, FailureRow, GateGuidanceView, GateRow, LinkRef, OperatorSummary,
-    OverviewEvidenceExportView, OverviewExternalTransferRow, OverviewLocalityStepRow,
-    OverviewLocalityView, OverviewMetrics, OverviewTrustPluginRow, OverviewTrustView, OverviewView,
-    PaginationView, RunDetailTemplate, RunHeadline, RunsListFilters, RunsListRow, RunsListTemplate,
-    StatusOption, StepDetailTemplate, StepDetailTemplateData, StepKeyGroup, StepRow,
-    StepSummaryField, TabLink, WorkflowContentTemplate, WorkflowDetailTemplate, WorkflowFileRow,
-    WorkflowInputRow, WorkflowOption, WorkflowPluginRow, WorkflowStepGroup, WorkflowStepRow,
-    WorkflowsListRow, WorkflowsListTemplate, render, render_api_problem, render_error,
+    BlobDetailTemplate, BlobDetailTemplateData, BlobKind, BlobRow, ChildRunOverview, EventRow,
+    FailureRow, GateGuidanceView, GateRow, LinkRef, OperatorSummary, OverviewEvidenceExportView,
+    OverviewExternalTransferRow, OverviewLocalityStepRow, OverviewLocalityView, OverviewMetrics,
+    OverviewTrustPluginRow, OverviewTrustView, OverviewView, PaginationView, RunDetailTemplate,
+    RunHeadline, RunsListFilters, RunsListRow, RunsListTemplate, StatusOption, StepDetailTemplate,
+    StepDetailTemplateData, StepKeyGroup, StepRow, StepSummaryField, TabLink,
+    WorkflowContentTemplate, WorkflowDetailTemplate, WorkflowFileRow, WorkflowInputRow,
+    WorkflowOption, WorkflowPluginRow, WorkflowStepGroup, WorkflowStepRow, WorkflowsListRow,
+    WorkflowsListTemplate, render, render_api_problem, render_error,
 };
 use crate::application::ApiProblem;
 use crate::domain::api_models::{
@@ -341,7 +342,7 @@ fn build_runs_url(filters: &RunsListFilters, offset: usize, limit: usize) -> Str
     format!("/inspect/runs?{}", parts.join("&"))
 }
 
-fn url_encode(value: &str) -> String {
+pub(super) fn url_encode(value: &str) -> String {
     value
         .bytes()
         .flat_map(|b| match b {
@@ -547,7 +548,7 @@ pub(crate) async fn run_detail(
     }
 
     let headline = build_headline(&run, metrics.as_ref(), params.tab.is_none());
-    let tabs = tab_links(&run_id, &tab);
+    let tabs = tab_links(&run_id, &tab, iteration_scope);
 
     // For runs in non-trivial intermediate/failed states, fetch the step list
     // once so the status banner can surface the failing/current step's
@@ -575,6 +576,10 @@ pub(crate) async fn run_detail(
             None
         };
     let blocked_gate_context = resolve_blocked_gate_context(state.as_ref(), &run);
+    let review_panel = blocked_gate_context
+        .as_ref()
+        .filter(|context| run.status == "blocked" && context.owning_run_id == run_id)
+        .map(|context| super::review::ReviewPanel::new(&context.owning_run_id, &context.gate));
     // When a failed parent run points at an actionable descendant, fetch it so
     // the banner can surface the descendant's failed-step error inline. Subflow
     // steps don't carry their own error_message; without this walk the banner
@@ -671,12 +676,30 @@ pub(crate) async fn run_detail(
     };
 
     let gates = if tab == "gates" {
-        match state.inspection.list_gates(&run_id) {
-            Ok(p) => p
-                .data
-                .into_iter()
-                .map(|g| GateRow {
-                    review_documents: g.review_documents.clone(),
+        let owners = std::iter::once((run_id.as_str(), run.workflow_id.as_str())).chain(
+            run.contained_runs
+                .iter()
+                .map(|child| (child.run_id.as_str(), child.workflow_id.as_str())),
+        );
+        let mut gates = Vec::new();
+        for (owner_id, workflow_id) in owners {
+            let page = match state.inspection.list_gates(owner_id) {
+                Ok(page) => page,
+                Err(problem) => return render_api_problem(problem),
+            };
+            gates.extend(page.data.into_iter().map(|g| {
+                GateRow {
+                    owner: LinkRef {
+                        href: format!("/inspect/runs/{}?tab=gates", url_encode(owner_id)),
+                        label: workflow_id.to_string(),
+                    },
+                    review_url: (g.status == "blocked").then(|| review_section_url(owner_id)),
+                    decision_history: g.decision_history,
+                    review_documents: g
+                        .review_documents
+                        .iter()
+                        .map(|d| super::review::ReviewDocument::new(owner_id, d))
+                        .collect(),
                     guidance: build_gate_guidance(&g.request_summary),
                     gate_id: g.gate_id,
                     status: g.status,
@@ -686,10 +709,10 @@ pub(crate) async fn run_detail(
                     decision_actor: g.decision.as_ref().and_then(|d| d.actor.clone()),
                     decision_reason: g.decision.as_ref().and_then(|d| d.reason.clone()),
                     decision_at: g.decision.and_then(|d| d.decided_at),
-                })
-                .collect(),
-            Err(problem) => return render_api_problem(problem),
+                }
+            }));
         }
+        gates
     } else {
         Vec::new()
     };
@@ -703,6 +726,20 @@ pub(crate) async fn run_detail(
         Vec::new()
     };
 
+    let output_tab = matches!(tab.as_str(), "artifacts" | "evidence" | "workflow-files");
+    let output_steps = if output_tab {
+        match state.inspection.list_steps(&run_id) {
+            Ok(page) => page.data,
+            Err(problem) => return render_api_problem(problem),
+        }
+    } else {
+        Vec::new()
+    };
+    let current_execution = blocked_gate_context
+        .as_ref()
+        .filter(|context| context.owning_run_id == run_id)
+        .and_then(|context| super::review::gate_execution(&context.gate))
+        .or_else(|| output_steps.iter().filter_map(|step| step.execution).max());
     let mut available_iterations: Vec<u32> = Vec::new();
 
     let artifacts = if tab == "artifacts" {
@@ -723,12 +760,11 @@ pub(crate) async fn run_detail(
                 available_iterations = rows.iter().map(|row| row.execution).collect();
                 available_iterations.sort_unstable();
                 available_iterations.dedup();
-                let latest_execution = available_iterations.iter().copied().max().unwrap_or(0);
                 let rows: Vec<BlobRow> = rows
                     .into_iter()
                     .map(|a| artifact_to_row(&run_id, a))
                     .collect();
-                filter_blob_rows_by_iteration(rows, iteration_scope, latest_execution)
+                filter_blob_rows_by_iteration(rows, iteration_scope, current_execution.unwrap_or(0))
             }
             Err(problem) => return render_api_problem(problem),
         }
@@ -754,12 +790,11 @@ pub(crate) async fn run_detail(
                 available_iterations = rows.iter().map(|row| row.execution).collect();
                 available_iterations.sort_unstable();
                 available_iterations.dedup();
-                let latest_execution = available_iterations.iter().copied().max().unwrap_or(0);
                 let rows: Vec<BlobRow> = rows
                     .into_iter()
                     .map(|a| evidence_to_row(&run_id, a))
                     .collect();
-                filter_blob_rows_by_iteration(rows, iteration_scope, latest_execution)
+                filter_blob_rows_by_iteration(rows, iteration_scope, current_execution.unwrap_or(0))
             }
             Err(problem) => return render_api_problem(problem),
         }
@@ -768,82 +803,73 @@ pub(crate) async fn run_detail(
     };
 
     let workflow_files = if tab == "workflow-files" {
-        match state.inspection.list_steps(&run_id) {
-            Ok(p) => {
-                let mut rows: Vec<(Option<String>, Option<String>, u32, WorkflowFileRow)> =
-                    Vec::new();
-                for s in p.data {
-                    let step_finished_at = s.finished_at.clone();
-                    let step_started_at = s.started_at.clone();
-                    let step_execution = s.execution.unwrap_or(0);
-                    for w in s.output_summary.workflow_files {
-                        rows.push((
-                            step_finished_at.clone(),
-                            step_started_at.clone(),
-                            step_execution,
-                            WorkflowFileRow {
-                                detail_url: w.workflow_file_id.as_ref().map(|id| {
-                                    format!("/inspect/runs/{run_id}/workflow-files/{id}")
-                                }),
-                                workflow_file_id: w.workflow_file_id,
-                                field_name: w.field_name,
-                                name: w.name,
-                                path: w.relative_path,
-                                size: w.size,
-                                media_type: w.media_type.unwrap_or_default(),
-                                producing_step_id: s.step_id.clone(),
-                                execution: step_execution,
-                            },
-                        ));
-                    }
+        {
+            let mut rows: Vec<(Option<String>, Option<String>, u32, WorkflowFileRow)> = Vec::new();
+            for s in output_steps {
+                let step_finished_at = s.finished_at.clone();
+                let step_started_at = s.started_at.clone();
+                let step_execution = s.execution.unwrap_or(0);
+                for w in s.output_summary.workflow_files {
+                    rows.push((
+                        step_finished_at.clone(),
+                        step_started_at.clone(),
+                        step_execution,
+                        WorkflowFileRow {
+                            detail_url: w
+                                .workflow_file_id
+                                .as_ref()
+                                .and_then(|id| available_workflow_file_url(&state, &run_id, id)),
+                            workflow_file_id: w.workflow_file_id,
+                            field_name: w.field_name,
+                            name: w.name,
+                            path: w.relative_path,
+                            size: w.size,
+                            media_type: w.media_type.unwrap_or_default(),
+                            producing_step_id: s.step_id.clone(),
+                            execution: step_execution,
+                        },
+                    ));
                 }
-                rows.sort_by(|left, right| {
-                    right
-                        .0
-                        .cmp(&left.0)
-                        .then(right.1.cmp(&left.1))
-                        .then(right.2.cmp(&left.2))
-                        .then(left.3.producing_step_id.cmp(&right.3.producing_step_id))
-                        .then(left.3.field_name.cmp(&right.3.field_name))
-                        .then(left.3.name.cmp(&right.3.name))
-                        .then(left.3.path.cmp(&right.3.path))
-                });
-                let rows: Vec<WorkflowFileRow> =
-                    rows.into_iter().map(|(_, _, _, row)| row).collect();
-                available_iterations = rows.iter().map(|row| row.execution).collect();
-                available_iterations.sort_unstable();
-                available_iterations.dedup();
-                let latest_execution = available_iterations.iter().copied().max().unwrap_or(0);
-                filter_workflow_file_rows_by_iteration(rows, iteration_scope, latest_execution)
             }
-            Err(problem) => return render_api_problem(problem),
+            rows.sort_by(|left, right| {
+                right
+                    .0
+                    .cmp(&left.0)
+                    .then(right.1.cmp(&left.1))
+                    .then(right.2.cmp(&left.2))
+                    .then(left.3.producing_step_id.cmp(&right.3.producing_step_id))
+                    .then(left.3.field_name.cmp(&right.3.field_name))
+                    .then(left.3.name.cmp(&right.3.name))
+                    .then(left.3.path.cmp(&right.3.path))
+            });
+            let rows: Vec<WorkflowFileRow> = rows.into_iter().map(|(_, _, _, row)| row).collect();
+            available_iterations = rows.iter().map(|row| row.execution).collect();
+            available_iterations.sort_unstable();
+            available_iterations.dedup();
+            filter_workflow_file_rows_by_iteration(
+                rows,
+                iteration_scope,
+                current_execution.unwrap_or(0),
+            )
         }
     } else {
         Vec::new()
     };
 
-    let children = if tab == "children" {
-        run.contained_runs
-            .iter()
-            .map(|c| ChildRunRow {
-                run_id: c.run_id.clone(),
-                status: c.status.clone(),
-                workflow_label: format!("{}@{}", c.workflow_id, c.workflow_version),
-                artifact_count: c.artifact_count,
-                evidence_count: c.evidence_count,
-                depth: 1,
-            })
-            .collect()
-    } else {
-        Vec::new()
-    };
+    available_iterations.extend(current_execution.filter(|execution| *execution > 0));
+    available_iterations.sort_unstable();
+    available_iterations.dedup();
+    let child_outline = (tab == "children" || (tab == "overview" && run.run_id == run.root_run_id))
+        .then(|| ChildOutline::new(&run.run_id, &run.contained_runs));
 
     render(&RunDetailTemplate {
         headline,
         status_banner,
+        review_panel,
         operator_summary,
         tab,
         iteration_scope: iteration_scope.key(),
+        current_execution,
         selected_iteration: match iteration_scope {
             IterationScope::Specific(iteration) => Some(iteration),
             _ => None,
@@ -858,7 +884,7 @@ pub(crate) async fn run_detail(
         artifacts,
         evidence,
         workflow_files,
-        children,
+        child_outline,
     })
 }
 
@@ -1200,25 +1226,6 @@ fn build_status_banner(
     };
 
     let cli_hint = match run.status.as_str() {
-        "blocked" => match run.blocked_gates.as_slice() {
-            [single] => Some(format!(
-                "transist runs gate approve {} {}",
-                run.run_id, single.gate_id
-            )),
-            _ => blocked_gate_context
-                .map(|ctx| {
-                    format!(
-                        "transist runs gate approve {} {}",
-                        ctx.owning_run_id, ctx.gate.gate_id
-                    )
-                })
-                .or_else(|| {
-                    Some(format!(
-                        "transist runs gate approve {} <gate-id>",
-                        run.run_id
-                    ))
-                }),
-        },
         "failed" => Some(format!("transist runs replay {}", run.run_id)),
         _ => None,
     };
@@ -1268,6 +1275,34 @@ fn build_status_banner(
     })
 }
 
+fn review_section_url(run_id: &str) -> String {
+    format!("/inspect/runs/{}#needs-review", url_encode(run_id))
+}
+
+fn gate_suggested_commands(root_run_id: &str) -> Vec<String> {
+    fn shell_arg(value: &str) -> String {
+        if !value.is_empty()
+            && value
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
+        {
+            value.to_string()
+        } else {
+            format!("'{}'", value.replace('\'', "'\"'\"'"))
+        }
+    }
+
+    // Match the CLI's suggested commands: it resolves the current blocked gate
+    // from the root run, even when that gate belongs to a nested run.
+    let run_id = shell_arg(root_run_id);
+    ["approve", "request-changes", "reject"]
+        .into_iter()
+        .map(|action| format!(
+            "transist runs gate {action} --actor 'Reviewer <reviewer@example.com>' --reason 'Replace with your reason' -- {run_id}"
+        ))
+        .collect()
+}
+
 fn build_operator_summary(
     run: &RunDetail,
     blocked_gate_context: Option<&BlockedGateContext>,
@@ -1277,6 +1312,10 @@ fn build_operator_summary(
         .len()
         .max(usize::from(blocked_gate_context.is_some()));
     let action_required = run.status == "blocked" && blocked_gate_count > 0;
+    let suggested_commands = blocked_gate_context
+        .filter(|_| action_required)
+        .map(|_| gate_suggested_commands(&run.root_run_id))
+        .unwrap_or_default();
     let expected_user_action = blocked_gate_context
         .map(|ctx| {
             format!(
@@ -1290,19 +1329,7 @@ fn build_operator_summary(
                 .map(|g| format!("Review gate '{}' for step '{}'.", g.gate_id, g.step_id))
         });
     let recommended_next_action = if action_required {
-        if let Some(ctx) = blocked_gate_context {
-            format!(
-                "Open run '{}' step '{}' and decide gate '{}'.",
-                ctx.owning_run_id, ctx.gate.step_id, ctx.gate.gate_id
-            )
-        } else if let Some(gate) = run.blocked_gates.first() {
-            format!(
-                "Open the gated step '{}' and decide gate '{}'.",
-                gate.step_id, gate.gate_id
-            )
-        } else {
-            "Open the Gates tab to review blocked manual gates.".to_string()
-        }
+        "Open the Gates tab to review blocked manual gates.".to_string()
     } else {
         match run.status.as_str() {
             "running" | "waiting" => "Monitor current step progress in the Steps tab.".to_string(),
@@ -1317,7 +1344,9 @@ fn build_operator_summary(
         current_step_id: run.current_step.as_ref().map(|s| s.step_id.clone()),
         blocked_gate_count,
         expected_user_action,
+        review_url: blocked_gate_context.map(|context| review_section_url(&context.owning_run_id)),
         recommended_next_action,
+        suggested_commands,
     }
 }
 
@@ -1404,7 +1433,12 @@ fn build_gate_guidance(value: &serde_json::Value) -> GateGuidanceView {
     }
 }
 
-fn tab_links(run_id: &str, active: &str) -> Vec<TabLink> {
+fn tab_links(run_id: &str, active: &str, iteration: IterationScope) -> Vec<TabLink> {
+    let suffix = match iteration {
+        IterationScope::All => "&iteration=all".to_string(),
+        IterationScope::Last => String::new(),
+        IterationScope::Specific(iteration) => format!("&iteration={iteration}"),
+    };
     let entries = [
         ("overview", "Overview"),
         ("steps", "Steps"),
@@ -1421,7 +1455,7 @@ fn tab_links(run_id: &str, active: &str) -> Vec<TabLink> {
         .map(|(k, l)| TabLink {
             key: k,
             label: l,
-            href: format!("/inspect/runs/{run_id}?tab={k}"),
+            href: format!("/inspect/runs/{run_id}?tab={k}{suffix}"),
             active: *k == active,
         })
         .collect()
@@ -1768,11 +1802,12 @@ pub(crate) async fn step_detail(
         .output_summary
         .workflow_files
         .iter()
+        .filter(|_| step.output.execution == step.execution)
         .map(|w| WorkflowFileRow {
             detail_url: w
                 .workflow_file_id
                 .as_ref()
-                .map(|id| format!("/inspect/runs/{run_id}/workflow-files/{id}")),
+                .and_then(|id| available_workflow_file_url(&state, &run_id, id)),
             workflow_file_id: w.workflow_file_id.clone(),
             field_name: w.field_name.clone(),
             name: w.name.clone(),
@@ -1818,13 +1853,13 @@ pub(crate) async fn step_detail(
     available_iterations.sort_unstable();
     available_iterations.dedup();
 
-    let latest_execution = available_iterations
-        .iter()
-        .copied()
-        .max()
-        .or(step.execution)
-        .unwrap_or(0);
+    let latest_execution = step.output.execution.or(step.execution).unwrap_or(0);
+    if latest_execution > 0 && !available_iterations.contains(&latest_execution) {
+        available_iterations.push(latest_execution);
+        available_iterations.sort_unstable();
+    }
 
+    let has_direct_blob_history = !all_artifacts.is_empty() || !all_evidence.is_empty();
     let artifacts = filter_blob_rows_by_iteration(all_artifacts, iteration_scope, latest_execution);
     let evidence = filter_blob_rows_by_iteration(all_evidence, iteration_scope, latest_execution);
 
@@ -2012,6 +2047,29 @@ pub(crate) async fn step_detail(
     // subflow step only just started, so we silently skip the overview.
     let child_run_overview = child_run_id.as_deref().and_then(|cid| {
         let child = state.inspection.get_run(cid).ok()?;
+        let review = (child.status == "blocked")
+            .then(|| resolve_blocked_gate_context(&state, &child))
+            .flatten();
+        let next_step = if let Some(context) = &review {
+            let step_id = &context.gate.step_id;
+            let label = super::review::gate_execution(&context.gate).map_or_else(
+                || step_id.clone(),
+                |execution| format!("{step_id} · Iteration {execution}"),
+            );
+            Some(LinkRef {
+                label,
+                href: review_section_url(&context.owning_run_id),
+            })
+        } else {
+            child.current_step.as_ref().map(|step| LinkRef {
+                label: step.step_id.clone(),
+                href: format!(
+                    "/inspect/runs/{}/steps/{}",
+                    url_encode(cid),
+                    url_encode(&step.step_id)
+                ),
+            })
+        };
         let metrics_view = child.metrics.as_ref().map(|m| OverviewMetrics {
             step_executions: m.total_step_executions,
             artifacts: m.total_artifacts_produced,
@@ -2032,7 +2090,7 @@ pub(crate) async fn step_detail(
         });
         let step_counts_json = serde_json::to_string_pretty(&child.step_counts).unwrap_or_default();
         Some(ChildRunOverview {
-            run_url: format!("/inspect/runs/{cid}"),
+            run_url: format!("/inspect/runs/{}", url_encode(cid)),
             run_id: cid.to_string(),
             workflow_label: format!("{}@{}", child.workflow_id, child.workflow_version),
             status: child.status.clone(),
@@ -2040,6 +2098,8 @@ pub(crate) async fn step_detail(
             finished_at: child.finished_at.clone(),
             artifact_count: child.artifact_summary.count,
             evidence_count: child.evidence_summary.count,
+            next_step,
+            review_required: review.is_some(),
             step_counts_json,
             metrics: metrics_view,
         })
@@ -2047,14 +2107,16 @@ pub(crate) async fn step_detail(
 
     let run_detail = state.inspection.get_run(&run_id).ok();
 
-    let gate_guidance = run_detail
-        .as_ref()
-        .and_then(|run| {
-            run.blocked_gates
-                .iter()
-                .find(|gate| gate.step_id == step.step_id && gate.status == "blocked")
-        })
-        .map(|gate| build_gate_guidance(&gate.request_summary));
+    let current_gate = run_detail.as_ref().and_then(|run| {
+        run.blocked_gates
+            .iter()
+            .find(|gate| gate.step_id == step.step_id && gate.status == "blocked")
+            .map(|gate| (run, gate))
+    });
+    let gate_guidance = current_gate.map(|(_, gate)| build_gate_guidance(&gate.request_summary));
+    let review_panel = current_gate
+        .filter(|(run, _)| run.status == "blocked")
+        .map(|(run, gate)| super::review::ReviewPanel::new(&run.run_id, gate));
 
     // When the run failed during preflight, surface any failed checks that
     // name this step so operators see the blocker without bouncing back to
@@ -2128,6 +2190,7 @@ pub(crate) async fn step_detail(
             child_run_url,
             child_run_overview,
             gate_guidance,
+            review_panel,
             preflight_blockers,
             input_summary_json,
             output_summary_json,
@@ -2138,6 +2201,7 @@ pub(crate) async fn step_detail(
             artifacts,
             evidence,
             workflow_files,
+            has_direct_blob_history,
         },
     })
 }
@@ -2224,6 +2288,24 @@ pub(crate) async fn evidence_detail(
         content_url,
         content,
     )
+}
+
+pub(super) fn available_workflow_file_url(
+    state: &AppState,
+    run_id: &str,
+    id: &str,
+) -> Option<String> {
+    let locator = crate::application::parse_workflow_file_id(id).ok()?;
+    state
+        .inspection
+        .get_workflow_file_metadata(run_id, &locator)
+        .ok()?
+        .links
+        .content?;
+    Some(format!(
+        "/inspect/runs/{}/workflow-files/{id}",
+        url_encode(run_id)
+    ))
 }
 
 pub(crate) async fn workflow_file_detail(

@@ -86,15 +86,31 @@
   <dt>Run status</dt><dd><span class="status-badge status-{{ headline.status }}">{{ headline.status }}</span></dd>
   <dt>Current step</dt><dd class="mono">{{ operator_summary.current_step_id.as_deref().unwrap_or("—") }}</dd>
   <dt>Blocked gates</dt><dd>{{ operator_summary.blocked_gate_count }}</dd>
-  {% match operator_summary.expected_user_action %}{% when Some with (s) %}<dt>Expected from user</dt><dd>{{ s }}</dd>{% when None %}{% endmatch %}
+  {% match operator_summary.expected_user_action %}{% when Some with (s) %}<dt>Expected from user</dt><dd>{% if let Some(url) = operator_summary.review_url %}<a href="{{ url }}">{{ s }}</a>{% else %}{{ s }}{% endif %}</dd>{% when None %}{% endmatch %}
+  {% if operator_summary.suggested_commands.is_empty() %}
   <dt>Recommended next action</dt><dd>{{ operator_summary.recommended_next_action }}</dd>
+  {% else %}
+  <dt>Suggested next commands</dt><dd>
+    <p class="muted">These commands use the root run ID. The CLI finds its current blocked gate. After reviewing, choose one command and replace the example actor and reason.</p>
+    <ul>{% for command in operator_summary.suggested_commands %}<li><code>{{ command }}</code></li>{% endfor %}</ul>
+  </dd>
+  {% endif %}
 </dl>
 
-<nav class="tabs" aria-label="Run tabs">
+{% match review_panel %}{% when Some with (review) %}
+{% let show_review_step = true %}
+{% include "review_panel.html" %}
+{% when None %}{% endmatch %}
+
+<nav id="run-tabs" class="tabs" aria-label="Run tabs">
   {% for t in tabs %}
-  <a href="{{ t.href }}"{% if t.active %} class="active" aria-current="page"{% endif %}>{{ t.label }}</a>
+  <a href="{{ t.href }}#run-tabs"{% if t.active %} class="active" aria-current="page"{% endif %}>{{ t.label }}</a>
   {% endfor %}
 </nav>
+
+{% match child_outline %}{% when Some with (outline) %}
+{% include "child_outline.html" %}
+{% when None %}{% endmatch %}
 
 {% if tab == "overview" %}
 {% match overview %}{% when Some with (o) %}
@@ -281,17 +297,15 @@
 
 {% else if tab == "gates" %}
 {% if gates.is_empty() %}
-<div class="empty-state">No gate decisions recorded on this run.</div>
-{% if operator_summary.action_required %}
-<p class="muted">This run is waiting on a manual gate in a nested actionable run. {{ operator_summary.recommended_next_action }}</p>
-{% endif %}
+<div class="empty-state">No gates recorded in this run or its nested runs.</div>
 {% else %}
 <table>
-  <thead><tr><th>Gate</th><th>Status</th><th>Step</th><th>Created</th><th>Expected from user</th><th>Decision options</th><th>Decision</th><th>Actor</th><th>Reason</th><th>At</th></tr></thead>
+  <thead><tr><th>Run</th><th>Gate</th><th>Status</th><th>Step</th><th>Created</th><th>Expected from user</th><th>Decision options</th><th>Decision</th><th>Actor</th><th>Reason</th><th>At</th></tr></thead>
   <tbody>
   {% for g in gates %}
     <tr>
-      <td class="mono">{{ g.gate_id }}</td>
+      <td><a href="{{ g.owner.href }}">{{ g.owner.label }}</a></td>
+      <td class="mono">{% if let Some(url) = g.review_url %}<a href="{{ url }}">{{ g.gate_id }}</a>{% else %}{{ g.gate_id }}{% endif %}</td>
       <td><span class="status-badge status-{{ g.status }}">{{ g.status }}</span></td>
       <td class="mono">{{ g.step_id }}</td>
       <td class="mono">{{ g.created_at.as_deref().unwrap_or("—") }}</td>
@@ -302,17 +316,27 @@
       <td>{{ g.decision_reason.as_deref().unwrap_or("—") }}</td>
       <td class="mono">{{ g.decision_at.as_deref().unwrap_or("—") }}</td>
     </tr>
+    {% if !g.decision_history.is_empty() %}
+    <tr><td colspan="11"><details open><summary>Decision history ({{ g.decision_history.len() }})</summary>
+      <ul>{% for decision in g.decision_history %}<li>
+        <strong>{% if decision.state == "request_changes" %}Changes requested{% else %}{{ decision.state }}{% endif %}</strong>
+        {% if let Some(actor) = decision.actor %} · {{ actor }}{% endif %}
+        {% if let Some(at) = decision.decided_at %} · <time datetime="{{ at }}">{{ at }}</time>{% endif %}
+        {% if let Some(reason) = decision.reason %} — {{ reason }}{% endif %}
+      </li>{% endfor %}</ul>
+    </details></td></tr>
+    {% endif %}
     {% if !g.review_documents.is_empty() %}
-    <tr><td colspan="10"><strong>Reviewed documents ({{ g.review_documents.len() }}):</strong>
-      <ul>{% for d in g.review_documents %}<li><strong>{{ d.revision.document }}</strong> — {{ d.revision.size_bytes }} bytes, {{ d.revision.file_count }} files;
-        revision <code>{{ d.revision.revision_id }}</code>, SHA-256 <code>{{ d.revision.blob.sha256 }}</code>;
-        <a href="{{ d.links.metadata }}">revision / tree members</a> · <a href="{{ d.links.content }}">content</a></li>{% endfor %}</ul>
+    <tr><td colspan="11"><strong>Reviewed documents ({{ g.review_documents.len() }}):</strong>
+      <ul>{% for d in g.review_documents %}<li><strong>{{ d.document.revision.document }}</strong> — {{ d.document.revision.size_bytes }} bytes, {{ d.document.revision.file_count }} files;
+        revision <code>{{ d.document.revision.revision_id }}</code>, SHA-256 <code>{{ d.document.revision.blob.sha256 }}</code>;
+        <a href="{{ d.preview_url }}">Preview revision</a> · <a href="{{ d.document.links.content }}">Download exact bytes</a></li>{% endfor %}</ul>
       Document review does not approve arbitrary workspace mutations.
     </td></tr>
     {% endif %}
     {% if g.guidance.prompt.is_some() || g.guidance.reason.is_some() %}
     <tr>
-      <td colspan="10">
+      <td colspan="11">
         {% match g.guidance.prompt %}{% when Some with (p) %}<strong>Prompt:</strong> {{ p }}{% when None %}{% endmatch %}
         {% if g.guidance.prompt.is_some() && g.guidance.reason.is_some() %}<br>{% endif %}
         {% match g.guidance.reason %}{% when Some with (r) %}<strong>Reason:</strong> {{ r }}{% when None %}{% endmatch %}
@@ -322,7 +346,6 @@
   {% endfor %}
   </tbody>
 </table>
-<p class="muted" style="font-size:12px;color:var(--muted);">CLI hint: <code>transist approve {{ headline.run_id }} [gate-id]</code></p>
 {% endif %}
 
 {% else if tab == "failures" %}
@@ -359,7 +382,7 @@
   <label for="artifacts-iteration-select">Iteration</label>
   <select id="artifacts-iteration-select" name="iteration">
     <option value="all" {% if iteration_scope == "all" %}selected{% endif %}>all iterations</option>
-    <option value="last" {% if iteration_scope == "last" %}selected{% endif %}>last iteration</option>
+    <option value="last" {% if iteration_scope == "last" %}selected{% endif %}>last iteration{% if let Some(execution) = current_execution %} ({{ execution }}){% endif %}</option>
     {% for iter in available_iterations %}
     <option value="{{ iter }}" {% match selected_iteration %}{% when Some with (selected) %}{% if *selected == *iter %}selected{% endif %}{% when None %}{% endmatch %}>iteration {{ iter }}</option>
     {% endfor %}
@@ -390,7 +413,7 @@
   <label for="evidence-iteration-select">Iteration</label>
   <select id="evidence-iteration-select" name="iteration">
     <option value="all" {% if iteration_scope == "all" %}selected{% endif %}>all iterations</option>
-    <option value="last" {% if iteration_scope == "last" %}selected{% endif %}>last iteration</option>
+    <option value="last" {% if iteration_scope == "last" %}selected{% endif %}>last iteration{% if let Some(execution) = current_execution %} ({{ execution }}){% endif %}</option>
     {% for iter in available_iterations %}
     <option value="{{ iter }}" {% match selected_iteration %}{% when Some with (selected) %}{% if *selected == *iter %}selected{% endif %}{% when None %}{% endmatch %}>iteration {{ iter }}</option>
     {% endfor %}
@@ -421,7 +444,7 @@
   <label for="workflow-files-iteration-select">Iteration</label>
   <select id="workflow-files-iteration-select" name="iteration">
     <option value="all" {% if iteration_scope == "all" %}selected{% endif %}>all iterations</option>
-    <option value="last" {% if iteration_scope == "last" %}selected{% endif %}>last iteration</option>
+    <option value="last" {% if iteration_scope == "last" %}selected{% endif %}>last iteration{% if let Some(execution) = current_execution %} ({{ execution }}){% endif %}</option>
     {% for iter in available_iterations %}
     <option value="{{ iter }}" {% match selected_iteration %}{% when Some with (selected) %}{% if *selected == *iter %}selected{% endif %}{% when None %}{% endmatch %}>iteration {{ iter }}</option>
     {% endfor %}
@@ -447,21 +470,7 @@
 </table>
 {% endif %}
 
-{% else if tab == "children" %}
-{% if children.is_empty() %}<div class="empty-state">No nested runs.</div>{% else %}
-<ul class="tree">
-  {% for c in children %}
-  <li style="margin-left: {{ c.depth }}em;">
-    <span class="status-badge status-{{ c.status }}">{{ c.status }}</span>
-    <a class="mono" href="/inspect/runs/{{ c.run_id }}">{{ c.run_id }}</a>
-    <span class="mono">{{ c.workflow_label }}</span>
-    art:{{ c.artifact_count }} ev:{{ c.evidence_count }}
-  </li>
-  {% endfor %}
-</ul>
-{% endif %}
-
-{% else %}
+{% else if tab != "children" %}
 <div class="error-box">Unknown tab: <code>{{ tab }}</code></div>
 {% endif %}
 {% endblock %}
