@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [0.1.4] — Nested Run Inspection
+
+- Navigate nested runs, gate history, and pinned review documents from the
+  `transist-server` inspection UI. Suggested gate commands use the root run ID.
+- Keep tab navigation at the tab bar and default output views to the current
+  execution instead of falling back to an older one.
+- Update `url` to 2.5.9 and `form_urlencoded` to 1.2.3 for RUSTSEC-2026-0592.
+
+Runtime, admin, and server use `0.1.4`; bundled packages and exact catalog pins
+remain `0.1.0`. See the [release notes](docs/public/releases/0.1.4.md).
+
 ## [0.1.3] — Schema Validation and Path Safety
 
 - Upgrade Rust JSON Schema validation to `jsonschema` 0.61.2. Installed workflow

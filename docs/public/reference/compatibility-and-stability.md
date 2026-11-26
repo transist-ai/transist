@@ -2,7 +2,7 @@
 
 ## Pre-1.0 (Public Beta) Policy
 
-Transist `0.1.3` is a public beta patch release. No surface is called stable or
+Transist `0.1.4` is a public beta patch release. No surface is called stable or
 production-ready before `1.0.0`.
 
 - Patch releases do not intentionally break documented surfaces except for an
@@ -11,9 +11,9 @@ production-ready before `1.0.0`.
   changelog entry, release note, migration guidance, and contract-fixture updates.
 - Versioned public surfaces are protected within the current minor line.
 - Schema and protocol `v1` identifiers are format versions, not SemVer stability
-  promises. Runtime, admin, and server use `0.1.3`; bundled plugins, workflows,
+  promises. Runtime, admin, and server use `0.1.4`; bundled plugins, workflows,
   modules, and exact catalog pins remain `0.1.0`. See the
-  [current release notes](../releases/0.1.3.md) and the
+  [current release notes](../releases/0.1.4.md) and the
   [0.1.1 release notes](../releases/0.1.1.md) for loop-routing adoption and recovery.
 
 ## Versioned Public Surfaces
