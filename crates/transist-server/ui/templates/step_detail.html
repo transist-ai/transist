@@ -50,7 +50,7 @@
     <strong>This step launches a child run.</strong>
   </div>
   <p class="status-banner-detail">
-    Steps, events, gates, artifacts, and evidence produced inside the subflow live on the child run, not on this step.
+    The child run contains the steps and outputs produced inside this subflow.
   </p>
   <p class="status-banner-actions">
     <a href="{{ url }}">View child run <span class="mono">{{ data.child_run_id.as_deref().unwrap_or("") }}</span> →</a>
@@ -63,10 +63,17 @@
   <dt>Run</dt><dd><a class="mono" href="{{ o.run_url }}">{{ o.run_id }}</a></dd>
   <dt>Workflow</dt><dd class="mono">{{ o.workflow_label }}</dd>
   <dt>Status</dt><dd><span class="status-badge status-{{ o.status }}">{{ o.status }}</span></dd>
+  {% if let Some(step) = o.next_step %}
+  <dt>{% if o.review_required %}Awaiting review{% else %}Current step{% endif %}</dt><dd><a href="{{ step.href }}">{{ step.label }}</a></dd>
+  {% endif %}
   <dt>Started</dt><dd class="mono">{{ o.started_at.as_deref().unwrap_or("—") }}</dd>
   <dt>Finished</dt><dd class="mono">{{ o.finished_at.as_deref().unwrap_or("—") }}</dd>
-  <dt>Artifacts</dt><dd>{{ o.artifact_count }}</dd>
-  <dt>Evidence files</dt><dd>{{ o.evidence_count }}</dd>
+  <dt>Child outputs</dt><dd>
+    <a href="{{ o.run_url }}?tab=workflow-files#run-tabs">Files</a> ·
+    <a href="{{ o.run_url }}?tab=artifacts#run-tabs">Artifacts</a> ·
+    <a href="{{ o.run_url }}?tab=evidence#run-tabs">Evidence</a>
+  </dd>
+  <dt>Across all iterations</dt><dd>{{ o.artifact_count }} artifacts · {{ o.evidence_count }} evidence files</dd>
 </dl>
 {% match o.metrics %}{% when Some with (m) %}
 <dl class="kv-grid">
@@ -90,6 +97,11 @@
   <p class="status-banner-detail"><strong>Decision options:</strong> {% for option in g.options %}<code>{{ option }}</code>{% if !loop.last %}, {% endif %}{% endfor %}</p>
   {% endif %}
 </aside>
+{% when None %}{% endmatch %}
+
+{% match data.review_panel %}{% when Some with (review) %}
+{% let show_review_step = false %}
+{% include "review_panel.html" %}
 {% when None %}{% endmatch %}
 
 {% if !data.key_groups.is_empty() %}
@@ -143,6 +155,13 @@
 <h2>Latest step output summary</h2>
 <details id="step-output-summary"><summary>Show JSON</summary><pre>{{ data.output_summary_json }}</pre></details>
 
+{% if data.child_run_id.is_some() %}
+  {% if data.has_direct_blob_history || !data.workflow_files.is_empty() %}
+  <h2>Produced directly by this step</h2>
+  {% endif %}
+{% endif %}
+
+{% if data.child_run_id.is_none() || data.has_direct_blob_history %}
 <h2>Artifact/evidence iteration filter</h2>
 <form method="get" class="filters-inline" aria-label="Artifact/evidence iteration filter">
   <input type="hidden" name="execution" value="{{ data.output_selector }}">
@@ -157,7 +176,9 @@
   <button type="submit">Apply</button>
 </form>
 <p class="muted">Artifacts and evidence follow this filter. Workflow files are shown from the step snapshot.</p>
+{% endif %}
 
+{% if data.child_run_id.is_none() || !data.workflow_files.is_empty() %}
 <h2>Workflow files</h2>
 {% if data.workflow_files.is_empty() %}<div class="empty-state">None.</div>{% else %}
 <table>
@@ -175,7 +196,9 @@
   </tbody>
 </table>
 {% endif %}
+{% endif %}
 
+{% if data.child_run_id.is_none() || !data.artifacts.is_empty() %}
 <h2>Artifacts</h2>
 {% if data.artifacts.is_empty() %}<div class="empty-state">None.</div>{% else %}
 <table>
@@ -193,7 +216,9 @@
   </tbody>
 </table>
 {% endif %}
+{% endif %}
 
+{% if data.child_run_id.is_none() || !data.evidence.is_empty() %}
 <h2>Evidence</h2>
 {% if data.evidence.is_empty() %}<div class="empty-state">None.</div>{% else %}
 <table>
@@ -210,6 +235,11 @@
   {% endfor %}
   </tbody>
 </table>
+{% endif %}
+{% endif %}
+
+{% if data.child_run_id.is_some() && data.has_direct_blob_history && data.artifacts.is_empty() && data.evidence.is_empty() %}
+<p class="muted">No direct artifacts or evidence match this iteration.</p>
 {% endif %}
 
 <h2>Metrics</h2>

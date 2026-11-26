@@ -1,0 +1,50 @@
+{% macro run_summary(run) %}
+  <a href="{{ run.run_link.href }}">{{ run.run_link.label }}</a>
+  <span class="status-badge status-{{ run.status }}">{{ run.status }}</span>
+  <span class="muted">Run <code>{{ run.run_id }}</code> · Artifacts: {{ run.artifact_count }} · Evidence: {{ run.evidence_count }}</span>
+  {% match run.current_step %}{% when Some with (step) %}
+  <span>· Current step: <a class="mono" href="{{ step.href }}">{{ step.label }}</a></span>
+  {% when None %}{% endmatch %}
+{% endmacro %}
+
+<section aria-labelledby="execution-outline">
+  <h2 id="execution-outline">Execution outline</h2>
+  {% if outline.items.is_empty() && outline.unplaced.is_empty() %}
+  <div class="empty-state">No nested runs.</div>
+  {% else %}
+  <details open>
+    <summary>Nested runs</summary>
+    {% if !outline.items.is_empty() %}
+    <ul class="tree">
+      {% for item in outline.items %}
+        {% if let Some(run) = item.row() %}
+        <li>
+          {% call run_summary(run) %}{% endcall %}
+          {% if item.child_count() > 0 %}
+          <details>
+            <summary>Child runs ({{ item.child_count() }})</summary>
+            <ul class="tree">
+          {% endif %}
+          {% if item.child_count() == 0 %}
+        </li>
+          {% endif %}
+        {% endif %}
+        {% if item.row().is_none() %}
+            </ul>
+          </details>
+        </li>
+        {% endif %}
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% if !outline.unplaced.is_empty() %}
+    <h3>Runs without a complete parent chain</h3>
+    <ul class="tree">
+      {% for run in outline.unplaced %}
+      <li>{% call run_summary(run) %}{% endcall %}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </details>
+  {% endif %}
+</section>

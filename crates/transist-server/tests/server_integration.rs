@@ -939,6 +939,8 @@ async fn inspect_run_detail_tabs_render_against_fixture_data() {
             body.contains("aria-label=\"Run tabs\""),
             "tab {tab} should still render tab navigation"
         );
+        assert!(body.contains("id=\"run-tabs\""));
+        assert!(body.contains(&format!("?tab={tab}#run-tabs\" class=\"active\"")));
         if matches!(tab, "artifacts" | "evidence" | "workflow-files") {
             assert!(
                 body.contains("all iterations") && body.contains("last iteration"),
@@ -1561,6 +1563,14 @@ async fn inspect_step_detail_shows_child_run_overview_for_subflow_step() {
         body.contains("/inspect/runs/subflow-run__plan_loop"),
         "missing href to child run"
     );
+    for tab in ["workflow-files", "artifacts", "evidence"] {
+        assert!(body.contains(&format!(
+            "/inspect/runs/subflow-run__plan_loop?tab={tab}#run-tabs"
+        )));
+    }
+    assert!(!body.contains("<h2>Workflow files</h2>"));
+    assert!(!body.contains("<h2>Artifacts</h2>"));
+    assert!(!body.contains("<h2>Evidence</h2>"));
 }
 
 #[tokio::test]

@@ -128,6 +128,7 @@ fn registered_get_handler(route: &ApiRoute) -> axum::routing::MethodRouter<Arc<A
         "inspectRun" => get(ssr::run_detail),
         "inspectRunFailures" => get(ssr::run_failures),
         "inspectStep" => get(ssr::step_detail),
+        "inspectDocument" => get(ssr::document_preview),
         "inspectArtifact" => get(ssr::artifact_detail),
         "inspectEvidence" => get(ssr::evidence_detail),
         "inspectWorkflowFile" => get(ssr::workflow_file_detail),

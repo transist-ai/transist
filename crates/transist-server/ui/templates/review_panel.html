@@ -1,0 +1,17 @@
+<section id="needs-review" aria-labelledby="needs-review-heading">
+  <h2 id="needs-review-heading">Needs review{% if let Some(execution) = review.execution %} · Iteration {{ execution }}{% endif %}</h2>
+  <p>Gate <code>{{ review.gate_id }}</code> at step
+    {% if show_review_step %}<a href="{{ review.step.href }}"><code>{{ review.step.label }}</code></a>{% else %}<code>{{ review.step.label }}</code>{% endif %}
+    · Run <code>{{ review.owning_run_id }}</code></p>
+  {% if review.documents.is_empty() %}
+  <p>No managed document revisions are attached to this gate.</p>
+  {% else %}
+  <ul>
+    {% for d in review.documents %}
+    <li><a href="{{ d.preview_url }}">Preview <strong>{{ d.document.revision.document }}</strong></a>
+      · revision <code>{{ d.document.revision.revision_id }}</code>
+      · SHA-256 <code>{{ d.document.revision.blob.sha256 }}</code></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>

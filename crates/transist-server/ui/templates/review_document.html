@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Document preview · {{ document.revision.document }}{% endblock %}
+{% block breadcrumb %}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="/inspect/runs">Runs</a><span class="sep">›</span>
+  <a href="{{ run_url }}"><code>{{ run_id }}</code></a><span class="sep">›</span>
+  <span>Document preview</span>
+</nav>
+{% endblock %}
+{% block content %}
+<h1>Document preview: <code>{{ document.revision.document }}</code></h1>
+<dl class="kv-grid">
+  <dt>Revision</dt><dd><code>{{ document.revision.revision_id }}</code></dd>
+  <dt>Revision SHA-256</dt><dd><code>{{ document.revision.blob.sha256 }}</code></dd>
+</dl>
+{% if !member_links.is_empty() %}
+<h2>Tree members</h2>
+<ul>{% for link in member_links %}<li><a href="{{ link.href }}"><code>{{ link.label }}</code></a></li>{% endfor %}</ul>
+{% endif %}
+{% match selected_member %}{% when Some with (member) %}
+<h2><code>{{ member.path }}</code></h2>
+<p>Member SHA-256: <code>{{ member.sha256 }}</code> · <a href="{{ revision_url }}">View tree manifest</a></p>
+{% when None %}
+<h2>{% if member_links.is_empty() %}Content{% else %}Manifest{% endif %}</h2>
+{% endmatch %}
+{% match preview %}
+  {% when Preview::Text with (text) %}<pre class="output-value">{{ text }}</pre>
+  {% when Preview::NonText %}<p class="muted">This content is not UTF-8 plain text.</p>
+  {% when Preview::TooLarge %}<p class="muted">This content is too large to preview (64 KiB limit).</p>
+{% endmatch %}
+<p><a href="{{ download_url }}">Download exact bytes</a> · <a href="{{ workspace_files_url }}">Related workspace files</a></p>
+{% endblock %}

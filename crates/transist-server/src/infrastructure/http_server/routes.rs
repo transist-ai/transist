@@ -185,6 +185,11 @@ pub static INSPECTION_GET_ROUTES: &[ApiRoute] = &[
     },
     ApiRoute {
         method: Method::GET,
+        path: "/inspect/runs/{run_id}/documents/{revision_id}",
+        operation_id: "inspectDocument",
+    },
+    ApiRoute {
+        method: Method::GET,
         path: "/inspect/runs/{run_id}/artifacts/{artifact_id}",
         operation_id: "inspectArtifact",
     },
