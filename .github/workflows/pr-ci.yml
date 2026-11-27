@@ -293,6 +293,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy --no-self-update
+          rustup default 1.88.0
       - name: Cache pinned Cargo audit tools
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -304,6 +308,8 @@ jobs:
         run: |
           bash scripts/ci/install_debian_tools.sh curl unzip nodejs npm python3 pip3 jq
           bash scripts/ci/install_ci_tools.sh audit
+      - name: Build sandbox launcher for security CI parity
+        run: cargo build --locked -p transist-sandbox-launcher
       - name: Run full cargo-deny policy
         run: cargo deny check
 
