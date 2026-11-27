@@ -3301,7 +3301,10 @@ except OSError as e:
                 Some(20),
                 "{mode:?}: {command:?}: {output:?}"
             );
-            assert!(String::from_utf8_lossy(&output.stderr).contains("SIOCSIFFLAGS failed"));
+            assert_eq!(
+                output.stderr, b"transist-sandbox-launcher: setup failed\n",
+                "{mode:?}: launcher stderr must not expose setup details"
+            );
             assert!(
                 !marker.exists(),
                 "{mode:?}: plugin must not execute after setup failure"

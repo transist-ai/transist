@@ -106,13 +106,11 @@ fn main() {
     match run(args.into_iter()) {
         Ok(code) => std::process::exit(code),
         Err(error) => {
-            eprintln!("transist-sandbox-launcher: {error}");
-            // Preflight diagnostics deliberately never surface child stderr:
-            // after the launcher execs a plugin that output is untrusted and
-            // may contain a secret. Preserve a safe, machine-readable failure
-            // category in the exit status instead, so an early launcher error
-            // can be distinguished without exposing stderr.
-            std::process::exit(launcher_error_exit_code(&error));
+            // Keep dynamic setup details off stderr. Preflight uses the exit
+            // status because stderr after exec belongs to the plugin.
+            let code = launcher_error_exit_code(&error);
+            eprintln!("transist-sandbox-launcher: setup failed");
+            std::process::exit(code);
         }
     }
 }
@@ -319,8 +317,7 @@ fn drop_capabilities_and_handoff(
         ) < 0
         {
             return Err(format!(
-                "failed switching to gid {}: {}",
-                target_gid,
+                "failed switching to gid: {}",
                 std::io::Error::last_os_error()
             ));
         }
@@ -331,8 +328,7 @@ fn drop_capabilities_and_handoff(
         ) < 0
         {
             return Err(format!(
-                "failed switching to uid {}: {}",
-                target_uid,
+                "failed switching to uid: {}",
                 std::io::Error::last_os_error()
             ));
         }
@@ -540,5 +536,13 @@ mod tests {
             28
         );
         assert_eq!(launcher_error_exit_code("missing target uid argument"), 2);
+        assert_eq!(
+            launcher_error_exit_code("failed switching to gid: Operation not permitted"),
+            24
+        );
+        assert_eq!(
+            launcher_error_exit_code("failed switching to uid: Operation not permitted"),
+            25
+        );
     }
 }
