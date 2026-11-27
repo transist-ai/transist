@@ -98,8 +98,8 @@ rm -f quickstart-inputs.json
 rm -rf "$TRANSIST_HOME"
 ```
 
-For the full signed offline trust loop (trust import, governed home, cancel,
-retry, evidence export), follow the
+For the full offline governed trust loop using the shipped workflow signature
+(no re-signing or additional download), follow the
 [Trusted Governed Execution Walkthrough](https://transist.ai/docs/guides/trust/trusted-execution-walkthrough).
 
 The getting-started demo workflows under `workflows/demos/getting_started/` are
