@@ -1278,30 +1278,6 @@
         "aliases": [],
         "defaults": [],
         "global": false,
-        "name": "--input",
-        "required": false,
-        "short": null
-      },
-      {
-        "aliases": [],
-        "defaults": [],
-        "global": false,
-        "name": "--inputs-file",
-        "required": false,
-        "short": null
-      },
-      {
-        "aliases": [],
-        "defaults": [],
-        "global": false,
-        "name": "--local-only",
-        "required": false,
-        "short": null
-      },
-      {
-        "aliases": [],
-        "defaults": [],
-        "global": false,
         "name": "--package",
         "required": false,
         "short": null
@@ -1311,22 +1287,6 @@
         "defaults": [],
         "global": false,
         "name": "--path",
-        "required": false,
-        "short": null
-      },
-      {
-        "aliases": [],
-        "defaults": [],
-        "global": false,
-        "name": "--policy-output",
-        "required": false,
-        "short": null
-      },
-      {
-        "aliases": [],
-        "defaults": [],
-        "global": false,
-        "name": "--signature",
         "required": false,
         "short": null
       },
