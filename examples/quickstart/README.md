@@ -47,23 +47,18 @@ runtime host.
 
 ## Running the smoke script
 
-Both the standalone and governed legs run when you invoke the smoke:
-
-```bash
-bash scripts/ci/run_quickstart_smoke.sh
-```
-
-From a source checkout (debug build):
+The smoke script runs both the standalone and governed legs. It is not shipped
+in the archive. From a source checkout (debug build):
 
 ```bash
 cargo build -p transist-cli -p transist-admin
 bash scripts/ci/run_quickstart_smoke.sh
 ```
 
-To verify a tarball without extracting it first:
+To verify a tarball, run from the source checkout:
 
 ```bash
-bash scripts/ci/run_quickstart_smoke.sh --archive ./transist-<tag>-<target>.tar.gz
+bash scripts/ci/run_quickstart_smoke.sh --archive /path/to/transist-release.tar.gz --require-isolation
 ```
 
 ## Re-signing after plugin/workflow changes

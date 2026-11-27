@@ -30,38 +30,38 @@ For a simpler entry point that needs no signing or trust setup, see the
   `bin/transist-admin`, `plugins/shell/`, `plugins/shell.sig`, and
   `examples/quickstart/`, plus ancillary `.agents/skills/` guidance.
 - Python 3 for the bundled `shell` plugin.
-- `jq` (to extract the effective home path from `transist home get`).
 
 **On Linux**, the `shell` plugin uses `bwrap` (bubblewrap) to sandbox child
 processes. Install it before running any workflow. See
 [Installation and Local Setup](../getting-started/installation-and-local-setup.md)
 for per-distro install commands.
 
-All commands below run from the extracted archive root with that directory on
-your `PATH` (or invoke `./bin/transist` directly). The walkthrough never
-needs the network.
+Start in the extracted archive root and keep using the same shell. The
+walkthrough never needs the network.
 
 ## 0. Use the archive binaries
 
 ```bash
-export PATH="$PWD/bin:$PATH"
+ARCHIVE_ROOT="$(pwd -P)"
+export PATH="$ARCHIVE_ROOT/bin:$PATH"
 transist --version
 ```
 
 ## 1. Create a throwaway project and initialize a governed home
 
 ```bash
-mkdir quickstart-project && cd quickstart-project
-transist home init
+QUICKSTART_ROOT="$(mktemp -d)"
+QUICKSTART_ROOT="$(cd "$QUICKSTART_ROOT" && pwd -P)"
+export TRANSIST_HOME="$QUICKSTART_ROOT/home"
+PACKAGE_DIR="$QUICKSTART_ROOT/quickstart-package-v1"
+mkdir "$QUICKSTART_ROOT/workspace" "$PACKAGE_DIR"
+cd "$QUICKSTART_ROOT/workspace"
+transist home init --mode governed --home "$TRANSIST_HOME"
 ```
 
-`home init` (with no `--home` flag and no `TRANSIST_HOME`) creates a governed
-home at the per-user default location
-(`${XDG_STATE_HOME:-$HOME/.local/state}/transist`), outside the current
-project directory. Every `transist` command run from anywhere on this machine
-resolves to the same home unless you pass `--home`, set `TRANSIST_HOME`, or run
-`transist home set <path>`. Governed homes default to `policy.profile:
-allowlist` and require trusted workflow/plugin verification.
+`TRANSIST_HOME` selects the temporary home instead of changing your default
+home. Governed homes default to `policy.profile: allowlist` and require trusted
+workflow and plugin verification.
 
 ## 2. Grant the exact capabilities the walkthrough needs
 
@@ -72,9 +72,9 @@ action, provider, and filesystem resources). Substitute the absolute workspace
 path and write it over the home config:
 
 ```bash
-home_dir="$(transist home get | jq -r .effective_home)"
-sed "s#__WORKSPACE__#$(pwd -P)#g" \
-  ../examples/quickstart/quickstart.config.yaml > "$home_dir/config.yaml"
+workspace_for_sed="$(pwd -P | sed 's/[\\&#]/\\&/g')"
+sed "s#__WORKSPACE__#$workspace_for_sed#g" \
+  "$ARCHIVE_ROOT/examples/quickstart/quickstart.config.yaml" > "$TRANSIST_HOME/config.yaml"
 ```
 
 The workspace capability grant is path-exact (no wildcards), so it must match
@@ -83,7 +83,7 @@ the directory you run from.
 ## 3. Import the demo-only public trust root
 
 ```bash
-transist trust import ../examples/quickstart/trust/quickstart-demo.pub
+transist trust import "$ARCHIVE_ROOT/examples/quickstart/trust/quickstart-demo.pub"
 transist trust list
 ```
 
@@ -96,16 +96,18 @@ outside the runtime home.
 ## 4. Install the signed shell plugin and signed workflow package
 
 ```bash
-transist plugins install --path ../plugins/shell/plugin.yaml --trusted-execution
-# Obtain this immutable package from its publisher; do not rebuild it on the runtime host.
-export PACKAGE_DIR=/path/to/quickstart-package-v1
-transist workflows install --package "$PACKAGE_DIR"
+transist plugins install --path "$ARCHIVE_ROOT/plugins/shell/plugin.yaml" --trusted-execution
+cp "$ARCHIVE_ROOT/examples/quickstart/quickstart.workflow.yaml" \
+   "$ARCHIVE_ROOT/examples/quickstart/quickstart.workflow.yaml.sig" "$PACKAGE_DIR/"
+transist workflows install --package "$PACKAGE_DIR" --dry-run
+# After reviewing the install plan:
+transist workflows install --package "$PACKAGE_DIR" --approve
 ```
 
-`--trusted-execution` verifies the shipped `plugins/shell.sig` and
-package-contained `transist.signature.v1` material against the imported public
-root before any bytes are copied or compiled. Governed homes require this even
-when the flag is omitted.
+The staged package contains only the shipped workflow and its detached
+signature. Copying these files does not modify or re-sign them. Governed
+installation verifies the plugin and workflow signatures against the imported
+public root before installing either payload.
 
 The plugin's verified bytes and the workflow package snapshot are retained in
 the runtime home. Workflow installation has no inputs and never grants policy
@@ -114,9 +116,12 @@ authority or creates a run.
 ## 5. Check and, when needed, authorize before the run
 
 ```bash
+printf '%s\n' '{"subject":"transist-demo"}' > ./inputs.json
 transist workflows check quickstart.demo@0.1.0 --inputs-file ./inputs.json
 # Only when the check reports exact missing authority:
-transist workflows authorize quickstart.demo@0.1.0 --inputs-file ./inputs.json
+transist workflows authorize quickstart.demo@0.1.0 --inputs-file ./inputs.json --dry-run
+# After reviewing the exact grants:
+transist workflows authorize quickstart.demo@0.1.0 --inputs-file ./inputs.json --approve
 transist workflows check quickstart.demo@0.1.0 --inputs-file ./inputs.json
 ```
 
@@ -150,7 +155,7 @@ diagnostics.
 
 ```bash
 transist workflows run quickstart.demo@0.1.0 --run-ref quickstart-run \
-  --trusted-execution --local-only --input subject=transist-demo --ui plain
+  --trusted-execution --local-only --inputs-file ./inputs.json --ui plain
 ```
 
 - `--trusted-execution` re-verifies the signed workflow and plugin before
@@ -177,7 +182,7 @@ preparation. For governed delivery, create the workflow package with
 `transist-admin workflow package` and install it with `transist workflows
 install` before running it from the operator console.
 
-## 6. Cancel during the sleep window
+## 7. Cancel during the sleep window
 
 From the same directory (another shell or after `run` returns):
 
@@ -195,8 +200,8 @@ settled=""
 for i in $(seq 1 60); do
   st=$(transist runs status quickstart-run 2>/dev/null | head -1 || true)
   case "$st" in
-    *canceled*|*success*) settled="$st"; break ;;
-    *failed*)
+    *canceled*) settled="$st"; break ;;
+    *failed*|*success*)
       echo "run ended: $st" >&2
       exit 1
       ;;
@@ -209,7 +214,7 @@ if [[ -z "$settled" ]]; then
 fi
 ```
 
-## 7. Retry the same run
+## 8. Retry the same run
 
 ```bash
 transist runs retry quickstart-run --trusted-execution --local-only
@@ -217,9 +222,10 @@ transist runs retry quickstart-run --trusted-execution --local-only
 
 `retry` re-enters the canceled run from persisted state, re-verifies trust,
 re-runs the canceled step, and continues to the reporting step. It keeps the
-same run id and preserves prior execution history.
+same run id and preserves prior execution history. Wait for `runs status
+quickstart-run` to report `success` before inspecting and exporting evidence.
 
-## 8. Inspect the local record
+## 9. Inspect the local record
 
 ```bash
 transist runs show quickstart-run
@@ -228,14 +234,13 @@ transist runs tail quickstart-run --limit 50
 
 The run record carries `local_only_mode`, `trusted_execution_mode`,
 `policy_profile: allowlist`, and `capability_enforcement: enforced`. The report
-step promotes an authored evidence file, under the effective home directory
-resolved in step 2 (`transist home get | jq -r .effective_home`):
+step promotes an authored evidence file under the temporary home:
 
 ```text
 <home>/runs/run_quickstart-run/artifacts/write_report/execution_001/evidence/000_summary.txt
 ```
 
-## 9. Export the evidence summary
+## 10. Export the evidence summary
 
 ```bash
 transist runs evidence export quickstart-run
@@ -244,6 +249,17 @@ transist runs evidence export quickstart-run
 The export renders a markdown summary from the persisted execution history
 and provenance, including the verified workflow digest, the verified
 `shell@0.1.0` plugin digest, and the signer key id.
+
+## Clean up
+
+After the run finishes and you've exported any evidence you want to keep, leave
+the workspace, remove the temporary root, and close the walkthrough shell to
+discard its environment changes:
+
+```bash
+cd "$ARCHIVE_ROOT"
+rm -rf -- "$QUICKSTART_ROOT"
+```
 
 ## What this proves
 
@@ -257,12 +273,6 @@ and provenance, including the verified workflow digest, the verified
 
 ## Verify it automatically
 
-From the extracted archive root (the smoke script is included in the archive):
-
-```bash
-bash scripts/ci/run_quickstart_smoke.sh
-```
-
 From a source checkout (debug build):
 
 ```bash
@@ -270,10 +280,11 @@ cargo build -p transist-cli -p transist-admin
 bash scripts/ci/run_quickstart_smoke.sh
 ```
 
-To verify a tarball without extracting it first:
+To verify a tarball, run the smoke script from the source checkout. The script
+is not shipped in the archive:
 
 ```bash
-bash scripts/ci/run_quickstart_smoke.sh --archive ./transist-<tag>-<target>.tar.gz
+bash scripts/ci/run_quickstart_smoke.sh --archive /path/to/transist-release.tar.gz --require-isolation
 ```
 
 Release CI runs this archive form from the final package on all three
