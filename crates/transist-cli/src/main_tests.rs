@@ -3498,6 +3498,67 @@ fn workflow_install_decline_leaves_the_standalone_home_unchanged() {
 }
 
 #[test]
+fn workflow_install_rejects_removed_options_with_migration_guidance() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let workflow = tmp.path().join("workflow.yaml");
+    fs::write(
+        &workflow,
+        "schema: transist.flow.v1\nid: incompatible_install\nversion: v1\nsteps:\n  - id: finish\n    control: control.finish\n    with: {}\n",
+    )
+    .expect("workflow");
+
+    for (flag, value) in [
+        ("--input", Some("subject=demo")),
+        ("--inputs-file", Some("inputs.json")),
+        ("--local-only", None),
+        ("--signature", Some("workflow.sig")),
+        ("--policy-output", Some("policy.yaml")),
+    ] {
+        let home = tempfile::tempdir_in(tmp.path()).expect("isolated home");
+        init_standalone_home(home.path());
+        let args = [
+            "transist",
+            "--home",
+            home.path().to_str().expect("UTF-8 home path"),
+            "workflows",
+            "install",
+            "--path",
+            workflow.to_str().expect("UTF-8 workflow path"),
+            flag,
+        ];
+        let cli = Cli::try_parse_from(args.into_iter().chain(value))
+            .expect("legacy option remains parseable");
+        let error = dispatch(
+            cli,
+            crate::cli::CliUiMode::Plain,
+            tmp.path(),
+            tmp.path(),
+            &std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            &mut ScriptedPrompt::default(),
+        )
+        .expect_err("removed option must be rejected");
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "{flag} is no longer supported by workflows install; install code first, then use workflows check with prospective inputs and workflows authorize for exact missing authority"
+            )
+        );
+        assert!(
+            !home
+                .path()
+                .join("registry/recipes/incompatible_install-v1.yaml")
+                .exists()
+        );
+        assert!(
+            !home
+                .path()
+                .join("registry/workflow-install-index.json")
+                .exists()
+        );
+    }
+}
+
+#[test]
 fn workflow_install_rejects_home_incompatible_flags_before_mutation() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let workflow = tmp.path().join("workflow.yaml");

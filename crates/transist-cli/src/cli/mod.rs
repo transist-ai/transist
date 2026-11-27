@@ -584,23 +584,24 @@ pub enum WorkflowSubcommand {
         /// Directory containing one signed workflow package (governed/trusted installs).
         #[arg(long, conflicts_with = "path")]
         package: Option<PathBuf>,
+        // Keep removed options parseable so dispatch can explain the migration.
         /// Input value in `key=value` form. Repeat to pass multiple inputs.
-        #[arg(long = "input")]
+        #[arg(long = "input", hide = true)]
         inputs: Vec<String>,
         /// JSON or YAML file containing workflow inputs.
-        #[arg(long)]
+        #[arg(long, hide = true)]
         inputs_file: Option<PathBuf>,
         /// Require trusted workflow verification in standalone or development homes.
         #[arg(long)]
         trusted_execution: bool,
         /// Apply local-only policy restrictions while validating the installation plan.
-        #[arg(long)]
+        #[arg(long, hide = true)]
         local_only: bool,
         /// Detached signature path for standalone or development homes.
-        #[arg(long)]
+        #[arg(long, hide = true)]
         signature: Option<PathBuf>,
         /// Policy-fragment destination for governed homes when a grant is required.
-        #[arg(long)]
+        #[arg(long, hide = true)]
         policy_output: Option<PathBuf>,
         /// Report the complete installation plan without changing the active home.
         #[arg(long, conflicts_with = "approve")]
@@ -2413,36 +2414,46 @@ mod tests {
     }
 
     #[test]
-    fn workflow_install_help_documents_confirmation_and_home_dependent_flags() {
+    fn workflow_install_help_lists_only_supported_install_flags() {
+        for help_flag in ["-h", "--help"] {
+            let error = Cli::try_parse_from(["transist", "workflows", "install", help_flag])
+                .expect_err("help is returned as a Clap error");
+            assert_eq!(error.kind(), clap::error::ErrorKind::DisplayHelp);
+            let help = error.to_string();
+            assert!(help.contains("Review and install a workflow into the active home"));
+            let has_option = |flag| {
+                help.lines()
+                    .any(|line| line.split_whitespace().next() == Some(flag))
+            };
+            for flag in [
+                "--path",
+                "--package",
+                "--trusted-execution",
+                "--dry-run",
+                "--approve",
+            ] {
+                assert!(has_option(flag), "missing {flag}: {help}");
+            }
+            for flag in [
+                "--input",
+                "--inputs-file",
+                "--local-only",
+                "--signature",
+                "--policy-output",
+                "--apply",
+                "--prepare",
+            ] {
+                assert!(!has_option(flag), "unexpected {flag}: {help}");
+            }
+        }
+    }
+
+    #[test]
+    fn workflow_install_help_parent_lists_supported_workflow_commands() {
         let mut command = Cli::command();
         let workflow = command
             .find_subcommand_mut("workflows")
             .expect("workflow subcommand");
-        let install = workflow
-            .find_subcommand_mut("install")
-            .expect("workflows install subcommand");
-        let mut buffer = Vec::new();
-        install.write_long_help(&mut buffer).expect("render help");
-        let help = String::from_utf8(buffer).expect("utf8 help");
-
-        assert!(help.contains("Review and install a workflow into the active home"));
-        for flag in [
-            "--path <PATH>",
-            "--input <INPUTS>",
-            "--inputs-file <INPUTS_FILE>",
-            "--trusted-execution",
-            "--local-only",
-            "--signature <SIGNATURE>",
-            "--policy-output <POLICY_OUTPUT>",
-            "--dry-run",
-            "--approve",
-        ] {
-            assert!(help.contains(flag), "missing {flag}: {help}");
-        }
-        assert!(help.contains("governed homes"));
-        assert!(!help.contains("--apply"));
-        assert!(!help.contains("--prepare"));
-
         let mut workflow_help = Vec::new();
         workflow
             .write_long_help(&mut workflow_help)
