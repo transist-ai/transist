@@ -41,6 +41,10 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
           fetch-depth: 0
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy --no-self-update
+          rustup default 1.88.0
       - name: Install cargo-deny
         run: |
           bash scripts/ci/install_debian_tools.sh bubblewrap curl git jq ripgrep unzip nodejs npm python3 pip3
